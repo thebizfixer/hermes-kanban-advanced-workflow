@@ -259,8 +259,16 @@ def _handle_init(args) -> int:
                 if default_url:
                     _run([HERMES_BIN, "-p", profile, "config", "set", "model.base_url", default_url])
                 print(f"   OK {profile} configured (copied from current profile)")
+            elif _yn(f"   Launch interactive model picker for {profile}?"):
+                print(f"   Run this in another terminal, then press Enter here to continue:")
+                print(f"     hermes -p {profile} model")
+                try:
+                    input("   Press Enter when done...")
+                except (EOFError, KeyboardInterrupt):
+                    pass
+                print(f"   OK continuing")
             else:
-                print(f"   !  Skipped. Run the interactive picker: hermes -p {profile} model")
+                print(f"   !  Skipped. Configure later: hermes -p {profile} model")
 
     # ── 1b. Max turns ────────────────────────────────────────────────
     print()
