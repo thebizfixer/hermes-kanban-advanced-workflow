@@ -275,20 +275,21 @@ def _handle_init(args) -> int:
     print()
     print("1b. Checking orchestrator max_turns...")
     try:
-        r = _run([HERMES_BIN, "-p", "orchestrator", "config", "get", "model.max_turns"])
-        max_turns = r.stdout.strip()
+        r = _run([HERMES_BIN, "-p", "orchestrator", "config", "show"])
+        # Hermes reads max_turns from agent.max_turns, not model.max_turns
+        mt = re.search(r"Max turns:\s*(\d+)", r.stdout)
+        max_turns = int(mt.group(1)) if mt else 90
     except Exception:
-        max_turns = ""
-    if max_turns and max_turns.isdigit() and int(max_turns) >= 180:
+        max_turns = 90
+    if max_turns >= 180:
         print(f"   OK orchestrator: max_turns = {max_turns}")
     else:
-        current = max_turns if max_turns else "default (90)"
-        print(f"   !  orchestrator: max_turns = {current} -- recommend 180 for complex plan decomposition")
+        print(f"   !  orchestrator: max_turns = {max_turns} -- recommend 180 for complex plan decomposition")
         if _yn(f"   Set max_turns to 180?"):
-            _run([HERMES_BIN, "-p", "orchestrator", "config", "set", "model.max_turns", "180"])
+            _run([HERMES_BIN, "-p", "orchestrator", "config", "set", "agent.max_turns", "180"])
             print(f"   OK max_turns set to 180")
         else:
-            print(f"   !  Skipped. Fix later: hermes -p orchestrator config set model.max_turns 180")
+            print(f"   !  Skipped. Fix later: hermes -p orchestrator config set agent.max_turns 180")
 
     # ── 2. Config overlay ────────────────────────────────────────────
     print()
