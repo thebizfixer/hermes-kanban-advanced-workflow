@@ -3,17 +3,6 @@ version: 1.0.0
 description: Multi-agent kanban workflow for Hermes Agent — decompose plans, dispatch workers, govern execution
 author: thebizfixer
 requires_env: []
-provides_tools:
-  - kanban_create
-  - kanban_list
-  - kanban_show
-  - kanban_complete
-  - kanban_block
-  - kanban_unblock
-  - kanban_link
 provides_hooks:
   - on_session_start
   - post_tool_call
-# provides_cli_commands:        # ← UNVERIFIED: not shown in any current Hermes doc example.
-#   - kanban                     # Verify this field is supported before uncommenting.
-                                 # CLI commands still work via register_cli_command() regardless.
