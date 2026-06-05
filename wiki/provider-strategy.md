@@ -30,17 +30,17 @@ For true parallel fan-out, create multiple worker profiles — each using a **di
 
 ```bash
 # Worker 1: Provider A
-hermes profile create worker-provider-a --clone default
+hermes profile create worker-provider-a --clone
 hermes config set model.default <provider-a>/<model-name> --profile worker-provider-a
 hermes config set model.provider <provider-a> --profile worker-provider-a
 
 # Worker 2: Provider B
-hermes profile create worker-provider-b --clone default
+hermes profile create worker-provider-b --clone
 hermes config set model.default <provider-b>/<model-name> --profile worker-provider-b
 hermes config set model.provider <provider-b> --profile worker-provider-b
 
 # Worker 3: Provider C
-hermes profile create worker-provider-c --clone default
+hermes profile create worker-provider-c --clone
 hermes config set model.default <provider-c>/<model-name> --profile worker-provider-c
 hermes config set model.provider <provider-c> --profile worker-provider-c
 ```

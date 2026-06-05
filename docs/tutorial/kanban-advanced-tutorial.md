@@ -37,8 +37,8 @@ Restart Hermes.
 **You run:**
 
 ```bash
-hermes profile create orchestrator --clone default
-hermes profile create worker --clone default
+hermes profile create orchestrator --clone
+hermes profile create worker --clone
 ```
 
 Expected output:

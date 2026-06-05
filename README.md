@@ -17,8 +17,8 @@ Use for feature building, troubleshooting, fixing bugs — anything you need to 
 hermes plugins install thebizfixer/hermes-kanban-advanced-workflow
 
 # 2. Create profiles
-hermes profile create orchestrator --clone default
-hermes profile create worker --clone default
+hermes profile create orchestrator --clone
+hermes profile create worker --clone
 
 # 3. Bootstrap your project
 cd your-project
@@ -142,7 +142,7 @@ You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* 
 | Plugin doesn't load | `hermes plugins list`; restart Hermes |
 | Skills not found | Use `plugin:` prefix: `skill_view("plugin:kanban-planning")` |
 | CLI not found | The group is `kanban-advanced`, not `kanban` |
-| Init fails on profiles | `hermes profile create orchestrator --clone default` |
+| Init fails on profiles | `hermes profile create orchestrator --clone` |
 | Cron scripts missing | Re-run `hermes kanban-advanced init` |
 
 Full guide: [docs/how-to/troubleshooting.md](docs/how-to/troubleshooting.md)

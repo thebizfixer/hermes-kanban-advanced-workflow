@@ -30,8 +30,8 @@ hermes plugins list
 The workflow uses two profiles. Choose your own names — the examples below use `orchestrator` and `worker`:
 
 ```bash
-hermes profile create orchestrator --clone default
-hermes profile create worker --clone default
+hermes profile create orchestrator --clone
+hermes profile create worker --clone
 ```
 
 Configure each profile with a model and provider. At minimum, the worker profile needs access to a coding agent CLI.
@@ -89,7 +89,7 @@ Follow the [tutorial](../tutorial/kanban-advanced-tutorial.md) for a guided walk
 |---------|----------|
 | Plugin doesn't appear in `hermes plugins list` | Restart Hermes. The plugin loader runs at startup. |
 | `hermes kanban-advanced: command not found` | The CLI group is `kanban-advanced`, not `kanban`. |
-| Init fails with "profile not found" | Create profiles first: `hermes profile create orchestrator --clone default` |
+| Init fails with "profile not found" | Create profiles first: `hermes profile create orchestrator --clone` |
 | "Project-local plugins are disabled" | Init sets `HERMES_ENABLE_PROJECT_PLUGINS=true` in `.env`. Source it or restart. |
 | Cron scripts don't run | Verify they exist at `$HERMES_HOME/scripts/`. Re-run `hermes kanban-advanced init`. |
 
