@@ -30,13 +30,13 @@ SCRIPTS_DIR = PLUGIN_ROOT / "scripts"
 HERMES_BIN = os.environ.get("HERMES_BIN", "hermes")
 
 
-def setup_argparse() -> argparse.ArgumentParser:
-    """Build the argument parser for 'hermes kanban-advanced'."""
-    parser = argparse.ArgumentParser(
-        prog="hermes kanban-advanced",
-        description="Advanced kanban workflow management for Hermes Agent",
-    )
-    subs = parser.add_subparsers(dest="subcommand", required=True)
+def setup_argparse(subparser: argparse.ArgumentParser) -> None:
+    """Build the ``hermes kanban-advanced`` argparse tree.
+
+    Called by Hermes at plugin load time. The subparser is already created —
+    we add subcommands to it.
+    """
+    subs = subparser.add_subparsers(dest="subcommand")
 
     # ── decompose ──
     dec = subs.add_parser("decompose", help="Governed card creation from a plan")
@@ -73,7 +73,7 @@ def setup_argparse() -> argparse.ArgumentParser:
     init.add_argument("--working-branch", default="main", help="Integration branch for worktrees (e.g. main, master)")
     init.add_argument("--force", action="store_true", help="Skip confirmation prompts")
 
-    return parser
+    subparser.set_defaults(func=handle_kanban)
 
 
 def handle_kanban(args: argparse.Namespace) -> int:
