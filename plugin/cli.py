@@ -171,10 +171,11 @@ def _handle_preflight(args) -> int:
 def _handle_init(args) -> int:
     """Post-install bootstrap for a project — interactive, step-by-step.
 
-    Each step must complete before moving to the next. The user is walked
-    through profile creation, model configuration, max_turns tuning, config
-    overlay, cron scripts, skill bundle, env setup, gateway check, and cron
-    job creation. Does not report "ready" until every step passes.
+    Each step must complete before moving to the next. Walks through
+    profile creation, model configuration, max_turns tuning, config
+    overlay, cron scripts, skill bundle, env setup, and gateway check.
+    Cron jobs are handled by the agent during preflight/cleanup.
+    Does not report "ready" until every step passes.
     """
     project_root = Path(args.project_root).resolve()
     hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
@@ -384,33 +385,6 @@ profiles:
                 print("   !  Start manually: hermes gateway run")
     except Exception as exc:
         print(f"   X Could not check gateway: {exc}")
-
-    # ── 7. Cron jobs ─────────────────────────────────────────────────
-    print("7. Setting up cron jobs...")
-    cron_scripts = {
-        "kanban-auto-unblock": ("every 1m", "auto_unblock.sh"),
-        "kanban-board-keeper": ("every 3m", "board_keeper.sh"),
-    }
-    for name, (schedule, script) in cron_scripts.items():
-        # Check if already exists
-        r = _run([HERMES_BIN, "cronjob", "list"])
-        if name in r.stdout:
-            print(f"   OK {name} already exists")
-            continue
-        if _yn(f"   Create cron job '{name}' ({schedule})?"):
-            r = _run([
-                HERMES_BIN, "cronjob", "create",
-                "--schedule", schedule,
-                "--script", script,
-                "--no-agent",
-                "--name", name,
-            ])
-            if r.returncode == 0:
-                print(f"   OK {name} created")
-            else:
-                print(f"   X Failed to create {name}: {r.stderr.strip()}")
-        else:
-            print(f"   !  Skipped. Create manually: hermes cronjob create --schedule \"{schedule}\" --script \"{script}\" --no-agent --name {name}")
 
     # ── Readiness ────────────────────────────────────────────────────
     print()
