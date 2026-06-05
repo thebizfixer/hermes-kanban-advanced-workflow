@@ -17,6 +17,7 @@ Subcommands:
 
 import argparse
 import logging
+import re
 import subprocess
 import sys
 import os
@@ -220,30 +221,46 @@ def _handle_init(args) -> int:
     # ── 1a. Model config ─────────────────────────────────────────────
     print()
     print("1a. Checking profile model config...")
+    # Sniff the current profile's model as a suggestion
+    try:
+        r = _run([HERMES_BIN, "config", "show"])
+        default_model = ""
+        default_provider = ""
+        default_url = ""
+        m = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", r.stdout)
+        if m:
+            default_model = m.group(1)
+        m = re.search(r"'provider':\s*'([^']+)'", r.stdout)
+        if m:
+            default_provider = m.group(1)
+        m = re.search(r"'base_url':\s*'([^']*)'", r.stdout)
+        if m:
+            default_url = m.group(1)
+        suggestion = f"{default_provider}/{default_model}" if default_provider and default_model else "none found"
+    except Exception:
+        default_model = default_provider = default_url = ""
+        suggestion = "unknown"
+
     for profile in ["worker", "orchestrator"]:
         try:
-            r = _run([HERMES_BIN, "-p", profile, "config", "get", "model.default"])
-            model = r.stdout.strip()
+            r = _run([HERMES_BIN, "-p", profile, "config", "show"])
+            pm = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", r.stdout)
+            has_model = bool(pm and pm.group(1) and pm.group(1) != "None")
         except Exception:
-            model = ""
-        if model and model != "None":
-            print(f"   OK {profile}: model.default = {model}")
+            has_model = False
+        if has_model:
+            print(f"   OK {profile}: model configured")
         else:
             print(f"   !  {profile}: no model configured")
-            if _yn(f"   Configure {profile} now?"):
-                m = input("      model name: ").strip()
-                p = input("      provider: ").strip()
-                if m:
-                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.default", m])
-                if p:
-                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.provider", p])
-                if profile == "orchestrator":
-                    u = input("      base_url (enter to skip): ").strip()
-                    if u:
-                        _run([HERMES_BIN, "-p", profile, "config", "set", "model.base_url", u])
-                print(f"   OK {profile} configured")
+            print(f"      Current profile uses: {suggestion}")
+            if default_model and default_provider and _yn(f"   Copy current model config to {profile}?"):
+                _run([HERMES_BIN, "-p", profile, "config", "set", "model.default", default_model])
+                _run([HERMES_BIN, "-p", profile, "config", "set", "model.provider", default_provider])
+                if default_url:
+                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.base_url", default_url])
+                print(f"   OK {profile} configured (copied from current profile)")
             else:
-                print(f"   !  Skipped. Fix later: hermes -p {profile} config set model.default <model-name>")
+                print(f"   !  Skipped. Run the interactive picker: hermes -p {profile} model")
 
     # ── 1b. Max turns ────────────────────────────────────────────────
     print()
