@@ -167,88 +167,105 @@ def _handle_preflight(args) -> int:
 
     return subprocess.call(["bash", str(script), args.plan_id])
 
-
 def _handle_init(args) -> int:
-    """Post-install bootstrap for a project.
+    """Post-install bootstrap for a project — interactive, step-by-step.
 
-    Provisions:
-    1. Verifies profiles (worker, orchestrator)
-    2. Creates config overlay
-    3. Provisions cron scripts to $HERMES_HOME/scripts/
-    4. Registers skill bundle for non-plugin Hermes sessions
-    5. Sets HERMES_ENABLE_PROJECT_PLUGINS=true
-    6. Verifies gateway
-    7. Outputs readiness report
+    Each step must complete before moving to the next. The user is walked
+    through profile creation, model configuration, max_turns tuning, config
+    overlay, cron scripts, skill bundle, env setup, gateway check, and cron
+    job creation. Does not report "ready" until every step passes.
     """
     project_root = Path(args.project_root).resolve()
     hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+    force = args.force
 
     print(f"kanban-advanced init -- bootstrapping {project_root}")
     print(f"  HERMES_HOME: {hermes_home}")
     print(f"  Working branch: {args.working_branch}")
     print()
 
-    errors = []
+    def _yn(prompt: str) -> bool:
+        if force:
+            return True
+        try:
+            return input(prompt + " [y/N] ").strip().lower() in {"y", "yes"}
+        except (EOFError, KeyboardInterrupt):
+            return False
 
-    # 1. Verify profiles exist
+    def _run(cmd: list[str], timeout: int = 15) -> subprocess.CompletedProcess:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+
+    # ── 1. Profiles ──────────────────────────────────────────────────
     print("1. Checking profiles...")
     try:
-        result = subprocess.run(
-            [HERMES_BIN, "profile", "list"],
-            capture_output=True, text=True, timeout=10
-        )
-        profiles_output = result.stdout
+        profiles_output = _run([HERMES_BIN, "profile", "list"]).stdout
     except Exception:
         profiles_output = ""
 
     for profile in ["worker", "orchestrator"]:
         if profile not in profiles_output:
-            msg = f"   Profile '{profile}' not found. Create it with: hermes profile create {profile}"
-            print(f"   X {msg}")
-            errors.append(msg)
+            if _yn(f"   Profile '{profile}' not found. Create it now?"):
+                r = _run([HERMES_BIN, "profile", "create", profile, "--clone"])
+                if r.returncode == 0:
+                    print(f"   OK Created '{profile}'")
+                else:
+                    print(f"   X Failed to create '{profile}': {r.stderr.strip()}")
+                    return 1
+            else:
+                print(f"   X Profile '{profile}' is required. Run: hermes profile create {profile} --clone")
+                return 1
         else:
             print(f"   OK {profile}")
 
-    # 1a. Check profile model config
+    # ── 1a. Model config ─────────────────────────────────────────────
     print()
     print("1a. Checking profile model config...")
     for profile in ["worker", "orchestrator"]:
         try:
-            result = subprocess.run(
-                [HERMES_BIN, "-p", profile, "config", "get", "model.default"],
-                capture_output=True, text=True, timeout=10
-            )
-            model = result.stdout.strip()
-            if model and model != "None":
-                print(f"   OK {profile}: model.default = {model}")
-            else:
-                print(f"   !  {profile}: no model configured")
-                print(f"      Fix: hermes -p {profile} config set model.default <model-name>")
-                print(f"           hermes -p {profile} config set model.provider <provider-name>")
-                if profile == "orchestrator":
-                    print(f"           hermes -p {profile} config set model.base_url <url>  # if needed")
+            r = _run([HERMES_BIN, "-p", profile, "config", "get", "model.default"])
+            model = r.stdout.strip()
         except Exception:
-            pass
+            model = ""
+        if model and model != "None":
+            print(f"   OK {profile}: model.default = {model}")
+        else:
+            print(f"   !  {profile}: no model configured")
+            if _yn(f"   Configure {profile} now?"):
+                m = input("      model name: ").strip()
+                p = input("      provider: ").strip()
+                if m:
+                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.default", m])
+                if p:
+                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.provider", p])
+                if profile == "orchestrator":
+                    u = input("      base_url (enter to skip): ").strip()
+                    if u:
+                        _run([HERMES_BIN, "-p", profile, "config", "set", "model.base_url", u])
+                print(f"   OK {profile} configured")
+            else:
+                print(f"   !  Skipped. Fix later: hermes -p {profile} config set model.default <model-name>")
 
-    # 1b. Check orchestrator max_turns
+    # ── 1b. Max turns ────────────────────────────────────────────────
     print()
     print("1b. Checking orchestrator max_turns...")
     try:
-        result = subprocess.run(
-            [HERMES_BIN, "-p", "orchestrator", "config", "get", "model.max_turns"],
-            capture_output=True, text=True, timeout=10
-        )
-        max_turns = result.stdout.strip()
-        if max_turns and max_turns.isdigit() and int(max_turns) >= 180:
-            print(f"   OK orchestrator: max_turns = {max_turns}")
-        else:
-            current = max_turns if max_turns else "default (90)"
-            print(f"   !  orchestrator: max_turns = {current} -- recommend 180 for complex plans")
-            print(f"      Fix: hermes -p orchestrator config set model.max_turns 180")
+        r = _run([HERMES_BIN, "-p", "orchestrator", "config", "get", "model.max_turns"])
+        max_turns = r.stdout.strip()
     except Exception:
-        pass
+        max_turns = ""
+    if max_turns and max_turns.isdigit() and int(max_turns) >= 180:
+        print(f"   OK orchestrator: max_turns = {max_turns}")
+    else:
+        current = max_turns if max_turns else "default (90)"
+        print(f"   !  orchestrator: max_turns = {current} -- recommend 180 for complex plan decomposition")
+        if _yn(f"   Set max_turns to 180?"):
+            _run([HERMES_BIN, "-p", "orchestrator", "config", "set", "model.max_turns", "180"])
+            print(f"   OK max_turns set to 180")
+        else:
+            print(f"   !  Skipped. Fix later: hermes -p orchestrator config set model.max_turns 180")
 
-    # 2. Create config overlay
+    # ── 2. Config overlay ────────────────────────────────────────────
+    print()
     print("2. Creating config overlay...")
     overlay_dir = project_root / ".hermes" / "kanban-overrides"
     overlay_dir.mkdir(parents=True, exist_ok=True)
@@ -263,11 +280,10 @@ profiles:
 """)
     print(f"   OK {config_file}")
 
-    # 3. Provision cron scripts
+    # ── 3. Cron scripts ──────────────────────────────────────────────
     print("3. Provisioning cron scripts...")
     cron_dir = hermes_home / "scripts"
     cron_dir.mkdir(parents=True, exist_ok=True)
-
     for script_name in ["auto_unblock.sh", "board_keeper.sh"]:
         src = SCRIPTS_DIR / script_name
         dst = cron_dir / script_name
@@ -276,89 +292,111 @@ profiles:
             dst.chmod(0o755)
             print(f"   OK {script_name} -> {dst}")
         else:
-            msg = f"   X {script_name} not found at {src}"
-            print(msg)
-            errors.append(msg)
+            print(f"   X {script_name} not found at {src}")
+            return 1
 
-    # 4. Register skill bundle (for non-plugin Hermes sessions)
+    # ── 4. Skill bundle ──────────────────────────────────────────────
     print("4. Registering skill bundle...")
     bundle_src = PLUGIN_ROOT / "bundles" / "kanban-advanced.yaml"
     bundle_dir = hermes_home / "skill-bundles"
     bundle_dst = bundle_dir / "kanban-advanced.yaml"
-
     if bundle_src.exists():
         bundle_dir.mkdir(parents=True, exist_ok=True)
         bundle_dst.write_text(bundle_src.read_text())
         print(f"   OK kanban-advanced.yaml -> {bundle_dst}")
-
-        # Reload bundles if hermes is available
         try:
-            subprocess.run(
-                [HERMES_BIN, "bundles", "reload"],
-                capture_output=True, text=True, timeout=10
-            )
+            _run([HERMES_BIN, "bundles", "reload"])
             print("   OK bundles reloaded")
         except Exception:
-            print("   X Could not reload bundles (hermes may not be running)")
+            print("   X Could not reload bundles")
     else:
-        msg = f"   X Bundle not found at {bundle_src}"
-        print(msg)
-        errors.append(msg)
+        print(f"   X Bundle not found at {bundle_src}")
+        return 1
 
-    # 5. Set HERMES_ENABLE_PROJECT_PLUGINS
+    # ── 5. Env ───────────────────────────────────────────────────────
     print("5. Setting HERMES_ENABLE_PROJECT_PLUGINS=true...")
     env_file = project_root / ".env"
     env_line = "HERMES_ENABLE_PROJECT_PLUGINS=true\n"
-
     if env_file.exists():
         content = env_file.read_text()
         if "HERMES_ENABLE_PROJECT_PLUGINS" not in content:
             env_file.write_text(content + env_line)
-            print("   OK Added to .env")
-        else:
-            print("   OK Already set in .env")
     else:
         env_file.write_text(env_line + "\n")
-        print("   OK Created .env with setting")
+    print("   OK")
 
-    # 6. Verify gateway
+    # ── 6. Gateway ───────────────────────────────────────────────────
     print("6. Checking gateway...")
+    gateway_ok = False
     try:
-        result = subprocess.run(
-            [HERMES_BIN, "gateway", "status"],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            print(f"   OK Gateway: {result.stdout.strip()}")
+        r = _run([HERMES_BIN, "gateway", "status"])
+        if r.returncode == 0:
+            stdout = r.stdout
+            if "outdated" in stdout.lower():
+                print("   !  Gateway running but service definition is outdated")
+                if _yn("   Restart gateway now to update?"):
+                    _run([HERMES_BIN, "gateway", "restart"], timeout=30)
+                    print("   OK Gateway restarted")
+                else:
+                    print("   !  Skipped. Run: hermes gateway restart")
+            else:
+                print("   OK Gateway running")
+            gateway_ok = True
         else:
-            msg = "Gateway not running -- start with 'hermes gateway start'"
-            print(f"   X {msg}")
-            errors.append(msg)
+            print("   !  Gateway not running")
+            if _yn("   Start gateway now?"):
+                print("   Starting gateway (this may take a moment)...")
+                r2 = subprocess.run(
+                    [HERMES_BIN, "gateway", "run"],
+                    capture_output=True, text=True, timeout=5
+                )
+                if r2.returncode == 0:
+                    print("   OK Gateway started")
+                    gateway_ok = True
+                else:
+                    print(f"   X Could not start gateway. Start manually: hermes gateway run")
+            else:
+                print("   !  Start manually: hermes gateway run")
     except Exception as exc:
-        msg = f"Could not check gateway: {exc}"
-        print(f"   X {msg}")
-        errors.append(msg)
+        print(f"   X Could not check gateway: {exc}")
 
-    # 7. Readiness report
+    # ── 7. Cron jobs ─────────────────────────────────────────────────
+    print("7. Setting up cron jobs...")
+    cron_scripts = {
+        "kanban-auto-unblock": ("every 1m", "auto_unblock.sh"),
+        "kanban-board-keeper": ("every 3m", "board_keeper.sh"),
+    }
+    for name, (schedule, script) in cron_scripts.items():
+        # Check if already exists
+        r = _run([HERMES_BIN, "cronjob", "list"])
+        if name in r.stdout:
+            print(f"   OK {name} already exists")
+            continue
+        if _yn(f"   Create cron job '{name}' ({schedule})?"):
+            r = _run([
+                HERMES_BIN, "cronjob", "create",
+                "--schedule", schedule,
+                "--script", script,
+                "--no-agent",
+                "--name", name,
+            ])
+            if r.returncode == 0:
+                print(f"   OK {name} created")
+            else:
+                print(f"   X Failed to create {name}: {r.stderr.strip()}")
+        else:
+            print(f"   !  Skipped. Create manually: hermes cronjob create --schedule \"{schedule}\" --script \"{script}\" --no-agent --name {name}")
+
+    # ── Readiness ────────────────────────────────────────────────────
     print()
     print("=" * 50)
-    if errors:
-        print("WARNING Bootstrap complete with warnings:")
-        for e in errors:
-            print(f"  - {e}")
-        return 1
-    else:
-        print("OK kanban-advanced is ready!")
-        print(f"  Config: {config_file}")
-        print(f"  Cron scripts: {cron_dir}")
-        print(f"  Skill bundle: {bundle_dst}")
-        print(f"  Profiles: worker, orchestrator")
+    print("OK kanban-advanced is ready!")
+    print(f"  Config: {config_file}")
+    print(f"  Cron scripts: {cron_dir}")
+    print(f"  Skill bundle: {bundle_dst}")
+    print(f"  Profiles: worker, orchestrator")
+    if not gateway_ok:
         print()
-        print("  Next steps:")
-        print(f"    1. Configure profile models if not set (see check 1a above)")
-        print(f"    2. Set up cron jobs for autonomous operation:")
-        print(f"       hermes cronjob create --schedule \"every 1m\" --script \"auto_unblock.sh\" --no-agent --name kanban-auto-unblock")
-        print(f"       hermes cronjob create --schedule \"every 3m\" --script \"board_keeper.sh\" --no-agent --name kanban-board-keeper")
-        print(f"    3. Start gateway: hermes gateway start")
-        print(f"    4. Decompose a plan: hermes kanban-advanced decompose --plan <file>")
-        return 0
+        print("  Before your first plan:")
+        print(f"    hermes gateway run")
+    return 0
