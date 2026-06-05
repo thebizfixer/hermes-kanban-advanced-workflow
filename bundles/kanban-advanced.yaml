@@ -1,0 +1,19 @@
+name: kanban-advanced
+description: Advanced Kanban workflow — orchestrator + worker + planning + governance + reconciliation + cleanup + preflight + notify + postmortem. Six-sigma multi-agent pipeline with walk-away intervention alerts and retrospective learning.
+skills:
+  - plugin:kanban-orchestrator
+  - plugin:kanban-worker
+  - plugin:kanban-planning
+  - plugin:kanban-reconciliation
+  - plugin:kanban-cleanup
+  - plugin:kanban-preflight
+  - plugin:kanban-notify
+  - plugin:kanban-postmortem
+  - plugin:kanban-orchestrator-governance
+  - plugin:kanban-worker-governance
+instruction: |
+  This is the advanced Kanban workflow. You are operating a six-sigma multi-agent pipeline.
+  Every card body must include a Files: line. Workers verify file compliance before completing.
+  The orchestrator never implements — it routes, monitors, audits, and reconciles.
+  In walk-away mode, notify the operator via gateway only for intervention triggers (kanban-notify).
+  After execution: reconcile, generate postmortem (kanban-postmortem), then clean up.

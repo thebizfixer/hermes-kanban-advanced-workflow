@@ -1,0 +1,539 @@
+#!/usr/bin/env bash
+# Kanban preflight — environment validation before decomposition.
+# Sources repo .env, runs checks from kanban-preflight skill checklist,
+# prints JSON to stdout. Exit 1 on blocking failures; exit 0 on pass or degraded-only.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/hermes_home.sh
+source "$SCRIPT_DIR/lib/hermes_home.sh"
+
+CHECK_TIMEOUT="${CHECK_TIMEOUT:-5}"
+PREFLIGHT_MEMORY_MIN_MB="${PREFLIGHT_MEMORY_MIN_MB:-1024}"
+PREFLIGHT_MEMORY_WARN_MB="${PREFLIGHT_MEMORY_WARN_MB:-2048}"
+PREFLIGHT_API_URL="${PREFLIGHT_API_URL:-http://127.0.0.1:8000/healthz}"
+PREFLIGHT_PROFILES="${PREFLIGHT_PROFILES:-code-worker,orchestrator}"
+PREFLIGHT_REQUIRED_SECRETS="${PREFLIGHT_REQUIRED_SECRETS:-MONGODB_URI,TINYFISH_API_KEY}"
+WORKER_PROFILE="${WORKER_PROFILE:-code-worker}"
+
+find_repo_root() {
+  local dir="$SCRIPT_DIR"
+  while [[ "$dir" != "/" ]]; do
+    if [[ -f "$dir/.env" || -d "$dir/.git" ]]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  printf '%s\n' "$(cd "$SCRIPT_DIR/.." && pwd)"
+}
+
+REPO_ROOT="$(find_repo_root)"
+cd "$REPO_ROOT"
+
+OVERLAY_CONFIG="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
+if [[ -f "$OVERLAY_CONFIG" ]]; then
+  _pf="$(grep -E '^preflight_profiles:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^preflight_profiles: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
+  [[ -n "$_pf" ]] && PREFLIGHT_PROFILES="$_pf"
+  _wp="$(grep -E '^worker_profile:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^worker_profile: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
+  [[ -n "$_wp" ]] && WORKER_PROFILE="$_wp"
+  _rs="$(grep -E '^required_secrets:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^required_secrets: *//; s/["'\'']//g')"
+  [[ -n "$_rs" ]] && PREFLIGHT_REQUIRED_SECRETS="$_rs"
+  _api="$(grep -E '^preflight_api_url:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^preflight_api_url: *//; s/^"//; s/"$//')"
+  [[ -n "$_api" ]] && PREFLIGHT_API_URL="$_api"
+fi
+
+if [[ -f "$REPO_ROOT/.env" ]]; then
+  # shellcheck disable=SC1091
+  set -a
+  source "$REPO_ROOT/.env"
+  set +a
+fi
+
+ENVIRONMENT="${ENVIRONMENT:-local}"
+TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+declare -a CHECK_JSON_LINES=()
+BLOCKING_FAILURES=0
+DEGRADED_WARNINGS=0
+
+json_escape() {
+  python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))'
+}
+
+record_check() {
+  local id="$1"
+  local status="$2"
+  local severity="$3"
+  local message="$4"
+
+  if [[ "$status" == "fail" && "$severity" == "blocking" ]]; then
+    BLOCKING_FAILURES=$((BLOCKING_FAILURES + 1))
+  elif [[ "$status" == "degraded" || ("$status" == "fail" && "$severity" == "degraded") ]]; then
+    DEGRADED_WARNINGS=$((DEGRADED_WARNINGS + 1))
+  fi
+
+  local msg_json
+  msg_json="$(printf '%s' "$message" | json_escape)"
+  CHECK_JSON_LINES+=(
+    "$(printf '{\"id\":%s,\"status\":%s,\"severity\":%s,\"message\":%s}' \
+      "$(printf '%s' "$id" | json_escape)" \
+      "$(printf '%s' "$status" | json_escape)" \
+      "$(printf '%s' "$severity" | json_escape)" \
+      "$msg_json")"
+  )
+}
+
+run_with_timeout() {
+  local seconds="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$seconds" "$@"
+  else
+    "$@"
+  fi
+}
+
+check_memory_budget() {
+  local avail_mb="0"
+  if [[ -r /proc/meminfo ]]; then
+    # Linux / WSL2
+    local avail_kb
+    avail_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
+    avail_mb=$((avail_kb / 1024))
+  elif command -v free >/dev/null 2>&1; then
+    # Linux fallback (GNU coreutils, Git Bash on Windows)
+    avail_mb="$(free -m | awk '/^Mem:/ {print $7}')"
+    avail_mb="${avail_mb:-0}"
+  elif command -v vm_stat >/dev/null 2>&1; then
+    # macOS: estimate available memory from vm_stat page counts
+    # free + speculative + inactive are all reclaimable by the kernel
+    local page_size free_pages speculative inactive
+    page_size=$(sysctl -n hw.pagesize 2>/dev/null || echo 4096)
+    free_pages=$(vm_stat | awk '/^Pages free:/ {gsub(/\./, "", $NF); print $NF+0}')
+    speculative=$(vm_stat | awk '/^Pages speculative:/ {gsub(/\./, "", $NF); print $NF+0}')
+    inactive=$(vm_stat | awk '/^Pages inactive:/ {gsub(/\./, "", $NF); print $NF+0}')
+    free_pages=${free_pages:-0}
+    speculative=${speculative:-0}
+    inactive=${inactive:-0}
+    avail_mb=$(( (free_pages + speculative + inactive) * page_size / 1024 / 1024 ))
+  fi
+
+  if [[ "$avail_mb" -lt "$PREFLIGHT_MEMORY_MIN_MB" ]]; then
+    record_check "memory_budget" "fail" "blocking" \
+      "Available memory ${avail_mb}MB is below minimum ${PREFLIGHT_MEMORY_MIN_MB}MB"
+  elif [[ "$avail_mb" -lt "$PREFLIGHT_MEMORY_WARN_MB" ]]; then
+    record_check "memory_budget" "degraded" "degraded" \
+      "Available memory ${avail_mb}MB is below recommended ${PREFLIGHT_MEMORY_WARN_MB}MB"
+  else
+    record_check "memory_budget" "pass" "blocking" \
+      "Available memory ${avail_mb}MB meets budget (${PREFLIGHT_MEMORY_WARN_MB}MB recommended)"
+  fi
+}
+
+check_secret_availability() {
+  local missing=()
+  local secret
+  IFS=',' read -r -a required <<< "$PREFLIGHT_REQUIRED_SECRETS"
+  for secret in "${required[@]}"; do
+    secret="$(printf '%s' "$secret" | tr -d '[:space:]"'\''')"
+    [[ -z "$secret" ]] && continue
+    if [[ -z "${!secret:-}" ]]; then
+      missing+=("$secret")
+    fi
+  done
+
+  if [[ "$ENVIRONMENT" == "production" && -z "${SECRET_KEY:-}" ]]; then
+    missing+=("SECRET_KEY")
+  fi
+
+  if ((${#missing[@]} > 0)); then
+    local joined
+    joined="$(IFS=,; printf '%s' "${missing[*]}")"
+    record_check "secret_availability" "fail" "blocking" \
+      "Missing required secrets: ${joined}"
+  else
+    record_check "secret_availability" "pass" "blocking" \
+      "Required secrets present (${PREFLIGHT_REQUIRED_SECRETS})"
+  fi
+}
+
+check_api_reachability() {
+  if [[ -z "${PREFLIGHT_SKIP_API:-}" ]]; then
+    local code
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time "$CHECK_TIMEOUT" "$PREFLIGHT_API_URL" 2>/dev/null || printf '000')"
+    if [[ "$code" =~ ^[23] ]]; then
+      record_check "api_reachability" "pass" "degraded" \
+        "API reachable at ${PREFLIGHT_API_URL} (HTTP ${code})"
+    else
+      record_check "api_reachability" "degraded" "degraded" \
+        "API unreachable at ${PREFLIGHT_API_URL} (HTTP ${code})"
+    fi
+  else
+    record_check "api_reachability" "pass" "degraded" \
+      "Skipped (PREFLIGHT_SKIP_API set)"
+  fi
+}
+
+check_gateway_health() {
+  if ! command -v hermes >/dev/null 2>&1; then
+    record_check "gateway_health" "fail" "blocking" \
+      "hermes CLI not found on PATH"
+    return
+  fi
+
+  local status_out=""
+  if status_out="$(run_with_timeout "$CHECK_TIMEOUT" hermes gateway status 2>&1)"; then
+    if printf '%s' "$status_out" | grep -qiE 'running|active|online|listening'; then
+      record_check "gateway_health" "pass" "blocking" "Hermes gateway is running"
+    else
+      record_check "gateway_health" "pass" "blocking" \
+        "hermes gateway status succeeded"
+    fi
+  else
+    record_check "gateway_health" "fail" "blocking" \
+      "Hermes gateway is not running (start: hermes gateway run)"
+  fi
+}
+
+check_profile_availability() {
+  local issues=()
+  local profile
+  local profiles_out=""
+
+  if ! command -v hermes >/dev/null 2>&1; then
+    record_check "profile_availability" "fail" "blocking" \
+      "hermes CLI not found on PATH"
+    return
+  fi
+
+  profiles_out="$(run_with_timeout "$CHECK_TIMEOUT" hermes profile list 2>/dev/null || true)"
+  IFS=',' read -r -a required_profiles <<< "$PREFLIGHT_PROFILES"
+  for profile in "${required_profiles[@]}"; do
+    profile="$(printf '%s' "$profile" | tr -d '[:space:]"'\''')"
+    [[ -z "$profile" ]] && continue
+    if ! printf '%s' "$profiles_out" | grep -q "$profile"; then
+      issues+=("missing profile: ${profile}")
+    fi
+  done
+
+  if ! command -v agent >/dev/null 2>&1; then
+    issues+=("agent binary not found")
+  elif ! run_with_timeout "$CHECK_TIMEOUT" agent --version >/dev/null 2>&1; then
+    issues+=("agent --version failed")
+  elif ! run_with_timeout "$CHECK_TIMEOUT" sh -c 'agent status 2>/dev/null | grep -q "Logged in"'; then
+    issues+=("agent not logged in")
+  fi
+
+  local soul_path="${HERMES_HOME}/profiles/${WORKER_PROFILE}/SOUL.md"
+  if [[ -f "$soul_path" ]] && grep -qE '%3C|%3E' "$soul_path" 2>/dev/null; then
+    issues+=("SOUL.md corruption detected")
+  fi
+
+  if ((${#issues[@]} > 0)); then
+    local joined
+    joined="$(IFS='; '; printf '%s' "${issues[*]}")"
+    record_check "profile_availability" "fail" "blocking" "$joined"
+  else
+    record_check "profile_availability" "pass" "blocking" \
+      "Profiles (${PREFLIGHT_PROFILES}) and agent auth verified"
+  fi
+}
+
+check_environment_parity() {
+  local issues=()
+  local warnings=()
+
+  case "$ENVIRONMENT" in
+    local|dev|production) ;;
+    *)
+      issues+=("ENVIRONMENT=${ENVIRONMENT} is not local, dev, or production")
+      ;;
+  esac
+
+  if [[ "$ENVIRONMENT" == "staging" ]]; then
+    issues+=("ENVIRONMENT=staging is not provisioned on this project")
+  fi
+
+  if [[ "$ENVIRONMENT" == "production" && -z "${SECRET_KEY:-}" ]]; then
+    issues+=("SECRET_KEY required when ENVIRONMENT=production")
+  fi
+
+  if [[ "$ENVIRONMENT" == "production" && "${PUBLIC_APP_URL:-}" == *localhost* ]]; then
+    warnings+=("PUBLIC_APP_URL points at localhost in production")
+  fi
+
+  if [[ "$ENVIRONMENT" == "local" && -n "${MONGODB_URI:-}" ]]; then
+    if printf '%s' "$MONGODB_URI" | grep -qiE 'prod|production'; then
+      warnings+=("MONGODB_URI may reference production while ENVIRONMENT=local")
+    fi
+  fi
+
+  if ((${#issues[@]} > 0)); then
+    local joined
+    joined="$(IFS='; '; printf '%s' "${issues[*]}")"
+    record_check "environment_parity" "fail" "blocking" "$joined"
+  elif ((${#warnings[@]} > 0)); then
+    local joined
+    joined="$(IFS='; '; printf '%s' "${warnings[*]}")"
+    record_check "environment_parity" "degraded" "degraded" "$joined"
+  else
+    record_check "environment_parity" "pass" "blocking" \
+      "ENVIRONMENT=${ENVIRONMENT} parity checks passed"
+  fi
+}
+
+check_filesystem_coherence() {
+  # Block if REPO_ROOT is on a cross-mount filesystem (WSL DrvFs, NFS, FUSE, CIFS, etc.)
+  # Override: PREFLIGHT_ALLOWED_FS_TYPES (comma-separated whitelist)
+  # Emergency skip: PREFLIGHT_SKIP_FS_CHECK=1 (audit-noted)
+
+  if [[ "${PREFLIGHT_SKIP_FS_CHECK:-}" == "1" ]]; then
+    record_check "filesystem_coherence" "pass" "blocking" \
+      "Skipped by PREFLIGHT_SKIP_FS_CHECK=1 (audit-noted override)"
+    return
+  fi
+
+  # ── Path-prefix guard ──────────────────────────────────────────
+  local path_warning=""
+  case "$REPO_ROOT" in
+    /mnt/*)
+      if [[ $(uname -r) =~ (WSL|Microsoft) ]]; then
+        path_warning="WSL DrvFs mount detected at $REPO_ROOT (cross-mount: /mnt/ → Windows NTFS). Clone to a native WSL path (e.g., ~/projects/)."
+      else
+        path_warning="Path starts with /mnt/ at $REPO_ROOT (possible cross-mount). Verify filesystem type."
+      fi
+      ;;
+    /net/*)
+      path_warning="Autofs/NFS mount detected at $REPO_ROOT (cross-mount: /net/). Clone to a local native filesystem."
+      ;;
+    /Volumes/*)
+      path_warning="External/mounted volume at $REPO_ROOT (cross-mount: /Volumes/). Clone to the internal disk."
+      ;;
+  esac
+
+  if [[ -n "$path_warning" ]]; then
+    record_check "filesystem_coherence" "fail" "blocking" "$path_warning"
+    return
+  fi
+
+  # ── Filesystem type guard ──────────────────────────────────────
+  local fs_type
+  # Linux/WSL2: df -T prints type in column 2.
+  # macOS BSD df: -T is not a type flag — use diskutil instead.
+  # Git Bash/Windows: df -T works via MSYS2 coreutils.
+  fs_type=$(df -T "$REPO_ROOT" 2>/dev/null | awk 'NR==2 {print $2}')
+  if [[ -z "$fs_type" ]] && command -v diskutil >/dev/null 2>&1; then
+    # macOS fallback: extract filesystem personality from diskutil
+    fs_type=$(diskutil info "$REPO_ROOT" 2>/dev/null \
+      | awk '/File System Personality:/ {print $NF}' \
+      | tr '[:upper:]' '[:lower:]')
+  fi
+
+  if [[ -z "$fs_type" ]]; then
+    record_check "filesystem_coherence" "degraded" "degraded" \
+      "Could not determine filesystem type for $REPO_ROOT (df -T and diskutil both failed). Cannot validate coherence."
+    return
+  fi
+
+  local allowed_types="${PREFLIGHT_ALLOWED_FS_TYPES:-}"
+  if [[ -n "$allowed_types" ]]; then
+    local allowed
+    IFS=',' read -r -a allowed <<< "$allowed_types"
+    local found=false
+    for at in "${allowed[@]}"; do
+      at=$(printf '%s' "$at" | tr -d '[:space:]')
+      [[ "$fs_type" == "$at" ]] && found=true && break
+    done
+    if [[ "$found" == "true" ]]; then
+      record_check "filesystem_coherence" "pass" "blocking" \
+        "Filesystem type $fs_type is in PREFLIGHT_ALLOWED_FS_TYPES ($allowed_types)"
+    else
+      record_check "filesystem_coherence" "fail" "blocking" \
+        "Filesystem type $fs_type at $REPO_ROOT is not in PREFLIGHT_ALLOWED_FS_TYPES ($allowed_types)"
+    fi
+  else
+    local blocked_types="9p nfs nfs4 fuse fuseblk cifs smbfs sshfs"
+    local blocked=false
+    for bt in $blocked_types; do
+      if [[ "$fs_type" == "$bt" ]]; then
+        blocked=true
+        break
+      fi
+    done
+
+    if [[ "$blocked" == "true" ]]; then
+      record_check "filesystem_coherence" "fail" "blocking" \
+        "Filesystem type $fs_type at $REPO_ROOT is a cross-mount/network filesystem. Clone to a native filesystem (ext4, xfs, apfs, btrfs). Override with PREFLIGHT_ALLOWED_FS_TYPES if this is intentional."
+    else
+      record_check "filesystem_coherence" "pass" "blocking" \
+        "Filesystem type $fs_type at $REPO_ROOT is native (not blocked)"
+    fi
+  fi
+}
+
+check_kanban_db_integrity() {
+  if [[ "${PREFLIGHT_SKIP_DB_CHECK:-}" == "1" ]]; then
+    record_check "kanban_db_integrity" "pass" "blocking" \
+      "Skipped by PREFLIGHT_SKIP_DB_CHECK=1 (audit-noted override)"
+    return
+  fi
+  local db="${HERMES_HOME}/kanban.db"
+  local lock="${db}.init.lock"
+  if [[ -f "$lock" ]]; then
+    rm -f "$lock" 2>/dev/null || true
+  fi
+  if [[ ! -f "$db" ]]; then
+    record_check "kanban_db_integrity" "degraded" "degraded" \
+      "kanban.db not found at $db (gateway may create on first run)"
+    return
+  fi
+  if python3 -c "import sqlite3; c=sqlite3.connect('${db}'); r=c.execute('PRAGMA integrity_check').fetchone()[0]; assert r=='ok', r; c.close()"; then
+    record_check "kanban_db_integrity" "pass" "blocking" "kanban.db integrity ok at $db"
+  else
+    record_check "kanban_db_integrity" "fail" "blocking" "kanban.db integrity check failed at $db"
+  fi
+}
+
+check_token_log() {
+  local token_path="${KANBAN_TOKEN_LOG:-$HERMES_HOME/kanban/tokens.jsonl}"
+  local token_dir
+  token_dir="$(dirname "$token_path")"
+  
+  if [[ -w "$token_path" ]]; then
+    record_check "token_log" "pass" "degraded" \
+      "Token log writable at $token_path"
+  elif [[ -d "$token_dir" && -w "$token_dir" ]]; then
+    record_check "token_log" "pass" "degraded" \
+      "Token log directory exists and is writable at $token_dir (file will be created)"
+  elif [[ ! -d "$token_dir" ]] && command -v mkdir >/dev/null 2>&1; then
+    mkdir -p "$token_dir" 2>/dev/null && {
+      record_check "token_log" "pass" "degraded" \
+        "Token log directory created at $token_dir"
+    } || {
+      record_check "token_log" "degraded" "degraded" \
+        "Cannot create token log directory at $token_dir — token tracking may fail"
+    }
+  else
+    record_check "token_log" "degraded" "degraded" \
+      "Token log path $token_path is not writable — set KANBAN_TOKEN_LOG"
+  fi
+
+  # Verify token_tracker.py is importable from the repo root
+  if python3 -c "import sys; sys.path.insert(0, '.'); from scripts.token_tracker import log_token_run, log_from_env, log_from_agent_output" 2>/dev/null; then
+    record_check "token_tracker_import" "pass" "degraded" \
+      "scripts/token_tracker.py is importable — token reporting will work"
+  else
+    record_check "token_tracker_import" "degraded" "degraded" \
+      "scripts/token_tracker.py not importable — token reporting will be silently skipped"
+  fi
+}
+
+check_plan_backup() {
+  # Copy the plan file to .hermes/kanban/plans/ for safe keeping
+  # before decomposition can accidentally lose it.
+  local plan_id="${KANBAN_PLAN_ID:-}"
+  local plan_src=""
+  
+  if [[ -n "$plan_id" ]]; then
+    # Try .agent/plans/ first, then .cursor/plans/
+    for dir in ".agent/plans" ".cursor/plans"; do
+      if [[ -f "$dir/${plan_id}.plan.md" ]]; then
+        plan_src="$dir/${plan_id}.plan.md"
+        break
+      fi
+      if [[ -f "$dir/${plan_id}.md" ]]; then
+        plan_src="$dir/${plan_id}.md"
+        break
+      fi
+    done
+  fi
+  
+  if [[ -n "$plan_src" ]]; then
+    local backup_dir=".hermes/kanban/plans"
+    mkdir -p "$backup_dir"
+    if cp "$plan_src" "$backup_dir/" 2>/dev/null; then
+      record_check "plan_backup" "pass" "degraded" \
+        "Plan file backed up: $plan_src → $backup_dir/"
+    else
+      record_check "plan_backup" "degraded" "degraded" \
+        "Plan backup failed (disk full or permissions) — plan still in $plan_src"
+    fi
+  else
+    record_check "plan_backup" "degraded" "degraded" \
+      "No plan file found to backup (KANBAN_PLAN_ID=$plan_id). Plan may be conversationally built."
+  fi
+}
+
+check_hermes_version() {
+  if ! command -v hermes >/dev/null 2>&1; then
+    record_check "hermes_version" "fail" "blocking" \
+      "hermes CLI not on PATH — install Hermes Agent >= 0.15.1"
+    return
+  fi
+  local ver_line
+  ver_line="$(hermes --version 2>/dev/null | head -1 || true)"
+  local ver_num=""
+  ver_num="$(printf '%s' "$ver_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
+  if [[ -z "$ver_num" ]]; then
+    record_check "hermes_version" "degraded" "degraded" \
+      "Could not parse hermes --version ($ver_line); confirm >= 0.15.1 manually"
+  else
+    if python3 -c 'import sys
+parts = [int(x) for x in sys.argv[1].split(".")]
+need = (0, 15, 1)
+sys.exit(0 if len(parts) >= 3 and tuple(parts[:3]) >= need else 1)' "$ver_num"; then
+      record_check "hermes_version" "pass" "blocking" \
+        "Hermes $ver_num >= 0.15.1 ($ver_line)"
+    else
+      record_check "hermes_version" "fail" "blocking" \
+        "Hermes $ver_num < 0.15.1 required for kanban --goal ($ver_line)"
+    fi
+  fi
+  if hermes kanban create --help 2>/dev/null | grep -q -- '--goal'; then
+    record_check "kanban_goal_flag" "pass" "blocking" \
+      "hermes kanban create supports --goal"
+  else
+    record_check "kanban_goal_flag" "fail" "blocking" \
+      "hermes kanban create missing --goal; upgrade to Hermes >= 0.15.1"
+  fi
+}
+
+check_memory_budget
+check_hermes_version
+check_filesystem_coherence
+check_kanban_db_integrity
+check_secret_availability
+check_api_reachability
+check_gateway_health
+check_profile_availability
+check_environment_parity
+check_token_log
+check_plan_backup
+
+OVERALL_STATUS="pass"
+if ((BLOCKING_FAILURES > 0)); then
+  OVERALL_STATUS="fail"
+elif ((DEGRADED_WARNINGS > 0)); then
+  OVERALL_STATUS="degraded"
+fi
+
+CHECKS_JSON="$(IFS=,; printf '%s' "${CHECK_JSON_LINES[*]}")"
+
+REPO_JSON="$(printf '%s' "$REPO_ROOT" | json_escape)"
+ENV_JSON="$(printf '%s' "$ENVIRONMENT" | json_escape)"
+
+printf '{'
+printf '"status":"%s",' "$OVERALL_STATUS"
+printf '"timestamp":"%s",' "$TIMESTAMP"
+printf '"environment":%s,' "$ENV_JSON"
+printf '"repo_root":%s,' "$REPO_JSON"
+printf '"blocking_failures":%s,' "$BLOCKING_FAILURES"
+printf '"degraded_warnings":%s,' "$DEGRADED_WARNINGS"
+printf '"checks":[%s]' "$CHECKS_JSON"
+printf '}\n'
+
+if ((BLOCKING_FAILURES > 0)); then
+  exit 1
+fi
+exit 0

@@ -1,0 +1,20 @@
+# How to: troubleshoot
+
+```bash
+hermes kanban list
+hermes kanban show <task_id>
+python hermes-kanban-advanced-workflow/scripts/kanban_recover.py --list
+bash hermes-kanban-advanced-workflow/scripts/preflight.sh
+```
+
+## Frequent issues
+
+| Symptom | Fix |
+| --- | --- |
+| PR001 — no `config.yaml` on profile | Copy template into profile dir from `$HERMES_HOME` |
+| A001 — attestation missing | Re-run preflight + `kanban_attestation.py` |
+| torn-extend / dispatch stuck | `hermes gateway restart`; see `references/sqlite-kanban-db-recovery.md` |
+| Plugin not loading | `hermes plugins list`; restart Hermes after install |
+| Cross-mount / dual clone | `docs/examples/cross-mount-filesystems.md` |
+
+Full symptom list: [wiki/troubleshooting.md](../../wiki/troubleshooting.md).

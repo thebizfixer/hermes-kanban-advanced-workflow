@@ -1,0 +1,48 @@
+---
+name: kanban-worker-governance
+description: On-demand governance reference for kanban workers — error code encyclopedia (E001–E020), evaluation chain details, and pitfall narratives. Load only when a worker hits a DENY or block and needs context.
+version: 1.0.0
+metadata:
+  hermes:
+    tags: [kanban, governance, reference, error-codes, pitfalls]
+    related_skills: [kanban-worker]
+---
+
+# Kanban Worker Governance Reference
+
+> Load this skill on-demand when a worker hits a DENY or block. The procedural `kanban-worker` skill only tells you what to DO. This skill tells you WHY.
+
+## Error Code Reference (E001–E020)
+
+Canonical source: `hermes-kanban-advanced-workflow/registry/error-codes.yaml`
+
+| Code | Severity | What it catches | Recovery |
+|------|----------|----------------|----------|
+| E001 | error | File in scope has zero changes | Agent missed a file — retry with explicit path |
+| E002 | warning | Unlisted file modified | Auto-reverted — add file to scope if intentional |
+| E003 | error | Tests failed or didn't run | Fix test failures, imports, or install test deps |
+| E004 | error | Commit message mismatch | Amend commit to match `Commit:` line |
+| E005 | warning | Token log missing (superseded by E018) | Run token_tracker.py manually |
+| E006 | error | Zero diff on all files | Check workspace type, agent auth, prompt clarity |
+| E013 | error | Evaluation chain script missing | Restore from `hermes-kanban-advanced-workflow/scripts/` |
+| E017 | error | Net line changes > 3× estimate | Block and escalate — scope explosion |
+| E018 | error | Token log not exact (task_id, source=agent, non-zero) | Capture agent stdout, extract usage, log with source="agent" |
+| E019 | error | Destructive git op (--theirs, --ours, reset --hard) | Resolve conflicts per-hunk; never overwrite entire files |
+| E020 | error | Agent output not captured/parseable | Ensure `--output-format json` and stdout redirected |
+
+## Pitfall Narratives
+
+### [unauthenticated] in worker.log is cosmetic
+The Cursor background indexing service logs `[unauthenticated] Error` during normal operation. Workers that grep worker.log for `unauthenticated` will false-positive block on every card. Use `agent -p "echo hello" --output-format json` (check `is_error`) as the sole auth verification.
+
+### CURSOR_API_KEY is a decoy env var
+Cursor CLI authenticates via OAuth token in `~/.config/cursor/auth.json`, not the env var. Setting `CURSOR_API_KEY` has no effect.
+
+### Workspace trust hangs agent in /tmp worktrees
+Cursor CLI prompts interactively for workspace trust on first run in a new directory. In non-interactive mode this hangs indefinitely. Workers must pre-create `~/.cursor/projects/<hash>/.workspace-trusted` before spawning the agent.
+
+### kanban_complete without eval chain is a protocol violation
+The evaluation chain is the governance layer's enforcement mechanism. Direct `kanban_complete` bypasses every guardrail — E006 won't catch zero output, E019 won't catch destructive git, E018 won't verify token data.
+
+### Salvage before re-dispatch for iteration-limit cards
+When a card exhausts 90 turns, the agent almost certainly completed the code work. Re-dispatching wastes another 90 turns. Check the worktree first — if commits exist, salvage by merging.

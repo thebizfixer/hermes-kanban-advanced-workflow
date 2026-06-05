@@ -1,0 +1,84 @@
+# hermes-kanban-advanced-workflow/policies/card-body-policy.yaml
+# Card body validation policy — evaluated deterministically before dispatch.
+# AGT PolicyEvaluator pattern applied to kanban card bodies.
+# Referenced by: kanban_card_policy.py
+
+apiVersion: hermes-kanban-advanced-workflow/v1
+name: card-body-policy
+description: "Validates kanban card bodies before dispatch. Cards failing policy are blocked with canonical error codes from the error registry."
+default_action: deny
+
+rules:
+  - name: require-files-line
+    condition: "body does not contain 'Files:'"
+    action: deny
+    reason: "Card body must contain a Files: line listing every file the agent touches"
+    error_code: P001_MISSING_FILES_LINE
+
+  - name: require-agent-block
+    condition: "body does not contain '```agent'"
+    action: deny
+    reason: "Card body must contain an agent -p fenced code block for worker handoff"
+    error_code: P002_MISSING_AGENT_BLOCK
+
+  - name: require-mode-line
+    condition: "body does not contain 'Mode:'"
+    action: deny
+    reason: "Card body must contain a Mode: line (modify-only, create-only, or any)"
+    error_code: P003_MISSING_MODE_LINE
+
+  - name: max-files-per-card
+    condition: "Files: count > 3"
+    action: require_approval
+    reason: "Cards touching >3 files risk agent context overflow — human review required"
+    error_code: P004_TOO_MANY_FILES
+
+  - name: require-known-model
+    condition: "agent -p block contains --model that overrides profile config.yaml"
+    action: deny
+    reason: "Card bodies must not specify --model when the assignee profile has model preferences in config.yaml. The profile determines the model, not the card body."
+    error_code: P005_MODEL_OVERRIDES_PROFILE
+
+  - name: require-worktree-workspace
+    condition: "code-gen card has scratch workspace (no worktree path)"
+    action: deny
+    reason: "Code-generation cards must use --workspace worktree:<abs-path>. Scratch workspaces have no source code and produce zero output."
+    error_code: P006_SCRATCH_WORKSPACE
+
+  - name: require-unique-workspace
+    condition: "card workspace path matches another running card's workspace"
+    action: deny
+    reason: "Multiple agents in the same worktree corrupt each other's files. Use unique /tmp/wt-<card-name> paths per card."
+    error_code: P007_SHARED_WORKSPACE
+
+  - name: forbid-parents-flag
+    condition: "card was created with --parents flag (known-broken in vanilla hermes)"
+    action: deny
+    reason: "The --parents flag is silently ignored by vanilla hermes kanban. Use hermes kanban link <parent> <child> instead. See known issues #24489."
+    error_code: P008_PARENTS_FLAG_BROKEN
+
+  - name: require-iteration-budget
+    condition: "card body indicates happy-path turns > 35 ceiling"
+    action: deny
+    reason: "Card estimated to exceed 35 happy-path turns (90-turn default). Split into smaller cards. Formula: (functions × 3) + (test_runs × 2) + (consumer_checks × 2) + 2 buffer."
+    error_code: P009_ITERATION_BUDGET_EXCEEDED
+
+  - name: require-acceptance-when-goal
+    condition: "HERMES_KANBAN_GOAL_MODE is set and body does not contain 'Acceptance:'"
+    action: deny
+    reason: "Goal-mode cards must include an Acceptance: block (judge criteria). See references/goal-card-selection.md."
+    error_code: G003_GOAL_CARD_INVALID
+
+profiles:
+  advisory:
+    default_action: allow
+    on_violation: warn
+    description: "Warn on policy violations but allow dispatch. For trusted/human-supervised runs."
+  balanced:
+    default_action: deny
+    on_violation: block
+    description: "Block cards that violate policy. Default for normal operations."
+  strict:
+    default_action: deny
+    on_violation: block_and_notify
+    description: "Block cards and notify operator via gateway. For walk-away / unattended runs."

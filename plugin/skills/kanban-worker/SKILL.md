@@ -1,0 +1,516 @@
+---
+name: kanban-worker
+description: Pitfalls, examples, and edge cases for Hermes Kanban workers — post-agent verification, evaluation chain governance, external coding agent patterns, retry diagnostics, and commit cadence.
+version: 5.1.0
+metadata:
+  hermes:
+    tags: [kanban, multi-agent, collaboration, workflow, pitfalls, governance]
+    related_skills: [kanban-orchestrator, kanban-planning]
+---
+
+# Kanban Worker — Supervisor Lifecycle
+
+> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E020, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. If you hit a DENY or block, load `kanban-worker-governance` for the error code reference — do not guess.
+
+> The **lifecycle** (7 steps: orient → memory → fast-sanity → handoff → monitor → verify → complete) is the worker's job. The worker is a **supervisor of the coding agent**, not the implementer. Its job: read the card, do a fast sanity check, hand off to the coding agent, monitor progress, verify the output via the evaluation chain, and close the task.
+
+Produce exactly what the card requests — nothing more. When in doubt, implement the simplest solution that fulfills the requirements, then ask whether anything should be expanded. If something goes wrong, take a step back and think through what happened before trying again. After any edit, the commit message should describe what changed and why.
+
+## Governance model (AGT + AEP)
+
+The worker lifecycle is gated by a deterministic evaluation chain — not by instructions. Calling `kanban_complete` without passing the chain is structurally prevented. The chain follows AEP's Deterministic Adjudication Lattice (DAL) pattern: 6 steps, each returning ALLOW/DENY with a canonical error code. The chain stops at the first DENY.
+
+**Error codes** are defined in `hermes-kanban-advanced-workflow/registry/error-codes.yaml`. **Recovery actions** are scripted in `hermes-kanban-advanced-workflow/scripts/kanban_recover.py`.
+
+## Worker lifecycle (7 steps)
+
+### Step 1 — Orient
+Read the card via `kanban_show`. Extract: `Files:` line, `Mode:` line, `Tests:` line, `Commit:` message, and the `agent -p` fenced code block. Confirm the workspace is a valid worktree. If the card has no `agent -p` block, block it immediately — the plan wasn't ready for decomposition (P002).
+
+**Plan file availability (mandatory):** The full plan file must be accessible in the worktree for autonomous troubleshooting. The card body carries task-specific instructions, but when the cursor agent hits an unexpected failure, the worker needs the plan for root cause context, phase dependencies, and sad-path contingencies.
+
+1. **Identify the plan file** — extract `plan_id` from the card body (first line: `plan_id: <id>`) or `$HERMES_KANBAN_PLAN_ID`. Search for the plan:
+```bash
+find .agent/plans .cursor/plans -name "*.md" | xargs grep -l "plan_id: $PLAN_ID" 2>/dev/null
+```
+
+2. **Restore if missing** — if the plan file is not found in the worktree (common on fresh worktrees or after `git reset --hard`), restore it from `${working_branch}`:
+```bash
+git checkout origin/${working_branch} -- .agent/plans/<plan>.md
+# Fallback if plans are in .cursor/plans/:
+# git checkout origin/${working_branch} -- .cursor/plans/
+```
+
+3. **Verify readability** — confirm the plan has the expected sections (at minimum: frontmatter with `plan_id`, `## Fix design`, and `## Test plan`). If the plan is truncated or corrupted, block the card with reason "Plan file unavailable — cannot troubleshoot autonomously" and escalate to orchestrator.
+
+**Why this matters:** Workers are autonomous supervisors. When a cursor agent fails a test, hits an import error, or produces code that doesn't match the `Files:` line, the worker reads the plan to decide: retry? block? salvage? Without the plan, every non-trivial failure becomes an intervention trigger — the worker has no context to self-heal. This check eliminates a class of unnecessary gateway notifications.
+
+### Step 2 — Memory (fast path)
+Check `.hermes/kanban/preflight_cache.json`. If timestamp < 30 min old:
+- Auth is verified — skip auth check, skip smoke test
+- Agent binary is known — skip ELF/shim debate
+- Provider/model are known — skip provider discovery
+- Branch prefix and repo root are known — skip branch discovery
+
+Only check: disk space, git clean state, branch name matches card. **This step should take under 30 seconds.**
+
+If the cache file is missing or stale (E012), run the full preflight (auth, shim, memory, branch) — but this is a degraded path that should only happen when the orchestrator skipped attestation.
+
+**Plan memory (shared warm-up):** Load `.hermes/kanban/memory/<plan_id>.json` to skip re-discovering things other workers already learned. The memory follows the ordinal framework (questions 1–14) — positive space (1–8) for what IS needed, negative space (9–14) for what must NOT happen. The orchestrator seeds this at decomposition. Workers append discoveries on completion. This eliminates the 5–8 minute cold-start repeated across every card.
+
+```bash
+PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}"
+MEMORY_FILE=".hermes/kanban/memory/${PLAN_ID}.json"
+if [ -f "$MEMORY_FILE" ]; then
+  ORIENTATION=$(python3 -c "
+import json
+with open('$MEMORY_FILE') as f:
+    d = json.load(f)
+o = d.get('orientation', {})
+print(f'worktree: {o.get(\"worktree\",{}).get(\"path_pattern\",\"?\")}')
+print(f'auth: {o.get(\"auth\",{}).get(\"cursor_api_key_path\",\"?\")}')
+pits = '; '.join(o.get('common_pitfalls', []))
+print(f'pitfalls: {pits[:200]}')
+" 2>/dev/null)
+  echo "[memory] Plan orientation loaded"
+fi
+```
+
+### Step 3 — Fast sanity
+- Confirm branch exists and matches card's `--branch`
+- `git status --short` — should be clean or contain only expected artifacts
+- Disk space > 1 GB (E007 if not)
+- Working directory matches repo root (E011 if cross-mount)
+- **Agent block guard (E014):** If the card has no `agent -p` fenced block AND no `Files:` line, this is an orchestrator-only card (gate, audit, root) that was mistakenly assigned to a worker profile. Do NOT spawn an agent — complete immediately with `kanban_complete(summary="Orchestrator-only card — no agent work to do.")`. Protocol violations happen when workers spawn agents with nothing to execute.
+- **Workspace isolation check:** If `git worktree list` shows more than one agent sharing this worktree path, self-heal by creating an isolated worktree.:
+```bash
+ISOLATED=$(mktemp -d "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/wt-$(echo $HERMES_KANBAN_TASK | cut -c1-8)-XXXXXX")
+git worktree add --detach "$ISOLATED" HEAD
+cd "$ISOLATED"
+```
+Log a heartbeat noting the isolation. The original shared worktree should be left untouched — other agents may still be using it.
+
+- **Integration freshness check (mandatory):** Before spawning the agent, verify the worktree is based on the latest staging/trunk. If the parent card completed >1hr ago, staging may have advanced with other cards' changes — the agent would work on stale code.
+
+```bash
+WORKTREE_BASE=$(git merge-base HEAD origin/staging 2>/dev/null || git merge-base HEAD origin/main)
+STAGING_HEAD=$(git rev-parse origin/staging 2>/dev/null || git rev-parse origin/main)
+if [ "$WORKTREE_BASE" != "$STAGING_HEAD" ]; then
+    echo "[worker] Staging has advanced — rebasing worktree before agent spawn"
+    git fetch origin staging 2>/dev/null || git fetch origin main
+    git merge origin/staging --no-edit 2>/dev/null || git merge origin/main --no-edit || {
+        echo "[worker] Merge conflict with staging — blocking for manual resolution"
+        exit 1
+    }
+fi
+```
+
+- **Cursor CLI auth verification (mandatory, replaces log-grep):** Do NOT check for `[unauthenticated]` in worker logs — this is the background indexing service (cosmetic, not blocking). Do NOT rely on `agent status` alone — it shows OAuth state but not execution capability. The ONLY reliable auth check is:
+
+```bash
+agent -p "echo hello" --output-format json 2>&1 | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+if d.get('is_error'):
+    sys.exit(1)
+print('agent auth: OK')
+"
+```
+
+If this exits 0, the agent is functional regardless of log noise. Block only if `is_error: true`. The Cursor CLI ignores `CURSOR_API_KEY` — it authenticates via OAuth token in `~/.config/cursor/auth.json`. `[unauthenticated]` in worker logs is the indexing service, not the agent.
+
+- **Workspace trust pre-provisioning (mandatory for /tmp worktrees):** Cursor CLI prompts for workspace trust on first run in a new directory, hanging indefinitely in non-interactive mode. Before spawning the agent, pre-trust the worktree:
+
+```bash
+WORKSPACE_PATH="${HERMES_KANBAN_WORKSPACE:-$(pwd)}"
+TRUST_HASH=$(echo "$WORKSPACE_PATH" | sed 's|^/||; s|/|-|g')
+TRUST_DIR="$HOME/.cursor/projects/$TRUST_HASH"
+mkdir -p "$TRUST_DIR" && touch "$TRUST_DIR/.workspace-trusted"
+```
+
+Pattern: strip leading `/`, replace `/` with `-` (e.g. `/tmp/wt-matrix-v3-e1` → `tmp-wt-matrix-v3-e1`). Then verify: `agent -p "echo hello" --output-format json` from the worktree should exit cleanly.
+
+### Step 4 — Handoff to coding agent
+
+```bash
+# The card body contains:
+# ```agent
+# agent -p "Implement WS3 per plan §Phase 1, Workstream 3. ..."
+# ```
+# Capture agent stdout for token extraction (mandatory):
+AGENT_OUTPUT=$(agent -p "$FULL_PROMPT" --output-format json 2>&1)
+echo "$AGENT_OUTPUT" > "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/agent_output_${HERMES_KANBAN_TASK}.json"
+
+# Extract token data for exact reporting:
+if echo "$AGENT_OUTPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+if not d.get('is_error'):
+    usage = d.get('usage', {})
+    print(usage.get('inputTokens', 0))
+    print(usage.get('outputTokens', 0))
+" 2>/dev/null; then
+    echo "[worker] Agent output captured for token extraction"
+fi
+```
+
+> **Model selection belongs to the profile, not the card body.** Do NOT add `--model` or `--output-format` flags. The profile's `config.yaml` determines the model. The worker reads `model.default` from the profile config. See § Provider/model fallback chain.
+
+Do NOT construct the prompt. Do NOT re-read the body to build arguments. Extract and execute. Start the heartbeat thread before the agent call.
+
+**Coding agent governance block (mandatory):** Before executing the agent, prepend the governance instructions from `references/coding-agent-governance.md` to the prompt. This injects the `Files:` boundary, issue-reporting protocol, verification requirements, and prohibited-actions list directly into the agent's task. The governance block is enforced post-hoc by the evaluation chain (E001–E006), but prompt-level guardrails reduce the remediation burden — without them, every agent run produces scope violations that the worker must revert.
+
+```bash
+GOVERNANCE=$(cat hermes-kanban-advanced-workflow/skills/references/coding-agent-governance.md 2>/dev/null)
+if [ -z "$GOVERNANCE" ]; then
+  GOVERNANCE="## Governance
+### Files boundary
+You MUST ONLY modify files listed in Files: below. Do NOT install packages,
+modify configs, or touch files outside the Files: list.
+### If blocked: report exact error to worker. Do NOT guess."
+fi
+AGENT_PROMPT="$(extract_agent_block_from_body)"
+FULL_PROMPT="$GOVERNANCE
+
+---
+
+$AGENT_PROMPT"
+agent -p "$FULL_PROMPT"
+```
+
+### Step 5 — Monitor
+
+Heartbeat every 3 minutes during agent execution. If no file changes in 5 minutes, investigate.
+
+**Salvage before crash (mandatory):** When the agent exits (regardless of exit code), BEFORE deciding it crashed, check for commits:
+
+```bash
+# Agent exited — check for work BEFORE blocking
+NEW_COMMITS=$(git log --oneline HEAD~5..HEAD 2>/dev/null | wc -l)
+AGENT_COMMIT=$(git log --oneline -1 --grep="$(echo $COMMIT_MSG | head -c 30)" 2>/dev/null)
+
+if [ -n "$AGENT_COMMIT" ] || [ "$NEW_COMMITS" -gt 0 ]; then
+  echo "[worker] Agent produced commits — proceeding to verification"
+  # Go to Step 6 (Verify), do NOT block
+else
+  echo "[worker] No commits found — agent produced no output"
+  kanban_block "$TASK_ID" "Agent exited without producing commits"
+  exit 1
+fi
+```
+
+If the agent produced commits but exited without calling `kanban_complete` (protocol violation), that's a salvage path — proceed to verification, run the eval chain, and complete the card. Do NOT block a card that has committed work. Only block if there are genuinely zero commits AND the agent crashed/timed out.
+
+### Step 6 — Verify (mandatory, post-agent, gated by evaluation chain)
+
+**The worker must run the deterministic evaluation chain. Calling `kanban_complete` directly without running the chain is a protocol violation. The chain is a hard gate — no path to Step 7 without ALLOW on every step.**
+
+```bash
+python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace> --baseline HEAD~1
+```
+
+The evaluation chain runs deterministic steps (AEP DAL pattern). Each returns ALLOW or DENY. **The chain stops at the first DENY.** No step is optional. No step is a warning — every DENY blocks the card.
+
+| Step | Code | What it checks | On DENY |
+|------|------|---------------|---------|
+| 1. Files: compliance | E001 | Every file in `Files:` has >0 changes in diff | Block — agent didn't touch required files |
+| 2. Unlisted changes | E002 | **Hard gate.** Auto-revert files modified outside `Files:`. If revert fails, DENY. | Block — agent modified files it wasn't authorized to touch. Orchestrator investigates. |
+| 3. Test pass | E003 | Run `Tests:` command, all must pass | Block — fix code or split card |
+| 4. Commit match | E004 | `git log -1 --format=%s` matches `Commit:` line | Block — commit message mismatch |
+| 5. Token log written | E018 | `tokens.jsonl` has an entry with matching `task_id`, source=`agent`, and non-zero token count | Block — cannot attribute burn to plan. Fix token_tracker import. |
+| 6. Zero-output check | E006 | At least one `Files:` file has >0 diff | Block — agent produced no code |
+| 7. Agent output capture | E020 | Agent's JSON output saved and parseable | Block — can't verify what agent did |
+| 8. Excessive churn | E017 | Net line changes < 3× estimate | Block — agent rewrote more than expected. Orchestrator reviews. |
+
+**E002 is a hard gate.** The auto-revert MUST succeed. If `git checkout HEAD~1 -- <unlisted_file>` fails (merge conflict, file didn't exist before), the card blocks. The orchestrator must investigate why the agent modified files outside its scope — this is a governance violation, not a cleanup task.
+
+**E018 is a hard gate.** The token log entry MUST exist for this task. If `tokens.jsonl` has no entry with matching `task_id`, source=`agent`, and non-zero tokens, the card blocks. The orchestrator can manually add the entry and unblock, but the worker must not complete without token attribution.
+
+**Lattice memory (AEP attractor pattern):** After successful completion, the chain writes a lattice memory entry with files + tests hash. Subsequent workers with matching attractor_hash skip cold-path validation for steps 1, 3, and 4. Steps 2, 5, and 6 always run — scope enforcement and token attribution are never cached.
+
+If the chain returns DENY, the task is blocked. Use `kanban_recover.py` for automated recovery:
+```bash
+python hermes-kanban-advanced-workflow/scripts/kanban_recover.py <task_id> <error_code>
+```
+
+If the chain script is missing (E013), block the task immediately — governance cannot proceed.
+
+### Goal-mode dispatch (`HERMES_KANBAN_GOAL_MODE`)
+
+When the dispatcher sets `HERMES_KANBAN_GOAL_MODE=1`, the worker may run **multiple Hermes turns** in the same session. The upstream judge re-checks card title + body (`Acceptance:`) after each turn until done, budget exhausted, or `kanban_block` / `kanban_complete`.
+
+**Worker rules:**
+
+- After **each** coding-agent handoff, run Steps 5–6 (monitor → evaluation chain) before `kanban_complete`.
+- Do **not** skip the evaluation chain because the Hermes judge said continue or done.
+- Log tokens on every coding-agent invocation (Step 6 token log still applies per turn).
+- Long `running` state is expected; do not treat as a stall until `goal_max_turns` or block.
+- If budget exhausts, upstream blocks the card — escalate via `kanban-notify`; do not silently exit.
+
+See `references/goal-card-selection.md` and `docs/how-to/goal-cards.md`.
+
+### Step 7 — Complete
+
+**`kanban_complete` is gated. Do not call it unless Step 6 returned ALLOW on every step.** If any step returned DENY, the card is already blocked — do not complete it. Salvage paths (agent produced commits but worker crashed) run the full eval chain before completing.
+
+```python
+# Only after eval chain passes ALL steps:
+kanban_complete(
+    summary="<one-line description of what shipped>",
+    metadata={
+        "changed_files": [...],
+        "tests_run": N,
+        "tests_passed": N,
+        "commit": "<sha>",
+        "evaluation_chain": "passed",
+        "token_log_written": True,  # E005 verified
+    },
+)
+```
+
+**Append plan memory:** After successful completion, write any discoveries to `.hermes/kanban/memory/<plan_id>.json` so subsequent workers benefit from what this worker learned. Include: workspace quirks, auth fixes, workaround commands, pitfall resolutions.
+
+```python
+import json, os, datetime
+
+plan_id = os.environ.get("HERMES_KANBAN_PLAN_ID", "")
+task_id = os.environ.get("HERMES_KANBAN_TASK", "")
+memory_file = f".hermes/kanban/memory/{plan_id}.json"
+
+if os.path.exists(memory_file):
+    with open(memory_file) as f:
+        data = json.load(f)
+    discoveries = data.get("discoveries", [])
+    # Append discoveries from this run
+    data["discoveries"] = discoveries
+    data["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with open(memory_file, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+```
+
+If verification fails at any point, `kanban_block` with the specific error code. Do NOT complete a task that didn't pass the evaluation chain.
+
+**Append plan memory:** After successful completion, write any discoveries to `.hermes/kanban/memory/<plan_id>.json` so subsequent workers benefit from what this worker learned. Include: workspace quirks, auth fixes, workaround commands, pitfall resolutions. The memory follows the ordinal framework (questions 1–14) — append discoveries to the corresponding question key.
+
+```python
+import json, os, datetime
+
+plan_id = os.environ.get("HERMES_KANBAN_PLAN_ID", "")
+task_id = os.environ.get("HERMES_KANBAN_TASK", "")
+memory_file = f".hermes/kanban/memory/{plan_id}.json"
+
+if os.path.exists(memory_file):
+    with open(memory_file) as f:
+        data = json.load(f)
+    discoveries = data.get("discoveries", [])
+    data["discoveries"] = discoveries
+    data["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    with open(memory_file, "w") as f:
+        json.dump(data, f, indent=2, default=str)
+```
+
+## Commit cadence
+
+**After completing each section of a plan, commit and push before moving to the next.** This is not optional — it is the single most effective protection against losing work to a gateway timeout or runtime crash.
+
+**Rule:** When the orchestrator merges a section's worktree branch into `${working_branch}`, it immediately pushes `${working_branch}`. Workers never push directly to `${working_branch}` — they commit to their own worktree branch (`wt/<card-name>`) and signal `kanban_complete`. The orchestrator handles the merge.
+
+## Workspace handling
+
+**All code-generation cards must use `worktree` workspace.** `scratch` workspaces have no project files — agents cannot find the repo and will complete with zero changes. The only exception is cards that generate standalone output (reports, analysis) with no dependency on the codebase.
+
+| Kind | When to use |
+|------|-------------|
+| `worktree:<repo-path>` | **Default for all code-gen cards.** Agents commit to `wt/<card-name>` branch. |
+| `dir:<path>` | Shared data that outlives a single task. |
+| `scratch` | Report generation or analysis with no codebase dependency. Never for code changes. |
+
+If a code-gen card was created with `scratch` workspace, block it immediately: the agent will produce zero output.
+
+## Good summary + metadata shapes
+
+**Coding task:**
+```python
+kanban_complete(
+    summary="shipped rate limiter — token bucket, keys on user_id with IP fallback, 14 tests pass",
+    metadata={
+        "changed_files": ["rate_limiter.py", "tests/test_rate_limiter.py"],
+        "tests_run": 14,
+        "tests_passed": 14,
+        "decisions": ["user_id primary, IP fallback for unauthenticated requests"],
+        "evaluation_chain": "passed",
+    },
+)
+```
+
+## Mandatory post-agent verification
+
+After an external coding agent completes, run the evaluation chain — not manual checks. See Step 6 above.
+
+## Token observability (mandatory — worker fails without it)
+
+Token attribution from planning through cleanup is a **hard requirement**. Every token burned by Hermes sessions and external coding agents must be attributed to a plan. Project managers use this data to budget token burn per sprint and scope project waterfalls.
+
+After the external agent completes and before `kanban_complete`, log token usage. The worker MUST call `log_token_run()` on EVERY completion path — success, salvage, and protocol-violation recovery. If the import fails, the worker blocks the card with reason "Token tracker unavailable — cannot attribute burn to plan."
+
+### Import (with fallback)
+
+```python
+import json, os, sys
+
+# Try project-local token_tracker first, fall back to hermes-kanban-advanced-workflow
+try:
+    sys.path.insert(0, os.environ.get("HERMES_KANBAN_REPO_ROOT", os.getcwd()))
+    from scripts.token_tracker import log_token_run
+except ImportError:
+    try:
+        repo = os.environ.get("HERMES_KANBAN_REPO_ROOT", "")
+        bundle = os.path.join(repo, "hermes-kanban-advanced-workflow")
+        sys.path.insert(0, bundle)
+        from scripts.token_tracker import log_token_run
+    except ImportError:
+        kanban_block(
+            task_id=os.environ["HERMES_KANBAN_TASK"],
+            reason="Token tracker unavailable — cannot attribute burn to plan",
+        )
+        sys.exit(1)
+```
+
+### Log both cursor and Hermes tokens
+
+Cursor CLI `--output-format json` exposes `usage.inputTokens`, `usage.outputTokens`, `usage.cacheReadTokens`, `usage.cacheWriteTokens`.
+
+For Hermes session tokens, the worker captures its own token burn by reading the session state. The `/usage` slash command or `hermes sessions stats` provides token totals. If programmatic access isn't available, estimate from turn count × system prompt size (3,000 tokens/turn), and mark the estimate.
+
+```python
+agent_usage = {}
+agent_duration_ms = 0
+try:
+    agent_output = json.loads(result.stdout)
+    agent_usage = agent_output.get("usage", {})
+    agent_duration_ms = agent_output.get("duration_api_ms", 0)
+except (json.JSONDecodeError, KeyError):
+    pass
+
+# Hermes tokens: try exact from session, fall back to turn-count estimate
+hermes_turns = int(os.environ.get("HERMES_KANBAN_TURNS", "3"))
+hermes_token_estimate = hermes_turns * 3000  # system prompt + tool schemas ≈ 3K/turn
+hermes_total = int(os.environ.get("HERMES_SESSION_TOKENS", str(hermes_token_estimate)))
+
+log_token_run(
+    plan_id=os.environ.get("HERMES_KANBAN_PLAN_ID", ""),
+    task_id=os.environ.get("HERMES_KANBAN_TASK", ""),
+    cursor_input_tokens=agent_usage.get("inputTokens", 0),
+    cursor_output_tokens=agent_usage.get("outputTokens", 0),
+    cursor_cache_read_tokens=agent_usage.get("cacheReadTokens", 0),
+    cursor_cache_write_tokens=agent_usage.get("cacheWriteTokens", 0),
+    cursor_model="<model-name>",
+    duration_seconds=agent_duration_ms / 1000.0 if agent_duration_ms else 0,
+    hermes_input_tokens=0,
+    hermes_output_tokens=0,
+    hermes_total_tokens=hermes_total,
+    hermes_turns=hermes_turns,
+    status="completed",
+)
+```
+
+### Log on every completion path
+
+| Path | What to log |
+|------|-------------|
+| Agent success → `kanban_complete` | Full cursor + hermes token data |
+| Salvage (commit exists, worker crashed) | Cursor tokens from agent output + hermes estimate |
+| Protocol violation (no commit) | Hermes tokens only (session overhead) + `status: "protocol_violation"` |
+| Blocked (environment failure) | Hermes tokens only + `status: "blocked"` |
+
+The orchestrator reads `tokens.jsonl` during reconciliation and the postmortem generator uses it for §7 Token Economics. **Zero token entries for a plan = failed postmortem.** The orchestrator must investigate which worker/script didn't write to the log and harden the gap before the next plan run.
+
+## External coding agent patterns
+
+### Decide: agent or terminal?
+
+Agents are for **code generation** only. Use **terminal commands directly** for pipeline execution (test suites, benchmarking, schema regeneration, git merges).
+
+- ✓ Agent: `"add evaluate_sentiment_rewrite function to classifier.py"`
+- ✗ Agent: `"re-run test suite and record results"` → use terminal
+
+### Heartbeat pattern (mandatory)
+
+Heartbeat every 3-5 minutes during agent execution to prevent the 15-minute reclaim cycle:
+
+```python
+import threading, time, os, subprocess
+
+stop = threading.Event()
+task_id = os.environ["HERMES_KANBAN_TASK"]
+
+def _heartbeat_loop():
+    start = time.time()
+    while not stop.is_set():
+        elapsed = int(time.time() - start)
+        kanban_heartbeat(
+            task_id=task_id,
+            note=f"Agent running — {elapsed//60}m elapsed"
+        )
+        stop.wait(timeout=180)
+
+hb = threading.Thread(target=_heartbeat_loop, daemon=True)
+hb.start()
+try:
+    result = subprocess.run(
+        ["agent", "-p", prompt, "--model", "<model-name>", "--output-format", "json"],
+        capture_output=True, text=True, timeout=900, cwd=workspace
+    )
+finally:
+    stop.set()
+    hb.join(timeout=5)
+```
+
+### Do NOT
+
+- Modify files outside `$HERMES_KANBAN_WORKSPACE` unless the task body says to.
+- Create follow-up tasks assigned to yourself.
+- Complete a task you didn't actually finish. Block it instead.
+- Call `kanban_complete` directly — always go through the evaluation chain (Step 6).
+- Push to `${trigger_branch}` or `origin/${trigger_branch}` — commit to worktree branch only (E009).
+- Use `git add -A` — use `git add <specific files>` to avoid staging unrelated changes.
+
+## Provider/model fallback chain
+
+The worker uses the profile's configured model from `config.yaml` (not hardcoded in the card body — see P005_MODEL_OVERRIDES_PROFILE). When the configured provider fails, follow the same SOP as Hermes Agent:
+
+1. **Primary:** Use the profile's `model.default` and `model.provider` from `config.yaml`.
+2. **Profile fallbacks:** If the primary provider fails (HTTP 429, connection error, timeout), try `fallback_providers` configured in the profile's `config.yaml`. Retry once per fallback provider before escalating.
+3. **Global fallback:** If all profile-level providers are exhausted, fall back to the **primary `config.yaml`** (`$HERMES_HOME/config.yaml` or `~/.hermes/config.yaml`).
+4. **Escalate:** If the primary config also fails, block the task with the error code and trigger intervention per `kanban-notify`.
+
+**Applicable error codes:** E008 (network down — retryable, triggers fallback). **Non-applicable:** PR001 (no `config.yaml`) is a config issue, not a provider failure; auth failures are caught before handoff.
+
+## Retry scenarios
+
+If `kanban_show` returns prior runs, you're a retry. Don't repeat the failed path:
+
+- `timed_out` — chunk the work or shorten it.
+- `crashed` — OOM or segfault. Reduce memory footprint.
+- `spawn_failed` — usually a profile config issue. Block with evidence.
+- `protocol_violation` — worker exited cleanly without signaling. Common causes: (a) agent -p block missing from card body (orchestrator-only card assigned to worker) — guard this in Step 3; (b) agent crashed but worker didn't catch the signal. Check `git log` — agent may have already committed everything needed.
+
+## Startup optimization (fast-path)
+
+Workers waste 5–8 minutes per task running identical pre-flight checks. Use the fast path: check `.hermes/kanban/preflight_cache.json`. If < 30 min old, skip auth/shim/memory. Always check disk space, branch, git clean state.
+
+## Pitfalls
+
+> **Full error code reference + pitfall narratives → `kanban-worker-governance`.** Load the governance reference skill when you hit a DENY or need diagnostic context.
+
+**Key procedural pitfalls (see governance ref for full context):**
+- Always heartbeat during agent execution (15-minute reclaim cycle).
+- Never push to `${trigger_branch}` — commit to worktree branch only.
+- `git reset --hard` destroys plan files — restore with `git checkout ${working_branch} -- .agent/plans/`.
+- Agent `-p` is for code generation only — pipeline execution uses terminal commands.
+- Never call `kanban_complete` directly — always run the evaluation chain (E001–E020).
+- Cursor `[unauthenticated]` in logs is cosmetic — use `agent -p "echo hello" --output-format json` for auth.
+- `CURSOR_API_KEY` is a decoy env var — Cursor CLI uses OAuth in `~/.config/cursor/auth.json`.
+- Pre-create `.workspace-trusted` before spawning agent in `/tmp` worktrees.
+- Salvage iteration-limit cards before re-dispatching — check the worktree for commits.
+- Hung-agent detection: investigate after 5 minutes with zero file changes.

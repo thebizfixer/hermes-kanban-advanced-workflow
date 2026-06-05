@@ -1,0 +1,308 @@
+# hermes-kanban-advanced-workflow/registry/error-codes.yaml
+# Canonical error registry — AEP error registry pattern.
+# Every kanban failure mode maps to a code, severity, and recovery action.
+# Referenced by: evaluation chain, card body policy, kanban-notify, sad-path recovery.
+
+version: 1
+description: "Canonical error codes for kanban-workflow governance. Evaluation chain, card body policy, and recovery scripts reference these codes."
+
+codes:
+  # ── Evaluation chain errors (Workstream 1) ──
+  E001:
+    code: E001_FILE_NOT_IN_DIFF
+    severity: error
+    description: "File listed in card body Files: line has zero changes in git diff"
+    recovery: "Agent missed a file. Check agent output for errors. Retry with explicit file path in prompt."
+    source: evaluation_chain_step_1
+    retry: true
+
+  E002:
+    code: E002_UNLISTED_FILE_CHANGE
+    severity: warning
+    description: "Agent modified a file not listed in card body Files: line"
+    recovery: "Auto-reverted by evaluation chain Step 2. If change was intentional, add file to card body Files: line and re-run."
+    source: evaluation_chain_step_2
+    retry: false
+
+  E003:
+    code: E003_TEST_FAILURE
+    severity: error
+    description: "Tests returned non-zero, or no tests actually ran (collected 0 items), or import/syntax error prevented execution"
+    sub_codes:
+      - E003_NO_TESTS_RAN: "collected 0 items / no tests ran"
+      - E003_IMPORT_ERROR: "ModuleNotFoundError or ImportError prevented test execution"
+      - E003_SYNTAX_ERROR: "SyntaxError in code under test"
+      - E003_TEST_RUNNER_MISSING: "pytest or test runner not available in workspace"
+      - E003_TEST_FAILURE: "Tests returned non-zero exit code"
+    recovery: "Fix the specific failure: add test cases, fix imports, correct syntax, install test dependencies, or fix failing assertions."
+    source: evaluation_chain_step_3
+    retry: true
+
+  E004:
+    code: E004_COMMIT_MISMATCH
+    severity: error
+    description: "Git commit message does not match card body Commit: line"
+    recovery: "Agent used wrong commit message or committed on wrong branch. Amend commit or update card body Commit: line."
+    source: evaluation_chain_step_4
+    retry: false
+
+  E005:
+    code: E005_TOKEN_LOG_MISSING
+    severity: warning
+    description: "Token tracker script did not produce a log entry at expected path (superseded by E018 exact token verification)"
+    recovery: "Run scripts/token_tracker.py manually with task_id and model context. Log entry needed for cost tracking. E018 now blocks on missing/non-exact entries."
+    source: evaluation_chain_step_5
+    retry: false
+
+  E006:
+    code: E006_ZERO_OUTPUT
+    severity: error
+    description: "All files in Files: line have zero diff — agent produced no effective changes"
+    recovery: "Agent produced nothing. Check workspace type (must be worktree, not scratch), agent auth, and prompt clarity."
+    source: evaluation_chain_step_6
+    retry: true
+
+  # ── Environmental errors ──
+  E007:
+    code: E007_DISK_FULL
+    severity: error
+    description: "Disk space below 1 GB threshold"
+    recovery: "Free disk space. Block all cards on this host until resolved."
+    source: worker_sanity_step_3
+    retry: false
+
+  E008:
+    code: E008_NETWORK_DOWN
+    severity: error
+    description: "Cannot reach API endpoint — network unavailable or rate-limited"
+    recovery: "Wait for network restore or rate-limit window reset. Retry on next dispatcher tick."
+    source: agent_startup
+    retry: true
+
+  E009:
+    code: E009_PUSH_TO_DEVELOPMENT
+    severity: error
+    description: "Agent pushed to development branch — protocol violation"
+    recovery: "Delete remote branch. Reset local. Agent must only push to its worktree branch."
+    source: pre_push_hook
+    retry: false
+
+  E010:
+    code: E010_FORBIDDEN_COMMAND
+    severity: error
+    description: "Agent attempted sudo, rm -rf, or other blocked command"
+    recovery: "Terminate agent process. Restart in clean worktree with restricted toolset."
+    source: sandbox_policy
+    retry: false
+
+  E011:
+    code: E011_CROSS_MOUNT_FILESYSTEM
+    severity: error
+    description: "Working copy on cross-mount filesystem (WSL DrvFs, NFS, FUSE)"
+    recovery: "Clone repo to native filesystem path (ext4/xfs/apfs). Re-run preflight."
+    source: preflight_check_0  # automated via check_filesystem_coherence() in preflight.sh
+    retry: false
+
+  E012:
+    code: E012_STALE_PREFlight_CACHE
+    severity: warning
+    description: "Preflight cache timestamp > 30 minutes old"
+    recovery: "Orchestrator must re-run preflight and regenerate attestation before dispatching."
+    source: worker_step_2
+    retry: false
+
+  E013:
+    code: E013_EVALUATION_CHAIN_MISSING
+    severity: error
+    description: "kanban_evaluation_chain.py not found at expected path"
+    recovery: "Restore from hermes-kanban-advanced-workflow/scripts/. Worker cannot complete tasks without evaluation chain."
+    source: worker_step_6
+    retry: false
+
+  E014:
+    code: E014_ORCHESTRATOR_CARD_ON_WORKER
+    severity: error
+    description: "Card has no agent -p block and no Files: line — orchestrator-only card mistakenly assigned to worker profile"
+    recovery: "Worker must complete immediately with kanban_complete(summary='Orchestrator-only card — no agent work to do.'). Orchestrator must reassign such cards to ${orchestrator_profile}."
+    source: worker_step_3
+    retry: false
+
+  E015:
+    code: E015_TEST_ENVIRONMENT_INVALID
+    severity: error
+    description: "Test dependencies missing in workspace — pytest, pytest-asyncio, or project requirements not installed"
+    recovery: "Worker must verify test environment before running evaluation chain. Run: pip install -r requirements.txt or equivalent. If missing dependencies are project-wide, add to preflight."
+    source: worker_step_3
+    retry: true
+
+  E016:
+    code: E016_COMMIT_NOT_ON_STAGING
+    severity: error
+    description: "Card completed but its commits are not reachable from staging — worktree was cleaned before merge"
+    recovery: "Orchestrator must salvage commits from worktree (if still on disk) or re-run the card. Prevention: merge each card to staging immediately after completion, never wait for final audit."
+    source: orchestrator_final_audit
+    retry: false
+
+  E017:
+    code: E017_EXCESSIVE_CHURN
+    severity: error
+    description: "Net line changes (additions + deletions) exceed the card's estimated line budget by >3x — possible whole-module rewrite not in plan scope"
+    recovery: "Block card and escalate to orchestrator. Compare actual diff against card's estimated_lines. If intentional, update estimate; if not, split card or constrain agent prompt."
+    source: evaluation_chain_step_7
+    retry: false
+
+  E018:
+    code: E018_TOKEN_NOT_EXACT
+    severity: error
+    description: "Token log entry is missing, has wrong task_id, source is not 'agent' (estimated or missing), or token counts are zero — replaces E005 existence check with exact verification"
+    recovery: "Worker must capture agent stdout to /tmp/agent_output_<task_id>.json, extract token counts from usage block, and log with source='agent'. See token_tracker.py log_from_agent_output()."
+    source: evaluation_chain_step_5
+    retry: false
+
+  E020:
+    code: E020_AGENT_OUTPUT_UNPARSEABLE
+    severity: error
+    description: "Agent output file not found at /tmp/agent_output_<task_id>.json, file is not valid JSON, or file is missing the 'usage' block — agent may have crashed, timed out, or worker did not capture stdout"
+    recovery: "Ensure agent is invoked with --output-format json and stdout is redirected to /tmp/agent_output_<task_id>.json. Re-run agent with output capture."
+    source: evaluation_chain_step_7
+    retry: true
+
+  E019:
+    code: E019_DESTRUCTIVE_GIT_OP
+    severity: error
+    description: "Destructive git operation detected in reflog — checkout --theirs, checkout --ours, or reset --hard. These overwrite ENTIRE files on multi-author code, silently dropping unrelated changes."
+    recovery: "Resolve conflicts per-hunk with git mergetool or manual edit. Never use --theirs/--ours on source files. Legitimate reset --hard for project artifact restoration (.cursor/plans/, docs/) is auto-exempted."
+    source: evaluation_chain_step_8
+    retry: true
+
+  # ── Card body policy errors (Workstream 3) ──
+  P001:
+    code: P001_MISSING_FILES_LINE
+    severity: error
+    description: "Card body missing Files: line"
+    recovery: "Add Files: line listing every file the agent must touch. Minimum one file."
+    source: card_body_policy
+    retry: false
+
+  P002:
+    code: P002_MISSING_AGENT_BLOCK
+    severity: error
+    description: "Card body missing agent -p fenced code block"
+    recovery: "Add ```agent fenced block containing executable agent -p command with Files, Mode, Tests, and Commit directives."
+    source: card_body_policy
+    retry: false
+
+  P003:
+    code: P003_MISSING_MODE_LINE
+    severity: error
+    description: "Card body missing Mode: line"
+    recovery: "Add Mode: line with one of: modify-only, create-only, or any."
+    source: card_body_policy
+    retry: false
+
+  P004:
+    code: P004_TOO_MANY_FILES
+    severity: warning
+    description: "Card touches more than 3 files — risk of agent context overflow"
+    recovery: "Human review required. Split into smaller cards or acknowledge risk."
+    source: card_body_policy
+    retry: false
+
+  P005:
+    code: P005_MODEL_OVERRIDES_PROFILE
+    severity: error
+    description: "--model flag in agent -p block overrides profile config.yaml model preferences"
+    recovery: "Remove --model from card body. Profile determines the model; worker follows fallback chain on provider failure."
+    source: card_body_policy
+    retry: false
+
+  P006:
+    code: P006_SCRATCH_WORKSPACE
+    severity: error
+    description: "Code-generation card uses scratch workspace (no source code)"
+    recovery: "Recreate card with --workspace worktree:<abs-path>. Scratch workspaces have no project files and produce zero output."
+    source: card_body_policy
+    retry: false
+
+  P007:
+    code: P007_SHARED_WORKSPACE
+    severity: error
+    description: "Card workspace path matches another running card — file corruption risk"
+    recovery: "Recreate card with unique workspace path (/tmp/wt-<card-name>). Concurrent agents in the same worktree clobber each other's changes."
+    source: card_body_policy
+    retry: false
+
+  P008:
+    code: P008_PARENTS_FLAG_BROKEN
+    severity: error
+    description: "Card created with --parents flag which is silently ignored by vanilla hermes kanban"
+    recovery: "Recreate card without --parents. Use hermes kanban link <parent> <child> after creation instead. See known issues #24489."
+    source: card_body_policy
+    retry: false
+
+  P009:
+    code: P009_ITERATION_BUDGET_EXCEEDED
+    severity: warning
+    description: "Card estimated to exceed 35 happy-path turns — risks 90-turn exhaustion"
+    recovery: "Split card into smaller sub-cards. Formula: (functions × 3) + (test_runs × 2) + (consumer_checks × 2) + 2 buffer. Relocation offers no exemption."
+    source: card_body_policy
+    retry: false
+
+  # ── Attestation errors (Workstream 2) ──
+  A001:
+    code: A001_ATTESTATION_MISSING
+    severity: error
+    description: "Pre-decomposition attestation file not found at .hermes/kanban/attestation.yaml"
+    recovery: "Run preflight, then kanban_attestation.py before decomposing. Do not create cards without attestation."
+    source: attestation
+    retry: false
+
+  A002:
+    code: A002_ATTESTATION_STALE
+    severity: error
+    description: "Attestation timestamp > 120 minutes old — may need re-attestation"
+    recovery: "Re-run preflight and regenerate attestation. Session-scoped TTL (120 min) covers a full plan execution; volatile checks (gateway, disk) are re-verified by workers."
+    source: attestation
+    retry: false
+
+  A003:
+    code: A003_ATTESTATION_CHECKSUM_MISMATCH
+    severity: error
+    description: "Attestation file modified after generation — tamper detected"
+    recovery: "Discard attestation. Re-run preflight from clean state. Investigate unauthorized modification."
+    source: attestation
+    retry: false
+
+  # ── Profile errors ──
+  PR001:
+    code: PR001_PROFILE_NO_CONFIG
+    severity: error
+    description: "Profile exists in hermes profile list but has no config.yaml"
+    recovery: "Copy config.yaml and .env from default profile to target profile directory. See kanban-preflight §5."
+    source: preflight_profile_check
+    retry: false
+
+  # ── Gateway / dispatcher errors ──
+  G001:
+    code: G001_GATEWAY_DOWN
+    severity: error
+    description: "Hermes gateway not running — dispatcher cannot claim tasks"
+    recovery: "Start gateway: hermes gateway run (use tmux or systemd). Verify with hermes gateway status."
+    source: kanban_notify
+    retry: false
+
+  G002:
+    code: G002_DISPATCHER_WEDGED
+    severity: error
+    description: "Gateway running but dispatcher not processing ready cards for > 5 minutes"
+    recovery: "Restart gateway: hermes gateway restart. Verify dispatch with hermes kanban watch."
+    source: cron_monitor
+    retry: false
+
+  G003:
+    code: G003_GOAL_CARD_INVALID
+    severity: error
+    description: "Goal-mode card missing Acceptance: block, goal_card budget exceeded, or --goal used on orchestrator-only card"
+    recovery: "Fix plan during Harden/Optimize (references/goal-card-selection.md). Re-run verify_goal_cards.py. Never pass --goal without Acceptance: in body."
+    source: goal_card_policy
+    retry: false
