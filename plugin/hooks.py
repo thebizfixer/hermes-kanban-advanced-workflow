@@ -1,7 +1,8 @@
 """Lifecycle hooks for the kanban-advanced plugin.
 
-on_session_start — auto-loads the kanban-advanced:kanban-orchestrator skill when a new session
-    starts for the orchestrator profile.
+on_session_start — logs skill availability hint when a new session starts.
+    The primary discovery mechanism is materialized skills appearing in
+    the system prompt's <available_skills> index, not hook injection.
 
 post_tool_call — logs board events after kanban tool calls (create, complete,
     block, unblock, link) for audit and debugging.
@@ -9,8 +10,10 @@ post_tool_call — logs board events after kanban tool calls (create, complete,
 
 import json
 import logging
+import os
 from pathlib import Path
 from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -27,25 +30,47 @@ def _ensure_log_dir():
         pass
 
 
-def on_session_start(session_ctx):
-    """Inject kanban-advanced bridge hint for all profiles.
+def _get_profile(**kwargs: Any) -> str:
+    """Best-effort detection of the active Hermes profile."""
+    return os.environ.get("HERMES_PROFILE", "")
 
-    Fires once when a brand-new session is created. Injects a hint that
-    kanban-advanced bridge skill is available. The bridge skill tells
-    the agent when to switch to the orchestrator profile.
+
+def on_session_start(**kwargs: Any) -> None:
+    """Log skill availability hint.  Profile-aware for orchestrator vs default.
+
+    The real discovery mechanism is materialized skills in
+    <available_skills>.  This hook provides a logged breadcrumb and a
+    best-effort hint when the CLI reference is available.
     """
     try:
-        skill_hint = (
-            "[kanban-advanced] Plugin skills available. For plan work load "
-            "kanban-advanced:kanban-planning. For full workflow load kanban-advanced "
-            "(the bridge skill tells you when to switch to the orchestrator profile). "
-            "Trigger phrases: 'plan this out', 'harden the plan', 'optimize for kanban', "
-            "'execute the plan', 'do a sanity check'."
-        )
-        try:
-            session_ctx.inject_message(skill_hint, role="system")
-        except AttributeError:
-            logger.info("plugin: %s", skill_hint)
+        profile = _get_profile(**kwargs)
+
+        if profile == "orchestrator":
+            skill_hint = (
+                "[kanban-advanced] Orchestrator profile detected. "
+                "Load kanban-advanced:kanban-orchestrator for the full "
+                "decomposition SOP.  All kanban-advanced skills available: "
+                "kanban-advanced:kanban-planning, "
+                "kanban-advanced:kanban-worker, "
+                "kanban-advanced:kanban-preflight, "
+                "kanban-advanced:kanban-cleanup, "
+                "kanban-advanced:kanban-postmortem, "
+                "kanban-advanced:kanban-reconciliation, "
+                "kanban-advanced:kanban-notify."
+            )
+        else:
+            skill_hint = (
+                "[kanban-advanced] Plugin skills available. "
+                "For plan work load kanban-advanced:kanban-planning. "
+                "For full workflow load kanban-advanced:kanban-advanced "
+                "(the bridge skill tells you when to switch to the "
+                "orchestrator profile). "
+                "Trigger phrases: 'plan this out', 'harden the plan', "
+                "'optimize for kanban', 'execute the plan', "
+                "'do a sanity check'."
+            )
+
+        logger.info("plugin: %s (profile=%s)", skill_hint, profile or "default")
 
     except Exception as exc:
         logger.error("plugin: on_session_start hook failed: %s", exc)

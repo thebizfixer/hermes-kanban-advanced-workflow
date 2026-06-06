@@ -17,16 +17,17 @@ Plans are gated by policy before decomposition. The orchestrator runs `kanban_ca
 
 ## Planning stage order (mandatory)
 
-The planning phase proceeds through four stages in this exact order. Do not skip ahead or reorder. The critical distinction: **Harden closes gaps in WHAT the plan is for** (content completeness, correctness, coverage). **Optimize closes gaps in HOW the plan will execute on Kanban** (formatting, decomposition readiness, agent blocks, budgets).
+The planning phase proceeds through five stages in this exact order. Do not skip ahead or reorder. The critical distinction: **Sanity check finds gaps** (read-only audit). **Harden closes gaps in WHAT the plan is for** (content completeness, correctness, coverage). **Optimize closes gaps in HOW the plan will execute on Kanban** (formatting, decomposition readiness, agent blocks, budgets).
 
 | Stage | Trigger phrase | What happens | Output |
 |-------|---------------|-------------|--------|
 | **Draft** | `"Plan this out"` or link to a plan file | Draft from goal, write to `.agent/plans/` | Plan file (first draft) |
-| **Harden** | `"Harden the plan"` | **Sanity check first** — verify anchor points against HEAD, check for structural gaps, missing edge cases, sad-path coverage, redundant changes, unverified assumptions. Then tier-gated hardening pass (Critical → Important → Nice-to-have) to close content gaps. See §Harden checklist below. | Hardened plan (content-complete) |
+| **Sanity check** | `"Do a sanity check"` or `"sanity check the plan"` | Read-only audit: verify anchor points against HEAD, cross-reference code claims, identify gaps, flag stale references, note deferred bloat. No edits — output is a findings list. | Gap report (what needs hardening) |
+| **Harden** | `"Harden the plan"` | Apply the hardening checklist to close gaps discovered during sanity check (or self-discovered). Tier-gated pass: Critical → Important → Nice-to-have. | Hardened plan (content-complete) |
 | **Revise** | `"Revise section X"` | Edit in-place, return to review — conversational updates to plan content | Revised plan |
 | **Optimize** | `"Optimize for Kanban"` | Close execution-formatting gaps: add agent-prompt blocks, draw dependency graph, estimate iteration budgets, add Files:/Mode: lines, plan same-provider staggering, pre-write commit messages. See §Optimize checklist below. | Decomposition-ready plan |
 
-**Critical ordering rule:** Harden and Revise iterate BEFORE Optimize. Harden ensures the plan says the right things (WHAT). Optimize ensures the plan can be decomposed and dispatched (HOW). You can revise after optimizing, but you must re-optimize to regenerate agent-prompt blocks and line budget. The interaction model is: **Draft → Harden → Revise → repeat → Optimize → execute**. Never Optimize before Harden — formatting a plan with content gaps wastes tokens on cards that will be blocked or produce wrong code.
+**Critical ordering rule:** Sanity check, Harden, and Revise iterate BEFORE Optimize. Sanity check is read-only — it finds gaps. Harden closes them. Optimize formats for execution. The interaction model is: **Draft → Sanity check → Harden → Revise → repeat → Optimize → execute**. Never Optimize before Harden — formatting a plan with content gaps wastes tokens on cards that will be blocked or produce wrong code.
 
 **Walk-away point:** After drafting but before execute. The plan sits in `.agent/plans/` — the user can return hours or days later and say "execute this plan."
 

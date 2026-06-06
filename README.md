@@ -49,7 +49,8 @@ Vanilla `hermes kanban` gives you a task board. This plugin adds deterministic g
 ```mermaid
 flowchart LR
     subgraph PLAN["Planning (interactive)"]
-        DRAFT["Draft<br/>'Plan this out'"] --> HARDEN["Harden<br/>'Harden the plan'"]
+        DRAFT["Draft<br/>'Plan this out'"] --> SANITY["Sanity check<br/>'Do a sanity check'"]
+        SANITY --> HARDEN["Harden<br/>'Harden the plan'"]
         HARDEN -->|"Revise section X"| HARDEN
     end
 
@@ -79,6 +80,7 @@ The workflow moves through trigger phrases. You say them — the agent advances.
 | Stage | You say | What happens |
 |-------|---------|-------------|
 | Draft | *"Plan this out"* | Agent drafts a plan from your description |
+| Sanity check | *"Do a sanity check"* | Read-only audit: verify anchors, cross-ref code, find gaps |
 | Harden | *"Harden the plan"* | Agent verifies anchor points, closes gaps, adds edge cases |
 | Revise | *"Revise section X"* | Iterate on harden as many times as needed |
 | Optimize | *"Optimize for Kanban"* | Agent adds execution formatting, dependency graph, iteration budget |
@@ -135,7 +137,7 @@ You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* 
 | Symptom | Fix |
 |---------|-----|
 | Plugin doesn't load | `hermes plugins list`; restart Hermes |
-| Skills not found | Use `plugin:` prefix: `skill_view("kanban-advanced:kanban-planning")` |
+| Skills not found | Use `kanban-advanced:` prefix: `skill_view("kanban-advanced:kanban-planning")` |
 | CLI not found | The group is `kanban-advanced`, not `kanban` |
 | Init fails on profiles | `hermes profile create orchestrator --clone` |
 | Cron scripts missing | Re-run `hermes kanban-advanced init` |

@@ -31,7 +31,7 @@ Load the relevant wiki page for detailed instructions:
 
 ## Plugin skills
 
-All skills are namespaced as `kanban-*`. Load them with `skill_view("kanban-advanced:kanban-planning")`, etc.
+All skills are namespaced as `kanban-advanced:kanban-*`. Load them with `skill_view("kanban-advanced:kanban-planning")`, etc.
 
 ## Documentation
 
