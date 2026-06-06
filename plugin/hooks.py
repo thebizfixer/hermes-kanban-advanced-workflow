@@ -28,37 +28,23 @@ def _ensure_log_dir():
 
 
 def on_session_start(session_ctx):
-    """Auto-load the kanban-orchestrator skill for the orchestrator profile.
+    """Inject kanban-advanced bridge hint for all profiles.
 
-    Fires once when a brand-new session is created. Does NOT fire on session
-    continuation (second message in an existing session).
-
-    The orchestrator skill provides board management SOPs, autonomous monitoring,
-    and the decomposition protocol.
+    Fires once when a brand-new session is created. Injects a hint that
+    plugin:kanban-advanced bridge skill is available. The bridge skill tells
+    the agent when to switch to the orchestrator profile.
     """
     try:
-        # Check if this session belongs to the orchestrator profile.
-        # The orchestrator profile name is configurable — default is 'orchestrator'.
-        profile = getattr(session_ctx, "profile", None) or ""
-        orchestrator_names = {"orchestrator"}
-        if not any(name in str(profile).lower() for name in orchestrator_names):
-            return
-
-        # Inject the orchestrator skill context
-        board_status = _get_board_status()
         skill_hint = (
-            "[kanban-advanced] Board status at session start:\n"
-            f"{board_status}\n\n"
-            "The kanban-orchestrator skill (plugin:kanban-orchestrator) is available "
-            "for board management. Use skill_view('plugin:kanban-orchestrator') to "
-            "load the full SOP."
+            "[kanban-advanced] The plugin:kanban-advanced bridge skill is available. "
+            "Load it with skill_view('plugin:kanban-advanced') when the user asks "
+            "to plan, harden, optimize, decompose, or execute governed work. "
+            "It will tell you when to switch to the orchestrator profile."
         )
         try:
             session_ctx.inject_message(skill_hint, role="system")
         except AttributeError:
-            # inject_message may not be available in all Hermes versions
-            logger.debug("plugin: inject_message not available, logging board status instead")
-            logger.info("plugin: board status at session start:\n%s", board_status)
+            logger.info("plugin: %s", skill_hint)
 
     except Exception as exc:
         logger.error("plugin: on_session_start hook failed: %s", exc)
