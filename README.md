@@ -39,7 +39,6 @@ Three steps. Restart Hermes and you're ready. Replace `<branch-name>` with your 
 | CLI commands | 7 | `hermes kanban-advanced decompose`, `list`, `show`, `validate`, `verify-optimization`, `preflight`, `init` |
 | LLM tools | 7 | `kanban_create`, `kanban_list`, `kanban_show`, `kanban_complete`, `kanban_block`, `kanban_unblock`, `kanban_link` |
 | Lifecycle hooks | 2 | `on_session_start` (auto-loads orchestrator skill), `post_tool_call` (board event logging) |
-| Skill bundle | 1 | `bundles/kanban-advanced.yaml` — fallback for non-plugin Hermes sessions |
 
 ---
 

@@ -307,24 +307,6 @@ profiles:
 """)
     print(f"   OK {config_file}")
 
-    # ── 2a. Materialize skills for slash-command bundle ───────────────
-    print("2a. Materializing skills for /kanban-advanced bundle...")
-    skills_src = PLUGIN_ROOT / "plugin" / "skills"
-    skills_dst = hermes_home / "skills" / "kanban-advanced"
-    count = 0
-    if skills_src.is_dir():
-        for child in sorted(skills_src.iterdir()):
-            skill_md = child / "SKILL.md"
-            if child.is_dir() and skill_md.exists():
-                dst_dir = skills_dst / child.name
-                dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(skill_md.read_text())
-                count += 1
-        print(f"   OK {count} skills -> {skills_dst}")
-    else:
-        print(f"   X Skills not found at {skills_src}")
-        return 1
-
     # ── 3. Cron scripts ──────────────────────────────────────────────
     print("3. Provisioning cron scripts...")
     cron_dir = hermes_home / "scripts"
@@ -340,26 +322,8 @@ profiles:
             print(f"   X {script_name} not found at {src}")
             return 1
 
-    # ── 4. Skill bundle ──────────────────────────────────────────────
-    print("4. Registering skill bundle...")
-    bundle_src = PLUGIN_ROOT / "bundles" / "kanban-advanced.yaml"
-    bundle_dir = hermes_home / "skill-bundles"
-    bundle_dst = bundle_dir / "kanban-advanced.yaml"
-    if bundle_src.exists():
-        bundle_dir.mkdir(parents=True, exist_ok=True)
-        bundle_dst.write_text(bundle_src.read_text())
-        print(f"   OK kanban-advanced.yaml -> {bundle_dst}")
-        try:
-            _run([HERMES_BIN, "bundles", "reload"])
-            print("   OK bundles reloaded")
-        except Exception:
-            print("   X Could not reload bundles")
-    else:
-        print(f"   X Bundle not found at {bundle_src}")
-        return 1
-
-    # ── 5. Env ───────────────────────────────────────────────────────
-    print("5. Setting HERMES_ENABLE_PROJECT_PLUGINS=true...")
+    # ── 4. Env ───────────────────────────────────────────────────────
+    print("4. Setting HERMES_ENABLE_PROJECT_PLUGINS=true...")
     env_file = project_root / ".env"
     env_line = "HERMES_ENABLE_PROJECT_PLUGINS=true\n"
     if env_file.exists():
@@ -411,7 +375,6 @@ profiles:
     print("OK kanban-advanced is ready!")
     print(f"  Config: {config_file}")
     print(f"  Cron scripts: {cron_dir}")
-    print(f"  Skill bundle: {bundle_dst}")
     print(f"  Profiles: worker, orchestrator")
     if not gateway_ok:
         print()
