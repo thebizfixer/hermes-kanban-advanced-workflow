@@ -22,7 +22,7 @@ If a user hands you this repo link and asks you to set it up:
 3. For a quick install without the full walkthrough, use `docs/how-to/install-as-plugin.md`.
 
 After any path, the plugin registers:
-- 10 skills under `kanban-*` namespace
+- 11 skills under `kanban-*` namespace
 - 7 LLM-callable tools (kanban_create, kanban_list, kanban_show, kanban_complete, kanban_block, kanban_unblock, kanban_link)
 - 7 CLI subcommands under `hermes kanban-advanced`
 - 2 lifecycle hooks (on_session_start, post_tool_call)
@@ -63,7 +63,7 @@ When users ask platform-specific questions, cite upstream sources from `wiki/ext
 ## Architecture
 
 - Plugin entry: `__init__.py` → `plugin/__init__.py` → `register(ctx)`
-- Skills: `plugin/skills/<name>/SKILL.md` (10 skills)
+- Skills: `plugin/skills/<name>/SKILL.md` (11 skills)
 - Data: `plugin/data/` (references, registry, policies, prompts)
 - Scripts: `scripts/` (governance, cron, bootstrap)
 - Skill bundle: `bundles/kanban-advanced.yaml`

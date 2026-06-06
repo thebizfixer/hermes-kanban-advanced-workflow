@@ -64,7 +64,7 @@ hermes-kanban-advanced-workflow/
 │   ├── tools.py                      # 7 tool handlers (wraps hermes kanban CLI)
 │   ├── hooks.py                      # on_session_start, post_tool_call
 │   ├── cli.py                        # hermes kanban-advanced <subcommand>
-│   ├── skills/                       # 10 skill subdirectories, each with SKILL.md
+│   ├── skills/                       # 11 skill subdirectories, each with SKILL.md
 │   └── data/
 │       ├── references/               # 12 reference docs
 │       ├── registry/                 # error-codes.yaml
