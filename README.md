@@ -16,16 +16,12 @@ Use for feature building, troubleshooting, fixing bugs — anything you need to 
 # 1. Install the plugin
 hermes plugins install thebizfixer/hermes-kanban-advanced-workflow
 
-# 2. Create profiles
-hermes profile create orchestrator --clone
-hermes profile create worker --clone
-
-# 3. Bootstrap your project
+# 2. Bootstrap your project (Don't Skip)
 cd your-project
 hermes kanban-advanced init --project-root . --working-branch <branch-name>
 ```
 
-Three steps. Restart Hermes and you're ready. Replace `<branch-name>` with your integration branch (e.g. `main`).
+Two steps. Restart Hermes and you're ready. The init walks you through profile creation, model config, and everything else. Replace `<branch-name>` with your integration branch (e.g. `main`).
 
 > **Agent-driven setup?** Hand this repo link to your agent and say "set this up." See [AGENTS.md](AGENTS.md) and [llms.txt](llms.txt).
 
