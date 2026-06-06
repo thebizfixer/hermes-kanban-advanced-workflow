@@ -3,6 +3,18 @@ version: 1.0.0
 description: Multi-agent kanban workflow for Hermes Agent — decompose plans, dispatch workers, govern execution
 author: thebizfixer
 requires_env: []
+provides_skills:
+  - kanban-advanced
+  - kanban-cleanup
+  - kanban-notify
+  - kanban-orchestrator
+  - kanban-orchestrator-governance
+  - kanban-planning
+  - kanban-postmortem
+  - kanban-preflight
+  - kanban-reconciliation
+  - kanban-worker
+  - kanban-worker-governance
 provides_hooks:
   - on_session_start
   - post_tool_call

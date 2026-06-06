@@ -36,10 +36,11 @@ def on_session_start(session_ctx):
     """
     try:
         skill_hint = (
-            "[kanban-advanced] The plugin:kanban-advanced bridge skill is available. "
-            "Load it with skill_view('plugin:kanban-advanced') when the user asks "
-            "to plan, harden, optimize, decompose, or execute governed work. "
-            "It will tell you when to switch to the orchestrator profile."
+            "[kanban-advanced] Plugin skills available. For plan work load "
+            "plugin:kanban-planning. For full workflow load plugin:kanban-advanced "
+            "(the bridge skill tells you when to switch to the orchestrator profile). "
+            "Trigger phrases: 'plan this out', 'harden the plan', 'optimize for kanban', "
+            "'execute the plan', 'do a sanity check'."
         )
         try:
             session_ctx.inject_message(skill_hint, role="system")
