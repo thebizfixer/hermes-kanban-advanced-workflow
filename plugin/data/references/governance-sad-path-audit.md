@@ -180,12 +180,12 @@ This is where most of our Phase 2 failures occurred. Each sad path now has a str
 
 | Sad path | Likelihood | Impact | Governance | Gap? |
 |---|---|---|---|---|
-| Cron jobs not removed | Medium | WASTED | kanban-cleanup §2 | ⚠️ Manual — cleanup checklist |
-| Worktree branches accumulate | High | DISK | kanban-cleanup doesn't clean worktrees | ❌ No worktree cleanup step |
+| Cron jobs not removed | Medium | WASTED | kanban-advanced:kanban-cleanup §2 | ⚠️ Manual — cleanup checklist |
+| Worktree branches accumulate | High | DISK | kanban-advanced:kanban-cleanup doesn't clean worktrees | ❌ No worktree cleanup step |
 | Board archived but DB orphaned | Low | CORRUPTION | No specific check | ❌ No post-cleanup verification |
-| Staged changes not committed | Medium | DRIFT | kanban-cleanup §5 (stage non-kanban changes) | ⚠️ Manual |
+| Staged changes not committed | Medium | DRIFT | kanban-advanced:kanban-cleanup §5 (stage non-kanban changes) | ⚠️ Manual |
 
-**Gap to fix:** Add worktree cleanup to kanban-cleanup. Add cron removal verification.
+**Gap to fix:** Add worktree cleanup to kanban-advanced:kanban-cleanup. Add cron removal verification.
 
 ---
 
@@ -195,7 +195,7 @@ This is where most of our Phase 2 failures occurred. Each sad path now has a str
 |---|---|---|---|---|
 | Terminal session ends → tmux watch dies | Medium | BLIND | Cron as fallback | ✅ board_keeper.sh covers this |
 | WSL DrvFS corruption on /mnt/ | Low | CATASTROPHIC | Preflight §0 blocks cross-mount | ✅ Structural |
-| /tmp fills with stale worktrees | High | DISK | kanban-cleanup doesn't address this | ❌ No governance |
+| /tmp fills with stale worktrees | High | DISK | kanban-advanced:kanban-cleanup doesn't address this | ❌ No governance |
 | Concurrent plans on same board | Low | COLLISION | dispatcher_owner field (#32228) not yet available | ❌ Upstream bug |
 | Plan file lost/deleted | Low | BLOCKING | Plan sits in .agent/plans/ — gitignored? | ⚠️ No backup mechanism |
 | Gateway restart during execution → DB corruption | Medium | CATASTROPHIC | Known issues #30908 workaround | ❌ Only mitigation, no prevention |
@@ -211,7 +211,7 @@ This is where most of our Phase 2 failures occurred. Each sad path now has a str
 
 1. **P008/P009 not implemented** — Declared in policy YAML but no script logic. P008 needs to detect --parents usage. P009 needs turn estimation from card body.
 2. **No meta-monitoring** — If board_keeper.sh cron fails silently, nobody knows. Add a watchdog cron that checks the board keeper is running.
-3. **Worktree accumulation** — /tmp fills with stale worktrees. Add cleanup to kanban-cleanup or board keeper.
+3. **Worktree accumulation** — /tmp fills with stale worktrees. Add cleanup to kanban-advanced:kanban-cleanup or board keeper.
 4. **Token tracking not default** — token_tracker.py not configured by default. Bundle it and add preflight check.
 
 ### Important (add detection or documentation):

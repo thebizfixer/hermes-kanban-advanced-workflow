@@ -5,12 +5,12 @@ version: 1.0.0
 metadata:
   hermes:
     tags: [kanban, governance, reference, pitfalls, orchestrator]
-    related_skills: [kanban-orchestrator]
+    related_skills: [kanban-advanced:kanban-orchestrator]
 ---
 
 # Kanban Orchestrator Governance Reference
 
-> Load this skill on-demand when an orchestrator hits a governance block or needs diagnostic context. The procedural `kanban-orchestrator` skill only tells you what to DO. This skill tells you WHY and what happened before.
+> Load this skill on-demand when an orchestrator hits a governance block or needs diagnostic context. The procedural `kanban-advanced:kanban-orchestrator` skill only tells you what to DO. This skill tells you WHY and what happened before.
 
 ## Pitfall Encyclopedia
 

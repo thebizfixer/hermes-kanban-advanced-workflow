@@ -524,11 +524,11 @@ def _pitfalls_from_data(
 
 def _skill_updates(pitfalls: list[str]) -> list[str]:
     mapping = [
-        ("protocol", "kanban-worker — enforce board signal on every code path; add post-agent verification SOP."),
-        ("reclaim", "kanban-worker — heartbeat + hung-agent investigation at 300s; terminal for non-code tasks."),
-        ("iteration budget", "kanban-orchestrator — split cards >200 lines / >2 files; cap same-file bundling."),
-        ("intervention rate", "kanban-orchestrator — mid-run reconciliation checklist + SOUL.md integrity probe."),
-        ("token burn", "kanban-reconciliation — token report review; flag >2× average tasks in KPI artifact."),
+        ("protocol", "kanban-advanced:kanban-worker — enforce board signal on every code path; add post-agent verification SOP."),
+        ("reclaim", "kanban-advanced:kanban-worker — heartbeat + hung-agent investigation at 300s; terminal for non-code tasks."),
+        ("iteration budget", "kanban-advanced:kanban-orchestrator — split cards >200 lines / >2 files; cap same-file bundling."),
+        ("intervention rate", "kanban-advanced:kanban-orchestrator — mid-run reconciliation checklist + SOUL.md integrity probe."),
+        ("token burn", "kanban-advanced:kanban-reconciliation — token report review; flag >2× average tasks in KPI artifact."),
     ]
     updates: list[str] = []
     joined = " ".join(pitfalls).lower()

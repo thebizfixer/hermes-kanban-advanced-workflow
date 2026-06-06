@@ -31,7 +31,7 @@ Two steps. Restart Hermes and you're ready. The init walks you through profile c
 
 | Surface | Count | Details |
 |---------|-------|---------|
-| Bundled skills | 10 | `kanban-planning`, `kanban-orchestrator`, `kanban-worker`, `kanban-preflight`, `kanban-cleanup`, `kanban-notify`, `kanban-postmortem`, `kanban-reconciliation`, `kanban-orchestrator-governance`, `kanban-worker-governance` |
+| Bundled skills | 10 | `kanban-advanced:kanban-planning`, `kanban-advanced:kanban-orchestrator`, `kanban-advanced:kanban-worker`, `kanban-advanced:kanban-preflight`, `kanban-advanced:kanban-cleanup`, `kanban-advanced:kanban-notify`, `kanban-advanced:kanban-postmortem`, `kanban-advanced:kanban-reconciliation`, `kanban-advanced:kanban-orchestrator-governance`, `kanban-advanced:kanban-worker-governance` |
 | CLI commands | 7 | `hermes kanban-advanced decompose`, `list`, `show`, `validate`, `verify-optimization`, `preflight`, `init` |
 | LLM tools | 7 | `kanban_create`, `kanban_list`, `kanban_show`, `kanban_complete`, `kanban_block`, `kanban_unblock`, `kanban_link` |
 | Lifecycle hooks | 2 | `on_session_start` (auto-loads orchestrator skill), `post_tool_call` (board event logging) |
@@ -135,7 +135,7 @@ You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* 
 | Symptom | Fix |
 |---------|-----|
 | Plugin doesn't load | `hermes plugins list`; restart Hermes |
-| Skills not found | Use `plugin:` prefix: `skill_view("kanban-planning")` |
+| Skills not found | Use `plugin:` prefix: `skill_view("kanban-advanced:kanban-planning")` |
 | CLI not found | The group is `kanban-advanced`, not `kanban` |
 | Init fails on profiles | `hermes profile create orchestrator --clone` |
 | Cron scripts missing | Re-run `hermes kanban-advanced init` |

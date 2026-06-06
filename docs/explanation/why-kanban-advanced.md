@@ -35,6 +35,6 @@ If you're unsure, start with `/goal` on a small task. Graduate to vanilla kanban
 | --- | --- |
 | Small / no board | Hermes `/goal` or direct `agent -p` |
 | Multi-lane governed delivery | This plugin (default **one-shot** kanban cards) |
-| One stubborn outcome lane | Same board + **`--goal`** on 0–2 cards after Harden (see `kanban-planning` skill § Goal-card selection) |
+| One stubborn outcome lane | Same board + **`--goal`** on 0–2 cards after Harden (see `kanban-advanced:kanban-planning` skill § Goal-card selection) |
 
 Requires Hermes **≥ 0.15.2** for `--goal`. Goal-mode **enhances** vanilla Hermes; the evaluation chain still gates every completion.

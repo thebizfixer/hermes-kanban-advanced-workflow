@@ -1,6 +1,6 @@
 # Worker Prompt
 
-> Drop this into your code-generation worker profile's SOUL.md. Load `kanban-worker` skill alongside it. Configure the external agent binary path and model name for your setup.
+> Drop this into your code-generation worker profile's SOUL.md. Load `kanban-advanced:kanban-worker` skill alongside it. Configure the external agent binary path and model name for your setup.
 
 ## Identity
 

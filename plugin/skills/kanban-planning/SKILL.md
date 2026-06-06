@@ -5,7 +5,7 @@ version: 5.2.0
 metadata:
   hermes:
     tags: [kanban, planning, decomposition, governance]
-    related_skills: [kanban-orchestrator, kanban-preflight, kanban-worker]
+    related_skills: [kanban-advanced:kanban-orchestrator, kanban-advanced:kanban-preflight, kanban-advanced:kanban-worker]
 ---
 # Kanban Planning
 
@@ -13,7 +13,7 @@ Write implementation plans that decompose cleanly into Kanban task graphs. The q
 
 ## Governance model (AGT + AEP)
 
-Plans are gated by policy before decomposition. The orchestrator runs `kanban_card_policy.py` on every card body before dispatch. Cards without `Files:`, `agent -p` block, or `Mode:` are blocked (P001/P002/P003). Plans without agent-prompt blocks are rejected at the attestation gate (Step 0c). See `kanban-orchestrator` § Step 0c and 0d.
+Plans are gated by policy before decomposition. The orchestrator runs `kanban_card_policy.py` on every card body before dispatch. Cards without `Files:`, `agent -p` block, or `Mode:` are blocked (P001/P002/P003). Plans without agent-prompt blocks are rejected at the attestation gate (Step 0c). See `kanban-advanced:kanban-orchestrator` § Step 0c and 0d.
 
 ## Planning stage order (mandatory)
 
@@ -196,7 +196,7 @@ Set via `KANBAN_POLICY_PROFILE` env var or `--profile` flag.
 
 The agent's working copy must live on a single coherent filesystem. Cross-mount paths, network mounts, OS-translation boundaries (e.g. WSL DrvFs `/mnt/` mounts, macFUSE, SSHFS), and symlinks that cross filesystem boundaries can cause silent state corruption during long-running multi-agent workflows.
 
-**Rule:** Confirm `pwd` resolves to a native filesystem path before running any kanban operation. If the working copy is on a translated or mounted path, clone it to a native location first. This check is part of the preflight checklist (see `kanban-preflight` § Filesystem coherence check).
+**Rule:** Confirm `pwd` resolves to a native filesystem path before running any kanban operation. If the working copy is on a translated or mounted path, clone it to a native location first. This check is part of the preflight checklist (see `kanban-advanced:kanban-preflight` § Filesystem coherence check).
 
 ## Commit cadence
 
@@ -223,7 +223,7 @@ Before decomposition, every plan must include a contingencies table. If a risk i
 
 - **BLOCKING impact** → Halt decomposition. Notify user with specific fix required. Do NOT auto-retry.
 - **DEGRADED impact** → Log warning, reduce parallelism or skip non-critical steps, continue. Auto-retry once if pattern supports it.
-- **Probability estimates** must be grounded in prior postmortems (`kanban-postmortem.md`).
+- **Probability estimates** must be grounded in prior postmortems (`kanban-advanced:kanban-postmortem.md`).
 
 ## Line budget analysis
 
@@ -308,10 +308,10 @@ The worker's Step 4 extracts this block via regex, executes it, and monitors the
 - `references/readme-formatting-pitfalls.md` — URL-encoded HTML artifacts, HTML entities, broken code fences, triple blanks, user-authored prose preservation
 - `references/vanilla-kanban-known-issues.md` — upstream Hermes Agent kanban bugs mapped to structural workarounds (dependency gating, workspace isolation, dispatcher resilience, root card anti-patterns)
 - `references/iteration-budget-case-study.md` — worked example: WS9 19-function extraction exhausted 90-turn budget; how to calculate operation counts and split correctly
-- `references/governance-sad-path-audit.md` — full flowchart trace of every transition with 23 sad paths, governance coverage assessment, and prioritized gaps (kanban-orchestrator reference)
+- `references/governance-sad-path-audit.md` — full flowchart trace of every transition with 23 sad paths, governance coverage assessment, and prioritized gaps (kanban-advanced:kanban-orchestrator reference)
 - `references/plan-hardening-checklist.md` — 11-item first-pass hardening checklist (Critical → Important → Nice-to-have) + redundant change detection pattern; runs between sanity check and optimization
 - `references/phase-transition-hardening.md` — re-verifying line numbers, fleshing out placeholder workstreams, dependency graphs, and verification gates when reactivating a deferred plan phase
 - `references/plan-hardening-methodology.md` — tier-gated hardening pass (Critical → Important → Nice-to-have) after a sanity check; verification grep suite; before/after report template
-- `references/dependency-graph-format.md` (kanban-orchestrator) — ASCII-art dependency graph format for parent-child link planning
+- `references/dependency-graph-format.md` (kanban-advanced:kanban-orchestrator) — ASCII-art dependency graph format for parent-child link planning
 - **Wiki: provider-strategy** — multi-provider fan-out, rate-limit prevention, fallback configuration (for same-provider staggering decisions in checklist item 9)
 - **Wiki: Why NOT Kanban** (README § Why NOT Kanban) — when to skip the workflow entirely (scope-appropriateness gate before planning begins)

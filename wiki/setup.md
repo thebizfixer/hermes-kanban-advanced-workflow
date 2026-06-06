@@ -113,4 +113,4 @@ The user should:
 
 **KPIs are automatic.** The agent surfaces success rate, intervention rate, token burn, and failure-mode distribution at the reconciliation checkpoint. See the [README Agent KPIs](../README.md#agent-kpis).
 
-The orchestrator loads `kanban-planning`, `kanban-orchestrator`, and `kanban-preflight` automatically from the plugin at session start.
+The orchestrator loads `kanban-advanced:kanban-planning`, `kanban-advanced:kanban-orchestrator`, and `kanban-advanced:kanban-preflight` automatically from the plugin at session start.

@@ -21,7 +21,7 @@ Deterministic gates — not prompt instructions — block unsafe dispatch. Two c
 2. **Card body policy** — `kanban_card_policy.py --all` (P001–P004).
 3. **Board validation** — `validate_board.sh` before unblocking gate.
 4. **Pre-dispatch** — `pre_dispatch_gate.sh` (plan on `${working_branch}`, preflight, memory, DB).
-5. **Worker verification** — inline checks in worker Step 6 (see `kanban-worker` skill).
+5. **Worker verification** — inline checks in worker Step 6 (see `kanban-advanced:kanban-worker` skill).
 
 ## Policy Profiles
 

@@ -42,7 +42,7 @@ KANBAN_CREATE = {
             "skill": {
                 "type": "array",
                 "items": {"type": "string"},
-                "description": "Skills to force-load into the worker (appended to kanban-worker). Example: ['kanban-planning']",
+                "description": "Skills to force-load into the worker (appended to kanban-advanced:kanban-worker). Example: ['kanban-advanced:kanban-planning']",
             },
             "goal": {
                 "type": "boolean",

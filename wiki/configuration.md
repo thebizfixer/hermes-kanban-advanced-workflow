@@ -90,8 +90,8 @@ The repo must live on a native filesystem (ext4, xfs, apfs, NTFS-native). WSL Dr
 
 For project-specific changes to skill files, add `.patch` files in `.hermes/kanban-overrides/patches/`. `provision.sh` applies them after variable substitution. Example:
 ```
-.hermes/kanban-overrides/patches/kanban-preflight.patch
-.hermes/kanban-overrides/patches/kanban-worker.patch
+.hermes/kanban-overrides/patches/kanban-advanced:kanban-preflight.patch
+.hermes/kanban-overrides/patches/kanban-advanced:kanban-worker.patch
 ```
 
 Patch format: standard unified diff (`diff -u old new`).

@@ -5,7 +5,7 @@ version: 2.2.0
 metadata:
   hermes:
     tags: [kanban, preflight, environment, gating]
-    related_skills: [kanban-orchestrator, kanban-planning]
+    related_skills: [kanban-advanced:kanban-orchestrator, kanban-advanced:kanban-planning]
 ---
 
 # Kanban Preflight — Environment Gating
@@ -255,7 +255,7 @@ Use **`${bundle_path}/scripts/preflight.sh`** as the single pre-dispatch gate. I
 ## Cross-references
 
 - Script: `hermes-kanban-advanced-workflow/scripts/preflight.sh`
-- Orchestrator: `kanban-orchestrator` Step 0 user gate + Step 0b preflight
+- Orchestrator: `kanban-advanced:kanban-orchestrator` Step 0 user gate + Step 0b preflight
 - Prompt: `hermes-kanban-advanced-workflow/prompts/orchestrator.md` § Preflight gating
 - Bundle documentation audit: [`references/bundle-documentation-audit.md`](references/bundle-documentation-audit.md) — README vs file tree drift detection, distinct from `provision.sh --check`
 - Filesystem coherence detection: [`references/filesystem-coherence-detection.md`](references/filesystem-coherence-detection.md) — canonical shell patterns for cross-mount detection (path-prefix blocklist, `df -T` FS type, config overrides)

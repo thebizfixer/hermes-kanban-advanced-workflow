@@ -36,21 +36,21 @@ flowchart LR
 
 | Stage       | Trigger phrase                           | Skill                   | Governance gate                                            |
 | ----------- | ---------------------------------------- | ----------------------- | ---------------------------------------------------------- |
-| Draft       | `"Plan this out"`                        | `kanban-planning`       | —                                                          |
-| Harden      | `"Harden the plan"`                      | `kanban-planning`       | Edge cases, contingencies, provider staggering             |
-| Revise      | `"Revise section X"`                     | `kanban-planning`       | —                                                          |
-| Optimize    | `"Optimize for Kanban"`                  | `kanban-planning`       | Harden (WHAT) + Optimize (HOW) checklists |
-| Preflight   | (automatic)                              | `kanban-preflight`      | 8 checks (filesystem, profiles, gateway, etc.)             |
-| Attestation | (automatic)                              | `kanban-orchestrator`   | attestation.yaml (session-scoped, 120 min) — **mandatory** |
-| Decompose   | (automatic)                              | `kanban-orchestrator`   | Card body policy validation (P001-P004)                    |
-| Execute     | `"Execute the plan"` / `"Proceed"`       | `kanban-worker`         | Preflight cache (fast path < 30s)                       |
-| Verify      | (automatic)                              | `kanban-worker`         | **Evaluation chain** (6-step DAL, ALLOW/DENY)              |
-| Audit       | (automatic)                              | `kanban-orchestrator`   | 10-gate final audit                                        |
-| Reconcile   | `"Yes"` (at checkpoint)                  | `kanban-reconciliation` | Error code → recovery mapping                              |
-| Cleanup     | `"Yes"` (at checkpoint)                  | `kanban-cleanup`        | Board archive + cron removal                               |
-| Postmortem  | `"Yes"` (at checkpoint)                  | `kanban-postmortem`     | Structured retrospective (includes cleanup cost)           |
+| Draft       | `"Plan this out"`                        | `kanban-advanced:kanban-planning`       | —                                                          |
+| Harden      | `"Harden the plan"`                      | `kanban-advanced:kanban-planning`       | Edge cases, contingencies, provider staggering             |
+| Revise      | `"Revise section X"`                     | `kanban-advanced:kanban-planning`       | —                                                          |
+| Optimize    | `"Optimize for Kanban"`                  | `kanban-advanced:kanban-planning`       | Harden (WHAT) + Optimize (HOW) checklists |
+| Preflight   | (automatic)                              | `kanban-advanced:kanban-preflight`      | 8 checks (filesystem, profiles, gateway, etc.)             |
+| Attestation | (automatic)                              | `kanban-advanced:kanban-orchestrator`   | attestation.yaml (session-scoped, 120 min) — **mandatory** |
+| Decompose   | (automatic)                              | `kanban-advanced:kanban-orchestrator`   | Card body policy validation (P001-P004)                    |
+| Execute     | `"Execute the plan"` / `"Proceed"`       | `kanban-advanced:kanban-worker`         | Preflight cache (fast path < 30s)                       |
+| Verify      | (automatic)                              | `kanban-advanced:kanban-worker`         | **Evaluation chain** (6-step DAL, ALLOW/DENY)              |
+| Audit       | (automatic)                              | `kanban-advanced:kanban-orchestrator`   | 10-gate final audit                                        |
+| Reconcile   | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-reconciliation` | Error code → recovery mapping                              |
+| Cleanup     | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-cleanup`        | Board archive + cron removal                               |
+| Postmortem  | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-postmortem`     | Structured retrospective (includes cleanup cost)           |
 | Recovery    | (on failure)                             | `kanban_recover.py`     | 10 automated recovery actions + cascade triage             |
-| Pause/Reset | `"Pause the plan"` / `"Block and reset"` | `kanban-orchestrator`   | Blocks all cards, preserves plan file                      |
+| Pause/Reset | `"Pause the plan"` / `"Block and reset"` | `kanban-advanced:kanban-orchestrator`   | Blocks all cards, preserves plan file                      |
 
 ## Package structure
 

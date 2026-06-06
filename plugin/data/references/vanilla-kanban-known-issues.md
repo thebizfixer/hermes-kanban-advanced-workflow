@@ -154,7 +154,7 @@ done
 
 ## Integration with kanban-advanced
 
-### Preflight (kanban-preflight)
+### Preflight (kanban-advanced:kanban-preflight)
 
 The preflight script should check for exposure to these issues:
 
@@ -166,7 +166,7 @@ The preflight script should check for exposure to these issues:
 | Code-gen cards with `scratch` workspace | Zero-output risk |
 | Orphaned agent processes | Provider slot exhaustion |
 
-### Orchestrator (kanban-orchestrator)
+### Orchestrator (kanban-advanced:kanban-orchestrator)
 
 During Step 0d (card body policy validation) and Step 1 (understand the goal):
 
@@ -176,7 +176,7 @@ During Step 0d (card body policy validation) and Step 1 (understand the goal):
 4. Set `max-retries: 2` on every card
 5. Complete the root card immediately after manual decomposition
 
-### Planning (kanban-planning)
+### Planning (kanban-advanced:kanban-planning)
 
 During the 12-item checklist:
 

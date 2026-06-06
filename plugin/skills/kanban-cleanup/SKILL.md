@@ -5,7 +5,7 @@ version: 1.0.0
 metadata:
   hermes:
     tags: [kanban, cleanup, devops, postmortem]
-    related_skills: [kanban-orchestrator, kanban-postmortem, kanban-notify]
+    related_skills: [kanban-advanced:kanban-orchestrator, kanban-advanced:kanban-postmortem, kanban-advanced:kanban-notify]
 ---
 
 # Kanban Cleanup
@@ -29,7 +29,7 @@ python hermes-kanban-advanced-workflow/scripts/generate_postmortem.py \
 
 The script reads token JSONL (`KANBAN_TOKEN_LOG` or `~/.hermes/kanban/tokens.jsonl`), task history from the kanban SQLite DB (`KANBAN_DB` or `~/.hermes/state.db`), and the intervention counter. It writes an eight-section markdown report (execution summary, agent performance, failure taxonomy, intervention log, discovered pitfalls, skill updates, token economics, learning summary). Confirm stdout shows `Postmortem written: ...` before proceeding.
 
-Cross-reference: `kanban-postmortem` skill for section semantics; `generate_postmortem.py` for flags (`--token-log`, `--db`, `--stdout`).
+Cross-reference: `kanban-advanced:kanban-postmortem` skill for section semantics; `generate_postmortem.py` for flags (`--token-log`, `--db`, `--stdout`).
 
 ### 1. Archive all kanban tasks
 
@@ -88,7 +88,7 @@ hermes kanban list
 export NOTIFY_ON_COMPLETE=true
 ```
 
-Completion message (no intervention prefix — see `kanban-notify`):
+Completion message (no intervention prefix — see `kanban-advanced:kanban-notify`):
 
 ```text
 ✅ Kanban plan complete — {plan_id}
@@ -97,7 +97,7 @@ Completion message (no intervention prefix — see `kanban-notify`):
 Board archived. Review postmortem when back.
 ```
 
-Prerequisites: gateway running and chat channel configured (`kanban-notify` § Gateway delivery setup). CLI-only environments should skip gateway send and rely on the written postmortem path printed by Step 0.
+Prerequisites: gateway running and chat channel configured (`kanban-advanced:kanban-notify` § Gateway delivery setup). CLI-only environments should skip gateway send and rely on the written postmortem path printed by Step 0.
 
 ## Git-safe cleanup scripts
 

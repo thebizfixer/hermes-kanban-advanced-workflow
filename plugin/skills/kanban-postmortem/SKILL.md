@@ -5,7 +5,7 @@ version: 1.0.0
 metadata:
   hermes:
     tags: [kanban, postmortem, retrospective, learning, walk-away]
-    related_skills: [kanban-cleanup, kanban-notify, kanban-reconciliation, kanban-planning]
+    related_skills: [kanban-advanced:kanban-cleanup, kanban-advanced:kanban-notify, kanban-advanced:kanban-reconciliation, kanban-advanced:kanban-planning]
 ---
 
 # Kanban Postmortem — Plan Retrospective
@@ -14,7 +14,7 @@ The postmortem is the **final learning artifact** of a kanban plan run. It is wr
 
 **Generator:** `hermes-kanban-advanced-workflow/scripts/generate_postmortem.py` — SSOT for section headings, metrics, and failure classification.
 
-**When:** `kanban-cleanup` Step 0 — generate while token logs, SQLite task history, and intervention counters are still intact; archive the board only after the report file exists.
+**When:** `kanban-advanced:kanban-cleanup` Step 0 — generate while token logs, SQLite task history, and intervention counters are still intact; archive the board only after the report file exists.
 
 ## Generate the report
 
@@ -45,7 +45,7 @@ Confirm stdout: `Postmortem written: ...` and that the file contains all eight `
 | Token JSONL | `KANBAN_TOKEN_LOG` | 2, 7; pitfall heuristics in 5 |
 | Kanban SQLite | `KANBAN_DB` | 1, 2, 3 |
 | `interventions.count` | `KANBAN_INTERVENTIONS` | 1, 4 |
-| `interventions.jsonl` | `~/.hermes/kanban/logs/` | 4 (structured rows from `kanban-notify`) |
+| `interventions.jsonl` | `~/.hermes/kanban/logs/` | 4 (structured rows from `kanban-advanced:kanban-notify`) |
 
 Missing DB or token log produces **data notes** at the top of the report; the generator still emits all eight sections with best-effort inference.
 
@@ -108,9 +108,9 @@ Section titles and order are fixed — do not rename or reorder when editing gen
 
 - Persistent counter from `interventions.count`
 - Rate vs total tasks
-- JSONL table: timestamp, task id, reason (when `kanban-notify` appended rows)
+- JSONL table: timestamp, task id, reason (when `kanban-advanced:kanban-notify` appended rows)
 
-**Agent use:** If counter-only (no JSONL), tighten notify persistence in `kanban-notify` § Persistence. High intervention rate without JSONL detail → add explicit logging to the next run.
+**Agent use:** If counter-only (no JSONL), tighten notify persistence in `kanban-advanced:kanban-notify` § Persistence. High intervention rate without JSONL detail → add explicit logging to the next run.
 
 ### 5. Discovered Pitfalls
 
@@ -130,9 +130,9 @@ Section titles and order are fixed — do not rename or reorder when editing gen
 
 **Purpose:** Map pitfalls to **kanban skill** changes (worker, orchestrator, reconciliation, notify).
 
-**Generator maps pitfalls to recommendations** (e.g. protocol → `kanban-worker`, intervention rate → `kanban-orchestrator`). When no signature matches, the section states that explicitly.
+**Generator maps pitfalls to recommendations** (e.g. protocol → `kanban-advanced:kanban-worker`, intervention rate → `kanban-advanced:kanban-orchestrator`). When no signature matches, the section states that explicitly.
 
-**Agent use:** After the operator approves, apply edits to `hermes-kanban-advanced-workflow/skills/` and sync publishable copies per `kanban-reconciliation` § Publishable sync. Do not block the next plan on skill PRs — track follow-up cards if needed.
+**Agent use:** After the operator approves, apply edits to `hermes-kanban-advanced-workflow/skills/` and sync publishable copies per `kanban-advanced:kanban-reconciliation` § Publishable sync. Do not block the next plan on skill PRs — track follow-up cards if needed.
 
 ### 7. Token Economics
 
@@ -165,8 +165,8 @@ Section titles and order are fixed — do not rename or reorder when editing gen
 1. **Locate** the latest report: `.hermes/kanban/reports/{plan_id}_postmortem_*.md`
 2. **Read** §8 Learning Summary, then §5 Discovered Pitfalls and §6 Skill Updates Needed
 3. **Update** the upcoming plan: sad-path table, same-file serialization, line budget flags
-4. **Optional:** Compare §1 metrics to `kanban-reconciliation` KPI template for trend arrows across plans
-5. **Do not delete** postmortem files — they are the audit trail (`kanban-cleanup` § What NOT to clean up)
+4. **Optional:** Compare §1 metrics to `kanban-advanced:kanban-reconciliation` KPI template for trend arrows across plans
+5. **Do not delete** postmortem files — they are the audit trail (`kanban-advanced:kanban-cleanup` § What NOT to clean up)
 
 ## Manual enrichment
 
@@ -183,7 +183,7 @@ The generator is deterministic from logs. The orchestrator or operator agent may
 ## Cross-references
 
 - Generator implementation: `hermes-kanban-advanced-workflow/scripts/generate_postmortem.py` (`SECTION_TITLES`, `build_report`, `parse_args`)
-- Cleanup ordering: `kanban-cleanup` § Step 0
-- Intervention logging: `kanban-notify` § Persistence (postmortem input)
-- Plan optimization gate: `kanban-planning` § Plan Optimization
-- Reconciliation overlap: `kanban-reconciliation` (mid-run vs post-plan; postmortem supersedes informal notes for learning)
+- Cleanup ordering: `kanban-advanced:kanban-cleanup` § Step 0
+- Intervention logging: `kanban-advanced:kanban-notify` § Persistence (postmortem input)
+- Plan optimization gate: `kanban-advanced:kanban-planning` § Plan Optimization
+- Reconciliation overlap: `kanban-advanced:kanban-reconciliation` (mid-run vs post-plan; postmortem supersedes informal notes for learning)

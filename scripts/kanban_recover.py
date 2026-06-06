@@ -154,7 +154,7 @@ def recover_profile_no_config(task_id: str, workspace: str, registry: dict):
     """PR001: Profile has no config.yaml."""
     print("[recover] PR001: Profile missing config.yaml.")
     print("[recover] Action: Copy config.yaml and .env from default profile.")
-    print("[recover] See kanban-preflight §5 for detailed recovery steps.")
+    print("[recover] See kanban-advanced:kanban-preflight §5 for detailed recovery steps.")
 
 
 # ── Cascade triage ─────────────────────────────────────────────────────

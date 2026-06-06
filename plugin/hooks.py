@@ -1,6 +1,6 @@
 """Lifecycle hooks for the kanban-advanced plugin.
 
-on_session_start — auto-loads the kanban-orchestrator skill when a new session
+on_session_start — auto-loads the kanban-advanced:kanban-orchestrator skill when a new session
     starts for the orchestrator profile.
 
 post_tool_call — logs board events after kanban tool calls (create, complete,
@@ -37,7 +37,7 @@ def on_session_start(session_ctx):
     try:
         skill_hint = (
             "[kanban-advanced] Plugin skills available. For plan work load "
-            "kanban-planning. For full workflow load kanban-advanced "
+            "kanban-advanced:kanban-planning. For full workflow load kanban-advanced "
             "(the bridge skill tells you when to switch to the orchestrator profile). "
             "Trigger phrases: 'plan this out', 'harden the plan', 'optimize for kanban', "
             "'execute the plan', 'do a sanity check'."

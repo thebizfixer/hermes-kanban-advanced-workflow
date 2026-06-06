@@ -4,8 +4,8 @@ The workflow uses two agent profiles with a strict separation of concerns.
 
 | Persona          | Role                                                                                | Key Skills                                                                                                                      |
 | ---------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **Orchestrator** | PM / Sysadmin — plans, optimizes, attests, decomposes, monitors, audits, reconciles | kanban-planning, kanban-orchestrator, kanban-preflight, kanban-notify, kanban-reconciliation, kanban-postmortem, kanban-cleanup |
-| **Worker**       | Supervisor — delegates to coding agents, runs evaluation chain, verifies output     | kanban-worker                                                                                                                   |
+| **Orchestrator** | PM / Sysadmin — plans, optimizes, attests, decomposes, monitors, audits, reconciles | kanban-advanced:kanban-planning, kanban-advanced:kanban-orchestrator, kanban-advanced:kanban-preflight, kanban-advanced:kanban-notify, kanban-advanced:kanban-reconciliation, kanban-advanced:kanban-postmortem, kanban-advanced:kanban-cleanup |
+| **Worker**       | Supervisor — delegates to coding agents, runs evaluation chain, verifies output     | kanban-advanced:kanban-worker                                                                                                                   |
 
 ## Worker Lifecycle
 

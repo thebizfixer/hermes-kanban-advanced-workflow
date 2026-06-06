@@ -19,4 +19,4 @@ Checks include filesystem coherence, kanban DB integrity, memory, secrets, API U
 
 Skip knobs: `references/preflight-env-knobs.md` (in plugin data).
 
-For agent-facing detail, load the `kanban-preflight` skill.
+For agent-facing detail, load the `kanban-advanced:kanban-preflight` skill.

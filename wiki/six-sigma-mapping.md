@@ -18,7 +18,7 @@ Six Sigma (6σ) uses the **DMAIC** cycle — Define, Measure, Analyze, Improve, 
 
 ## DMAIC in reconciliation (per-execution cycle)
 
-The `kanban-reconciliation` skill runs an 8-phase DMAIC loop after every plan:
+The `kanban-advanced:kanban-reconciliation` skill runs an 8-phase DMAIC loop after every plan:
 
 | Phase | Reconciliation step | Tool |
 |-------|-------------------|------|
@@ -28,7 +28,7 @@ The `kanban-reconciliation` skill runs an 8-phase DMAIC loop after every plan:
 | **Analyze** | Categorize failures by root cause. Flag categories exceeding 30% of tasks. Identify token outliers (>2× average). | Reconciliation checklist §3 |
 | **Improve** | Apply lessons to skills. Document new pitfalls. Codify validated workflow improvements. | Skill file patches |
 | **Improve** | Sync skill changes back to publishable hermes-kanban-advanced-workflow/ source | `provision.sh` |
-| **Control** | Archive board, remove monitoring cron, verify no orphaned processes | `kanban-cleanup` |
+| **Control** | Archive board, remove monitoring cron, verify no orphaned processes | `kanban-advanced:kanban-cleanup` |
 | **Control** | Governance gates remain active for next plan (attestation, card policy, eval chain) | All governance scripts |
 
 ## Defect reduction metrics (Six Sigma language)

@@ -43,7 +43,7 @@ df -P . | tail -1 | awk '{print $1, $6}'
 # Fail if type is 9p (WSL DrvFs), nfs, fuse, cifs, smbfs
 ```
 
-This check is built into `kanban-preflight` § Filesystem coherence check (check 0). It runs before decomposition. A `fail` result blocks the board from starting.
+This check is built into `kanban-advanced:kanban-preflight` § Filesystem coherence check (check 0). It runs before decomposition. A `fail` result blocks the board from starting.
 
 ### Configuration overrides
 

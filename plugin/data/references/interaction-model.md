@@ -6,10 +6,10 @@ The kanban-advanced workflow uses **explicit user triggers** — the orchestrato
 
 | Stage | User trigger (examples) | Skill |
 | --- | --- | --- |
-| Draft | "draft a plan", "start planning" | `kanban-planning` |
-| Harden | "harden the plan" | `kanban-planning` |
-| Revise | "revise …" | `kanban-planning` |
-| Optimize | "optimize for dispatch" | `kanban-planning` |
+| Draft | "draft a plan", "start planning" | `kanban-advanced:kanban-planning` |
+| Harden | "harden the plan" | `kanban-advanced:kanban-planning` |
+| Revise | "revise …" | `kanban-advanced:kanban-planning` |
+| Optimize | "optimize for dispatch" | `kanban-advanced:kanban-planning` |
 
 ## Execution
 

@@ -9,4 +9,4 @@ What the plugin CAN'T do — these remain manual or bootstrap-only because the p
 | Cron job creation | Plugin can't call the `cronjob` tool during init | `kanban-advanced init` documents the cron commands |
 | Worktree path configuration | Project-specific paths | Config overlay in `.hermes/kanban-overrides/` |
 | Agent binary verification | Plugin can't check `agent --version` | `kanban-advanced init` preflight check |
-| Token attribution | Plugin can't inject token logging into the orchestrator's eval loop | Built into `kanban-orchestrator` skill |
+| Token attribution | Plugin can't inject token logging into the orchestrator's eval loop | Built into `kanban-advanced:kanban-orchestrator` skill |

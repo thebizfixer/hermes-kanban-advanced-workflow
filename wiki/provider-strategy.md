@@ -22,7 +22,7 @@ hermes kanban block <child_task>   # child stays blocked until parent completes
 
 Rule: for any N cards assigned to the same `assignee` profile that use the same LLM provider, serialize them. Only one runs at a time.
 
-This is documented in `kanban-orchestrator` § Step 2 — same-provider serialization.
+This is documented in `kanban-advanced:kanban-orchestrator` § Step 2 — same-provider serialization.
 
 ## Solution 2: Multiple worker profiles with different providers (recommended for fan-out)
 

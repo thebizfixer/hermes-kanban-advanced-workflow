@@ -5,7 +5,7 @@ version: 1.0.0
 metadata:
   hermes:
     tags: [kanban, notify, gateway, walk-away, intervention]
-    related_skills: [kanban-orchestrator, kanban-preflight, kanban-cleanup, kanban-postmortem]
+    related_skills: [kanban-advanced:kanban-orchestrator, kanban-advanced:kanban-preflight, kanban-advanced:kanban-cleanup, kanban-advanced:kanban-postmortem]
 ---
 
 # Kanban Notify — Intervention Gateway Push
@@ -126,7 +126,7 @@ hermes gateway status
 hermes gateway run   # tmux or background for persistence
 ```
 
-2. **Preflight pass** — `bash hermes-kanban-advanced-workflow/scripts/preflight.sh` must report `gateway_health` as pass (see `kanban-preflight`).
+2. **Preflight pass** — `bash hermes-kanban-advanced-workflow/scripts/preflight.sh` must report `gateway_health` as pass (see `kanban-advanced:kanban-preflight`).
 
 3. **Chat channel configured** — Hermes config maps the operator's chat id for the active platform. Without this, gateway runs but messages have nowhere to go.
 
@@ -172,7 +172,7 @@ Completion message (no 🚨 prefix):
 Board archived. Review postmortem when back.
 ```
 
-Wired in `kanban-cleanup` — see that skill for ordering (postmortem before archive).
+Wired in `kanban-advanced:kanban-cleanup` — see that skill for ordering (postmortem before archive).
 
 ## Orchestrator integration
 
@@ -194,8 +194,8 @@ Cross-reference: `hermes-kanban-advanced-workflow/prompts/orchestrator.md` § In
 
 ## Cross-references
 
-- Preflight gateway check: `kanban-preflight` § Gateway health
+- Preflight gateway check: `kanban-advanced:kanban-preflight` § Gateway health
 - Orchestrator prompt: `hermes-kanban-advanced-workflow/prompts/orchestrator.md`
 - Intervention counter: `scripts/kanban_intervention_inc.sh`
-- Completion opt-in: `kanban-cleanup`
-- Postmortem input: `kanban-postmortem`, `hermes-kanban-advanced-workflow/scripts/generate_postmortem.py`
+- Completion opt-in: `kanban-advanced:kanban-cleanup`
+- Postmortem input: `kanban-advanced:kanban-postmortem`, `hermes-kanban-advanced-workflow/scripts/generate_postmortem.py`

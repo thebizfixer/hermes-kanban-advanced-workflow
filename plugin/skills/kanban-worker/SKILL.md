@@ -5,12 +5,12 @@ version: 5.1.0
 metadata:
   hermes:
     tags: [kanban, multi-agent, collaboration, workflow, pitfalls, governance]
-    related_skills: [kanban-orchestrator, kanban-planning]
+    related_skills: [kanban-advanced:kanban-orchestrator, kanban-advanced:kanban-planning]
 ---
 
 # Kanban Worker — Supervisor Lifecycle
 
-> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E020, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. If you hit a DENY or block, load `kanban-worker-governance` for the error code reference — do not guess.
+> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E020, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. If you hit a DENY or block, load `kanban-advanced:kanban-worker-governance` for the error code reference — do not guess.
 
 > The **lifecycle** (7 steps: orient → memory → fast-sanity → handoff → monitor → verify → complete) is the worker's job. The worker is a **supervisor of the coding agent**, not the implementer. Its job: read the card, do a fast sanity check, hand off to the coding agent, monitor progress, verify the output via the evaluation chain, and close the task.
 
@@ -245,7 +245,7 @@ When the dispatcher sets `HERMES_KANBAN_GOAL_MODE=1`, the worker may run **multi
 - Do **not** skip the evaluation chain because the Hermes judge said continue or done.
 - Log tokens on every coding-agent invocation (Step 6 token log still applies per turn).
 - Long `running` state is expected; do not treat as a stall until `goal_max_turns` or block.
-- If budget exhausts, upstream blocks the card — escalate via `kanban-notify`; do not silently exit.
+- If budget exhausts, upstream blocks the card — escalate via `kanban-advanced:kanban-notify`; do not silently exit.
 
 See `references/goal-card-selection.md` and `docs/how-to/goal-cards.md`.
 
@@ -482,7 +482,7 @@ The worker uses the profile's configured model from `config.yaml` (not hardcoded
 1. **Primary:** Use the profile's `model.default` and `model.provider` from `config.yaml`.
 2. **Profile fallbacks:** If the primary provider fails (HTTP 429, connection error, timeout), try `fallback_providers` configured in the profile's `config.yaml`. Retry once per fallback provider before escalating.
 3. **Global fallback:** If all profile-level providers are exhausted, fall back to the **primary `config.yaml`** (`$HERMES_HOME/config.yaml` or `~/.hermes/config.yaml`).
-4. **Escalate:** If the primary config also fails, block the task with the error code and trigger intervention per `kanban-notify`.
+4. **Escalate:** If the primary config also fails, block the task with the error code and trigger intervention per `kanban-advanced:kanban-notify`.
 
 **Applicable error codes:** E008 (network down — retryable, triggers fallback). **Non-applicable:** PR001 (no `config.yaml`) is a config issue, not a provider failure; auth failures are caught before handoff.
 
@@ -501,7 +501,7 @@ Workers waste 5–8 minutes per task running identical pre-flight checks. Use th
 
 ## Pitfalls
 
-> **Full error code reference + pitfall narratives → `kanban-worker-governance`.** Load the governance reference skill when you hit a DENY or need diagnostic context.
+> **Full error code reference + pitfall narratives → `kanban-advanced:kanban-worker-governance`.** Load the governance reference skill when you hit a DENY or need diagnostic context.
 
 **Key procedural pitfalls (see governance ref for full context):**
 - Always heartbeat during agent execution (15-minute reclaim cycle).

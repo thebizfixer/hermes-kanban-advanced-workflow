@@ -5,12 +5,12 @@ version: 1.0.0
 metadata:
   hermes:
     tags: [kanban, governance, reference, error-codes, pitfalls]
-    related_skills: [kanban-worker]
+    related_skills: [kanban-advanced:kanban-worker]
 ---
 
 # Kanban Worker Governance Reference
 
-> Load this skill on-demand when a worker hits a DENY or block. The procedural `kanban-worker` skill only tells you what to DO. This skill tells you WHY.
+> Load this skill on-demand when a worker hits a DENY or block. The procedural `kanban-advanced:kanban-worker` skill only tells you what to DO. This skill tells you WHY.
 
 ## Error Code Reference (E001–E020)
 

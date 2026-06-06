@@ -16,7 +16,7 @@ Prefer a **fast, JSON-stable** model for the judge. The worker profile’s `mode
 
 ## When to use `--goal` on a card
 
-1. During **Harden**, consult the `kanban-planning` skill for goal-card selection criteria (scenarios D1–D10 vs A1–A10).
+1. During **Harden**, consult the `kanban-advanced:kanban-planning` skill for goal-card selection criteria (scenarios D1–D10 vs A1–A10).
 2. Set `goal_card: true` only when the decision checklist passes and `goal_card_budget` allows (default **2** per plan).
 3. During **Optimize**, add an **`Acceptance:`** block per goal workstream.
 4. At decomposition, orchestrator passes `--goal` and optional `--goal-max-turns` (default upstream: **20**).
@@ -25,7 +25,7 @@ Prefer a **fast, JSON-stable** model for the judge. The worker profile’s `mode
 
 ## Write acceptance criteria
 
-Use the four-part template described in the `kanban-planning` skill:
+Use the four-part template described in the `kanban-advanced:kanban-planning` skill:
 
 - **Object** — what must exist
 - **Done when** — observable condition

@@ -5,7 +5,7 @@ version: 1.1.0
 metadata:
   hermes:
     tags: [kanban, reconciliation, audit, six-sigma]
-    related_skills: [kanban-orchestrator, kanban-postmortem]
+    related_skills: [kanban-advanced:kanban-orchestrator, kanban-advanced:kanban-postmortem]
 ---
 
 # Kanban Reconciliation

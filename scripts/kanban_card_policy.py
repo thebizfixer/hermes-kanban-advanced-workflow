@@ -148,8 +148,8 @@ def apply_policy(task_id: str, violations: List[dict], profile: str) -> Tuple[bo
         print(f"BLOCK+NOTIFY: {task_id} — {len(violations)} policy violation(s): {', '.join(violation_codes)}")
         print(f"  {reasons}")
         subprocess.run(["hermes", "kanban", "block", task_id, reasons])
-        # kanban-notify integration point: trigger gateway notification
-        # (handled by kanban-notify skill when it sees the block event)
+        # kanban-advanced:kanban-notify integration point: trigger gateway notification
+        # (handled by kanban-advanced:kanban-notify skill when it sees the block event)
         return False, reasons
 
     return True, None

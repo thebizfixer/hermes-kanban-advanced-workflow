@@ -5,12 +5,12 @@ version: 5.4.0
 metadata:
   hermes:
     tags: [kanban, multi-agent, orchestration, routing]
-    related_skills: [kanban-worker]
+    related_skills: [kanban-advanced:kanban-worker]
 ---
 
 # Kanban Orchestrator — Decomposition Playbook
 
-> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E020, card body policy P001–P009, preflight.sh, validate_board.sh, pre_dispatch_gate.sh) structurally enforces them. If you hit a DENY or block, load `kanban-orchestrator-governance` for the error code reference and pitfall encyclopedia — do not guess.
+> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E020, card body policy P001–P009, preflight.sh, validate_board.sh, pre_dispatch_gate.sh) structurally enforces them. If you hit a DENY or block, load `kanban-advanced:kanban-orchestrator-governance` for the error code reference and pitfall encyclopedia — do not guess.
 
 > The core worker lifecycle (including the `kanban_create` fan-out pattern and the "decompose, don't execute" rule) is auto-injected into every kanban process via the `KANBAN_GUIDANCE` system-prompt block. This skill is the deeper playbook when you're an orchestrator profile whose whole job is routing.
 
@@ -26,7 +26,7 @@ metadata:
 
 ## Token attribution (mandatory)
 
-Every token the orchestrator burns during a plan run must be logged to `tokens.jsonl`. Workers handle their own logging (see `kanban-worker` §Token observability). The orchestrator logs at these checkpoints:
+Every token the orchestrator burns during a plan run must be logged to `tokens.jsonl`. Workers handle their own logging (see `kanban-advanced:kanban-worker` §Token observability). The orchestrator logs at these checkpoints:
 
 | Checkpoint | What to log | `plan_id` | `task_id` |
 |-----------|-------------|-----------|-----------|
@@ -70,7 +70,7 @@ When the operator steps away, a 5-minute recurring cron checks heartbeats, stale
 
 ## Intervention notifications
 
-When `watch` or cron surfaces a blocked, crashed, timed_out, or gave_up task, run this pipeline before paging the operator. Classify the event with **`kanban-notify`** — only rows in the intervention trigger table should reach the gateway; everything on the non-intervention list is handled silently.
+When `watch` or cron surfaces a blocked, crashed, timed_out, or gave_up task, run this pipeline before paging the operator. Classify the event with **`kanban-advanced:kanban-notify`** — only rows in the intervention trigger table should reach the gateway; everything on the non-intervention list is handled silently.
 
 ### Flow (every intervention event)
 
@@ -80,7 +80,7 @@ When `watch` or cron surfaces a blocked, crashed, timed_out, or gave_up task, ru
 hermes kanban block <task_id> "Paused — intervention triage in progress"
 ```
 
-2. **Auto-retry if supported.** If the failure mode is on the **`kanban-notify` non-intervention list** (e.g. protocol violation with commits already present, expected reclaim cycle, transient vendor 429), unblock and let the dispatcher retry — do **not** notify:
+2. **Auto-retry if supported.** If the failure mode is on the **`kanban-advanced:kanban-notify` non-intervention list** (e.g. protocol violation with commits already present, expected reclaim cycle, transient vendor 429), unblock and let the dispatcher retry — do **not** notify:
 
 ```bash
 hermes kanban unblock <task_id>
@@ -88,7 +88,7 @@ hermes kanban unblock <task_id>
 
 Wait one watch/cron tick and confirm heartbeats or completion before treating the retry as failed.
 
-3. **Notify via gateway if retry fails.** When auto-retry is unsupported or a retry finishes without progress, compose the intervention message per **`kanban-notify`** (trigger label, task id, reason, suggested action) and deliver through the gateway operator chat channel. Prerequisites and delivery commands are in **`kanban-notify`** § Gateway delivery setup (`hermes gateway run` must be up — see Pitfalls).
+3. **Notify via gateway if retry fails.** When auto-retry is unsupported or a retry finishes without progress, compose the intervention message per **`kanban-advanced:kanban-notify`** (trigger label, task id, reason, suggested action) and deliver through the gateway operator chat channel. Prerequisites and delivery commands are in **`kanban-advanced:kanban-notify`** § Gateway delivery setup (`hermes gateway run` must be up — see Pitfalls).
 
 Increment the intervention counter once per gateway escalation (feeds mid-run reconciliation). **This is mandatory — the postmortem reads this counter. Every intervention must be counted:**
 
@@ -105,7 +105,7 @@ Verify the counter incremented: `cat .hermes/kanban/logs/interventions.count`
 hermes kanban unblock <task_id>
 ```
 
-**Operator boundary:** During walk-away execution, resolve every **`kanban-notify` non-intervention** event autonomously. Gateway notifications are reserved for intervention triggers the orchestrator cannot fix after one supported auto-retry.
+**Operator boundary:** During walk-away execution, resolve every **`kanban-advanced:kanban-notify` non-intervention** event autonomously. Gateway notifications are reserved for intervention triggers the orchestrator cannot fix after one supported auto-retry.
 
 ## Profiles are user-configured — not a fixed roster
 
@@ -287,7 +287,7 @@ Draft the graph out loud before creating anything:
 
 **Auto-progression (mandatory):** LLM orchestrators cannot poll the board autonomously — they only act when prompted. The mechanical work of "check parents → unblock children" and "salvage iteration-limit cards" must be delegated to scripts. The auto-unblock and board keeper crons are created as a mandatory hard gate in Steps 9a–9c — the gate cannot complete until both crons are verified running.
 
-**Cron removal during cleanup:** Both crons must be removed during `kanban-cleanup`:
+**Cron removal during cleanup:** Both crons must be removed during `kanban-advanced:kanban-cleanup`:
 
 ```bash
 # Start auto-unblock — runs every 30s during execution
@@ -405,7 +405,7 @@ git cherry-pick -x "$commit" --no-edit
 
 Without `-x`, the cherry-picked commit gets a new SHA with no link to the original. `verify_commits_reachable.sh` relies on the trailer when direct ancestry (`git merge-base --is-ancestor`) fails because the SHA differs. Cherry-pick without `-x` is a final-audit finding — the operator must manually verify traceability.
 
-**Integration freshness — same-file parent-child cards:** When a card is linked to a parent that touched the same file(s), the child's worktree base may be stale if staging advanced with other commits after the parent completed. Cards with same-file parent-child links should enforce a maximum gap: if a child is promoted more than 1 hour after its parent completed, the worker must merge `origin/staging` (not just the parent branch) before spawning the agent. See `kanban-worker` § Integration freshness check.
+**Integration freshness — same-file parent-child cards:** When a card is linked to a parent that touched the same file(s), the child's worktree base may be stale if staging advanced with other commits after the parent completed. Cards with same-file parent-child links should enforce a maximum gap: if a child is promoted more than 1 hour after its parent completed, the worker must merge `origin/staging` (not just the parent branch) before spawning the agent. See `kanban-advanced:kanban-worker` § Integration freshness check.
 
 ## Salvage pattern (iteration-limit recovery)
 
@@ -439,7 +439,7 @@ cd <main-repo> && git fetch <worktree> <branch> && git merge FETCH_HEAD
 
 **When NOT to salvage:** If no files were created or `git diff` is empty, the agent produced nothing — retry or split the card.
 
-**Root cause:** Card too large for 90-turn budget. Apply the iteration budget ceiling (35 turns — see `kanban-planning` §Optimize checklist item 3) before the next decomposition. Salvage is a recovery pattern, not a substitute for correct card sizing.
+**Root cause:** Card too large for 90-turn budget. Apply the iteration budget ceiling (35 turns — see `kanban-advanced:kanban-planning` §Optimize checklist item 3) before the next decomposition. Salvage is a recovery pattern, not a substitute for correct card sizing.
 
 ## Escalation hierarchy — when the coding agent fails
 
@@ -540,7 +540,7 @@ When the operator says **"walk away"**, **"go unattended"**, or equivalent after
 
 ### Walk-away checklist (run in order)
 
-1. **Preflight** — Run Step 0b before any card creation. On `fail`, stop and do not enter walk-away. On `degraded`, require explicit operator OK. See **`kanban-preflight`**.
+1. **Preflight** — Run Step 0b before any card creation. On `fail`, stop and do not enter walk-away. On `degraded`, require explicit operator OK. See **`kanban-advanced:kanban-preflight`**.
 
 ```bash
 bash hermes-kanban-advanced-workflow/scripts/preflight.sh
@@ -550,7 +550,7 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 
 3. **Enable auto-retry** — Walk-away assumes the **Intervention notifications** pipeline is active for every `blocked`, `crashed`, `timed_out`, or `gave_up` event:
    - Pause (`kanban block`) before triage.
-   - **Auto-retry once** when the failure is on the **`kanban-notify` non-intervention list** or the plan sad-path table marks it retryable.
+   - **Auto-retry once** when the failure is on the **`kanban-advanced:kanban-notify` non-intervention list** or the plan sad-path table marks it retryable.
    - Gateway notify only after retry exhaustion or non-retryable triggers.
    - Resolve non-intervention events autonomously — do not page the operator for routine recoveries.
 
@@ -560,11 +560,11 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 # Example: Hermes cron (use deliver="null" so the job persists — see Pitfalls)
 cronjob(action="create", name="kanban-monitor-300s", schedule="every 5m",
   prompt="Poll board: heartbeats, staleness, blocked/crashed/timed_out/gave_up.
-  Apply kanban-notify trigger table. Triage per Intervention notifications.
+  Apply kanban-advanced:kanban-notify trigger table. Triage per Intervention notifications.
   If zero running and zero ready tasks, emit completion signal for orchestrator cleanup.")
 ```
 
-The cron must apply the same intervention rules as **`hermes kanban watch`** (see § Monitoring). Poll for READY orchestrator tasks (e.g. final-audit card) and print **AUDIT READY** when the audit task is waiting. If chat delivery fails for ~two consecutive ticks, fall back to log inspection per **`kanban-notify`** § Walk-away cron.
+The cron must apply the same intervention rules as **`hermes kanban watch`** (see § Monitoring). Poll for READY orchestrator tasks (e.g. final-audit card) and print **AUDIT READY** when the audit task is waiting. If chat delivery fails for ~two consecutive ticks, fall back to log inspection per **`kanban-advanced:kanban-notify`** § Walk-away cron.
 
 Kill the tmux watch session if one was started interactively — cron is the unattended primary:
 
@@ -572,22 +572,22 @@ Kill the tmux watch session if one was started interactively — cron is the una
 tmux kill-session -t kanban-watch 2>/dev/null || true
 ```
 
-5. **Confirm notification channel** — Before the operator leaves, load **`kanban-notify`** and verify gateway delivery:
+5. **Confirm notification channel** — Before the operator leaves, load **`kanban-advanced:kanban-notify`** and verify gateway delivery:
    - `hermes gateway run` (or already running per preflight)
    - `hermes gateway status` passes
    - Operator chat channel configured in Hermes config
    - Send a **test intervention-shaped message** and confirm receipt
-   - State the **8 intervention triggers**, **7 silent events**, and whether `NOTIFY_ON_COMPLETE` is set (handoff script in **`kanban-notify`**)
+   - State the **8 intervention triggers**, **7 silent events**, and whether `NOTIFY_ON_COMPLETE` is set (handoff script in **`kanban-advanced:kanban-notify`**)
 
 Optional: `hermes kanban notify-subscribe <audit_task_id>` for instant audit-ready ping.
 
 6. **Handle completion** — When all worker tasks reach `done`:
    - Run **Final audit (mandatory)** on the orchestrator profile.
-   - Run **`kanban-reconciliation`** if intervention ratio exceeded thresholds mid-run.
-   - Run **`kanban-cleanup`** (postmortem generation, board archive) — see **`kanban-postmortem`** / cleanup skill.
+   - Run **`kanban-advanced:kanban-reconciliation`** if intervention ratio exceeded thresholds mid-run.
+   - Run **`kanban-advanced:kanban-cleanup`** (postmortem generation, board archive) — see **`kanban-advanced:kanban-postmortem`** / cleanup skill.
    - Remove monitoring cron (`cronjob(action="remove", job_id="<id>")`).
    - Complete the stranded root card if it auto-promoted to `ready`.
-   - Send completion notification per **`kanban-notify`** after postmortem is written (on by default; set `NOTIFY_ON_COMPLETE=false` to suppress).
+   - Send completion notification per **`kanban-advanced:kanban-notify`** after postmortem is written (on by default; set `NOTIFY_ON_COMPLETE=false` to suppress).
 
 **Operator boundary (walk-away):** Gateway pages are for true manual interventions only. Everything else — progress, heartbeats, successful auto-retry, non-intervention blocks — stays silent unless completion notify is opted in.
 
@@ -610,12 +610,12 @@ Each tick via `hermes kanban list` (and `hermes kanban show <task_id>` for triag
 
 ### Intervention rules
 
-Same pipeline as § Intervention notifications and the **`kanban-notify` intervention trigger table**:
+Same pipeline as § Intervention notifications and the **`kanban-advanced:kanban-notify` intervention trigger table**:
 
 1. **Classify** — trigger row vs non-intervention list.
 2. **Pause** — `hermes kanban block <task_id>`.
 3. **Auto-retry once** — unblock retryable / non-intervention failures; stay silent on success.
-4. **Gateway notify** — operator page only after retry exhaustion or non-retryable triggers (`missing_profile`, `auth_failure`, …). See **`kanban-notify`** § Gateway delivery setup. Run `kanban_intervention_inc.sh` per escalation.
+4. **Gateway notify** — operator page only after retry exhaustion or non-retryable triggers (`missing_profile`, `auth_failure`, …). See **`kanban-advanced:kanban-notify`** § Gateway delivery setup. Run `kanban_intervention_inc.sh` per escalation.
 
 ### Completion detection
 
@@ -624,7 +624,7 @@ Same pipeline as § Intervention notifications and the **`kanban-notify` interve
 
 ### Chat delivery fallback
 
-If chat delivery fails for **~two consecutive ticks** (~10 min), inspect logs per **`kanban-notify`** § Walk-away cron:
+If chat delivery fails for **~two consecutive ticks** (~10 min), inspect logs per **`kanban-advanced:kanban-notify`** § Walk-away cron:
 
 ```bash
 bash scripts/kanban_cron_monitor_log_fallback.sh
@@ -635,7 +635,7 @@ Fresh log lines without matching chat → fix `deliver`/routing; the poll still 
 
 ### Cleanup
 
-Remove during **`kanban-reconciliation`** / **`kanban-cleanup`** — a completion banner is not removal:
+Remove during **`kanban-advanced:kanban-reconciliation`** / **`kanban-advanced:kanban-cleanup`** — a completion banner is not removal:
 
 ```bash
 cronjob(action="remove", job_id="<id>")   # id from cronjob(action="list") at create time
@@ -654,7 +654,7 @@ set -euo pipefail
 LIST="$(hermes kanban list 2>&1)"
 RUNNING=$(echo "$LIST" | grep -c '●' || true); READY=$(echo "$LIST" | grep -c '▶' || true)
 echo "$LIST"
-# kanban-notify: block → auto-retry once → gateway if exhausted
+# kanban-advanced:kanban-notify: block → auto-retry once → gateway if exhausted
 for id in $(echo "$LIST" | awk '/blocked|crashed|timed_out|gave_up/ {print $2}'); do hermes kanban show "$id" | head -15; done
 echo "$LIST" | grep '▶' | grep -i orchestrator && echo "AUDIT READY — see ready line above"
 [ "$RUNNING" -eq 0 ] && [ "$READY" -eq 0 ] && echo "KANBAN_COMPLETE — run final audit + cleanup"
@@ -670,7 +670,7 @@ When a card hits the iteration limit but completed its extraction work, the orch
 
 ## Pitfalls
 
-> **Full pitfall encyclopedia → `kanban-orchestrator-governance`.** The evaluation chain (E001–E020) and card body policy (P001–P009) structurally enforce the most critical rules. Load the governance reference skill when you need detailed diagnostics and historical context for a specific pitfall.
+> **Full pitfall encyclopedia → `kanban-advanced:kanban-orchestrator-governance`.** The evaluation chain (E001–E020) and card body policy (P001–P009) structurally enforce the most critical rules. Load the governance reference skill when you need detailed diagnostics and historical context for a specific pitfall.
 
 **Key procedural pitfalls (see governance ref for full context):**
 - `auto_decompose: true` creates duplicate children — set to `false`.
