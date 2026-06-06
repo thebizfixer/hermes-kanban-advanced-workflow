@@ -31,13 +31,13 @@ def on_session_start(session_ctx):
     """Inject kanban-advanced bridge hint for all profiles.
 
     Fires once when a brand-new session is created. Injects a hint that
-    plugin:kanban-advanced bridge skill is available. The bridge skill tells
+    kanban-advanced bridge skill is available. The bridge skill tells
     the agent when to switch to the orchestrator profile.
     """
     try:
         skill_hint = (
             "[kanban-advanced] Plugin skills available. For plan work load "
-            "plugin:kanban-planning. For full workflow load plugin:kanban-advanced "
+            "kanban-planning. For full workflow load kanban-advanced "
             "(the bridge skill tells you when to switch to the orchestrator profile). "
             "Trigger phrases: 'plan this out', 'harden the plan', 'optimize for kanban', "
             "'execute the plan', 'do a sanity check'."

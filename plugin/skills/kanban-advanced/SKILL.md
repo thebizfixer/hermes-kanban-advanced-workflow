@@ -27,18 +27,18 @@ Load this skill when the user says any of these trigger phrases:
 ## What to do
 
 1. **Switch to the orchestrator profile.** Tell the user: "I need to switch to the orchestrator profile for this. Run `hermes -p orchestrator` and I'll guide you from there."
-2. Once on the orchestrator profile, the `on_session_start` hook will auto-load the full `plugin:kanban-orchestrator` skill with the complete SOP.
-3. If the user is already on the orchestrator profile, load `plugin:kanban-orchestrator` directly.
+2. Once on the orchestrator profile, the `on_session_start` hook will auto-load the full `kanban-orchestrator` skill with the complete SOP.
+3. If the user is already on the orchestrator profile, load `kanban-orchestrator` directly.
 
 ## Quick reference
 
 | User says | Load |
 |-----------|------|
-| "Plan this out" | `plugin:kanban-planning` |
-| "Harden the plan" | `plugin:kanban-planning` |
-| "Optimize for Kanban" | `plugin:kanban-planning` |
-| "Execute the plan" | `plugin:kanban-orchestrator` |
-| Decomposition questions | `plugin:kanban-orchestrator` |
-| Worker/verification questions | `plugin:kanban-worker` |
-| Preflight questions | `plugin:kanban-preflight` |
-| Governance questions | `plugin:kanban-orchestrator-governance` |
+| "Plan this out" | `kanban-planning` |
+| "Harden the plan" | `kanban-planning` |
+| "Optimize for Kanban" | `kanban-planning` |
+| "Execute the plan" | `kanban-orchestrator` |
+| Decomposition questions | `kanban-orchestrator` |
+| Worker/verification questions | `kanban-worker` |
+| Preflight questions | `kanban-preflight` |
+| Governance questions | `kanban-orchestrator-governance` |

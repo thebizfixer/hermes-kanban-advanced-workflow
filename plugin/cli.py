@@ -307,6 +307,24 @@ profiles:
 """)
     print(f"   OK {config_file}")
 
+    # ── 2a. Materialize skills so skill_view() can resolve them ────────
+    print("2a. Materializing skills...")
+    skills_src = PLUGIN_ROOT / "plugin" / "skills"
+    skills_dst = hermes_home / "skills" / "kanban-advanced"
+    count = 0
+    if skills_src.is_dir():
+        for child in sorted(skills_src.iterdir()):
+            skill_md = child / "SKILL.md"
+            if child.is_dir() and skill_md.exists():
+                dst_dir = skills_dst / child.name
+                dst_dir.mkdir(parents=True, exist_ok=True)
+                (dst_dir / "SKILL.md").write_text(skill_md.read_text())
+                count += 1
+        print(f"   OK {count} skills -> {skills_dst}")
+    else:
+        print(f"   X Skills not found at {skills_src}")
+        return 1
+
     # ── 3. Cron scripts ──────────────────────────────────────────────
     print("3. Provisioning cron scripts...")
     cron_dir = hermes_home / "scripts"

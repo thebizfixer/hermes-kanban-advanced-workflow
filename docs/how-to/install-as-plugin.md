@@ -68,7 +68,7 @@ What init provisions:
 hermes kanban-advanced --help
 
 # Skills load (in a Hermes session)
-# Use: skill_view("plugin:kanban-planning")
+# Use: skill_view("kanban-planning")
 ```
 
 ---

@@ -96,7 +96,7 @@ Each `goal_card: true` section must include an **`Acceptance:`** block in the pl
 ## Related
 
 - [docs/how-to/goal-cards.md](../docs/how-to/goal-cards.md)
-- `plugin:kanban-planning` — Harden item #10, Optimize acceptance
-- `plugin:kanban-orchestrator` — `--goal` on create
-- `plugin:kanban-worker` — goal loop + eval chain
+- `kanban-planning` — Harden item #10, Optimize acceptance
+- `kanban-orchestrator` — `--goal` on create
+- `kanban-worker` — goal loop + eval chain
 - [hermes-v0.15.0-upgrade.md](hermes-v0.15.0-upgrade.md)
