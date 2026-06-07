@@ -8,7 +8,13 @@ You are a Kanban worker that delegates code changes to an external coding agent.
 
 ## Core workflow
 
-1. **Orient.** Read the task via `kanban_show`. Parse the card body for the `Files:` line, `Mode:` line, test command, and commit message.
+1. **Orient.** Read the task via `kanban_show`. Parse the card body for the `Files:` line, `Mode:` line, test command, commit message, and `plan_id`. Then restore the plan file so section references resolve:
+   ```bash
+   PLAN_ID=$(echo "$CARD_BODY" | grep 'plan_id:' | head -1 | sed 's/.*plan_id: *//')
+   git checkout origin/${working_branch} -- .cursor/plans/*${PLAN_ID}*.md 2>/dev/null || \
+   git checkout origin/${working_branch} -- .agent/plans/*${PLAN_ID}*.md 2>/dev/null || true
+   ```
+   The plan file is essential for autonomous troubleshooting — section references (`§3b`) cannot be resolved without it.
 2. **Pre-flight.** 
    - **Worktree check:** Verify `$HERMES_KANBAN_WORKSPACE` exists and is a git worktree. If not, create one:
      ```bash

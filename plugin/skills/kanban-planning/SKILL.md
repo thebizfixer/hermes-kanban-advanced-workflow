@@ -65,8 +65,10 @@ Run this during the Optimize stage, after the plan content is hardened. These it
 11. **Cross-section contradictions checked** — No two sections modify the same file in conflicting ways. If section A creates function X and section B deletes function X, flag as contradiction. If section A modifies lines 100–200 and section B modifies lines 150–250, flag as overlapping.
 12. **Optimization attestation** — All checklist items recorded in the plan frontmatter under `optimization_checklist` with `status: pass`. The orchestrator's Step 0c reads this for attestation.
 13. **Plan committed and pushed to `${working_branch}`** — The hardened, optimized plan is committed to `${working_branch}` and pushed to `origin/${working_branch}`. Workers branch their worktrees from `${working_branch}` and need the full plan file for autonomous troubleshooting. Verify: `git log --oneline -1 -- .agent/plans/<plan>.md` shows a recent commit on `${working_branch}` AND `git fetch origin ${working_branch} --dry-run` confirms the push.
-14. **Goal-card acceptance encoded** — For each `goal_card: true` workstream: add an **`Acceptance:`** subsection (judge-facing; use template in `references/goal-card-selection.md`); optional `goal_max_turns` in frontmatter (default **20**, must not exceed `goals.max_turns`). Run `python3 hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md` before attestation.
-15. **Executive summary documentation-ready** — For plans that serve double-duty as implementation plans AND documentation artifacts (linked from `docs/` or referenced by other plans), the executive summary must be self-contained: a reader who never opens the evidence matrix must understand the problem, root causes, what's already fixed, what each phase delivers, and target metrics. Anti-pattern: a flat severity table. Required structure: (a) one-sentence opening, (b) root causes table with fix-complexity column, (c) already-shipped items, (d) remediation-at-a-glance phase table, (e) key performance targets in before/after format, (f) closing line with blast radius.
+14. **Card body self-containment verified** — Every agent-prompt block includes inline code for function bodies, types, and constants the worker can't derive from file paths alone. Section references (`§3b`) are acceptable for narrative context but NOT for implementation details. If a card says "implement curiousPresentationComplete per plan §3b", the function body MUST be included in the agent-prompt block. Workers without plan file access will block on "plan detail missing."
+15. **Diff cap present** — Every agent-prompt block over 50 lines includes an explicit scope guard: `"If your diff exceeds 150 lines net, STOP and report what's remaining."` This prevents scope explosion (observed: 1654-line diff on a 91-line card). Smaller cards don't need this.
+16. **Goal-card acceptance encoded** — For each `goal_card: true` workstream: add an **`Acceptance:`** subsection (judge-facing; use template in `references/goal-card-selection.md`); optional `goal_max_turns` in frontmatter (default **20**, must not exceed `goals.max_turns`). Run `python3 hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md` before attestation.
+17. **Executive summary documentation-ready** — For plans that serve double-duty as implementation plans AND documentation artifacts (linked from `docs/` or referenced by other plans), the executive summary must be self-contained: a reader who never opens the evidence matrix must understand the problem, root causes, what's already fixed, what each phase delivers, and target metrics. Anti-pattern: a flat severity table. Required structure: (a) one-sentence opening, (b) root causes table with fix-complexity column, (c) already-shipped items, (d) remediation-at-a-glance phase table, (e) key performance targets in before/after format, (f) closing line with blast radius.
 
 ### System-agnostic path convention
 
@@ -135,6 +137,7 @@ Every code-generation card body must end with a fenced `agent -p` block. This is
 ````markdown
 ```agent
 agent -p "Implement [task] per plan §[section].
+plan_id: <plan-id>
 Files: path/to/file1.py, path/to/file2.py.
 Mode: modify-only.
 Tests: <test command>.
@@ -262,6 +265,7 @@ Net change = additions + deletions + rewrites.
 **Card body:**
 ```agent
 agent -p "Implement [task] per plan §[section].
+plan_id: <plan-id>
 Files: path/to/file1.py, path/to/file2.py.
 Mode: modify-only.
 Tests: <test command>.

@@ -279,10 +279,10 @@ Draft the graph out loud before creating anything:
 5. COMPLETE root immediately        hermes kanban complete <root_id> --summary "Root complete — N cards dispatched."
 6. LINK all dependencies            hermes kanban link <parent> <child>
 7. CREATE auto-unblock cron         cronjob(action="create", name="kanban-auto-unblock-1m",
-                                      schedule="every 1m", deliver="local", no_agent=true,
+                                      schedule="every 1m", deliver="origin", no_agent=true,
                                       repeat=999, script="scripts/auto_unblock.sh")
 8. CREATE board keeper cron         cronjob(action="create", name="kanban-board-keeper-3m",
-                                      schedule="every 3m", deliver="local", no_agent=true,
+                                      schedule="every 3m", deliver="origin", no_agent=true,
                                       repeat=999, script="scripts/board_keeper.sh")
 9. VERIFY both crons running        cronjob(action="list") — confirm both job_ids with
                                       next_run_at in the future
