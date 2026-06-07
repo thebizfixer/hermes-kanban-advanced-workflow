@@ -30,6 +30,16 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `PREFLIGHT_SKIP_API` | Skip API health check | unset |
 | `PREFLIGHT_SKIP_FS_CHECK` | Skip filesystem coherence check | unset |
 
+## Coding agent resolution
+
+The `coding_agent_binary` flows through three layers to the worker:
+
+1. **Init (step 1c)** — user picks from supported agents table → written to `kanban-config.yaml` and `.env` as `KANBAN_CODING_AGENT`
+2. **Worker environment** — `.env` is sourced at session start → `KANBAN_CODING_AGENT` available as env var
+3. **Worker dispatch** — `[os.environ.get("KANBAN_CODING_AGENT", "agent"), "-p", prompt, ...]`
+
+To change the coding agent: edit `.env` or re-run `hermes kanban-advanced init`. The YAML config is the source of truth for documentation; the env var is what the worker reads at runtime.
+
 ## Policy profiles
 
 Set via `KANBAN_POLICY_PROFILE` env var or `--profile` flag on `kanban_card_policy.py`:

@@ -83,7 +83,39 @@ LLM orchestrators cannot poll the board autonomously. Wave progression (checking
 ```bash
 bash hermes-kanban-advanced-workflow/scripts/auto_unblock.sh
 ```
-Run via cron every 30s during execution. Handles every wave transition without orchestrator intervention.
+Run via cron every 60s during execution. Handles every wave transition without orchestrator intervention.
+
+### Board keeper (proactive salvage)
+
+A second cron runs every 180s for proactive board management:
+```bash
+bash hermes-kanban-advanced-workflow/scripts/board_keeper.sh
+```
+
+5 functions: salvage iteration-limit cards (check worktree for commits → merge → complete), kill orphaned agent processes, unstick ready cards stalled >3 minutes, merge completed worktree branches, report board status. Designed for LLM-driven cron (`no_agent=false`).
+
+### Cron governance (hardened in v1.1)
+
+Before execution, three layers verify crons will actually work:
+
+| Layer | When | Checks |
+|-------|------|--------|
+| `pre_dispatch_gate.sh` | Before decomposition | Scripts exist AND executable (`test -x`), hermes on PATH |
+| Standard Process steps 7–9 | After card creation | Both crons created, both verified running via `cronjob(action="list")` |
+| `validate_board.sh` check 0 | Before unblocking gate | Scripts executable, hermes on PATH with common-install-location fallback, both crons found in `hermes cron list` |
+
+**Why hermes PATH matters:** Cron jobs run in a minimal environment. If `hermes` is at `~/.local/bin/hermes` but cron's PATH doesn't include `~/.local/bin`, `auto_unblock.sh` and `board_keeper.sh` will fail silently. The gate checks for this before any cards are dispatched.
+
+**Why executable matters:** `provision.sh` does `chmod 755`, but a stale copy or manual edit can strip the executable bit. A non-executable cron script fails silently on every tick — no error, no notification, no wave progression. The gate catches this.
+
+## Pre-dispatch gate (single entry point)
+
+The `pre_dispatch_gate.sh` script replaces the old multi-step Steps 0a–0e:
+```bash
+bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
+```
+
+Runs in order: plan on `${working_branch}` → plan pushed → preflight → attestation → card policy present → plan memory seeded → DB integrity → cron scripts executable → hermes on PATH. Fails on any blocking check.
 
 ## Governance integrity (pre-decomposition)
 

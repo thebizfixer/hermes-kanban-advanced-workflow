@@ -48,7 +48,31 @@
    cd your-project
    hermes kanban-advanced init --project-root . --working-branch <branch-name>
    ```
-   This provisions config overlay, cron scripts, and environment settings. See [[configuration]] for what the overlay contains.
+   This provisions config overlay, cron scripts, and environment settings. During init, you'll be asked which **coding agent binary** you use (Cursor CLI `agent`, Claude Code `claude`, OpenAI Codex `codex`, etc.). The choice is written to `.hermes/kanban-overrides/kanban-config.yaml` (`coding_agent_binary`) and `.env` (`KANBAN_CODING_AGENT`). Workers read this to dispatch the right binary. See [[configuration]] for what the overlay contains.
+
+### Skill namespace
+
+All kanban-advanced skills use the `kanban-advanced:` prefix — derived from `plugin.yaml`'s `name` field, not the literal string `plugin:`. Load skills with:
+```
+skill_view("kanban-advanced:kanban-planning")
+skill_view("kanban-advanced:kanban-orchestrator")
+```
+The old `plugin:kanban-planning` form does NOT work. Skills are also materialized to `$HERMES_HOME/skills/kanban-advanced/` during init so they appear in the system prompt's `<available_skills>` index and can be loaded without the prefix from any profile.
+
+### Coding agent binary
+
+Set during init (step 1c). Supported agents:
+
+| Binary | Source | Install |
+|--------|--------|---------|
+| `agent` | Cursor CLI | `curl https://cursor.com/install -fsS \| bash` |
+| `claude` | Claude Code | `npm i -g @anthropic-ai/claude-code` |
+| `codex` | OpenAI Codex | `pip install openai-codex` |
+| `grok` | grok-cli | `npm i -g grok-dev` |
+| `aider` | Aider | `pip install aider-install` |
+| `gemini` | Gemini CLI | `npm i -g @google/gemini-cli` |
+
+The worker reads `KANBAN_CODING_AGENT` from the environment (set in `.env`) and dispatches the coding agent with `[coding_agent, "-p", prompt, ...]`. To change later, edit `.env` or re-run `hermes kanban-advanced init`.
 
 5. **Verify everything:**
    ```bash
@@ -109,8 +133,8 @@ The user should:
 2. The orchestrator runs preflight → attestation → decomposition
 3. Workers execute, evaluation chain verifies, orchestrator audits
 
-**Guide the user through the interaction model:** The workflow uses trigger phrases at each stage — `"Plan this out"` → `"Harden the plan"` → `"Optimize for Kanban"` → `"Execute the plan"`. After execution, the agent checkpoints at reconciliation, cleanup, and postmortem. The user can walk away after saying "execute." Full details in the [README Interaction Model](../README.md#interaction-model).
+**Guide the user through the interaction model:** The workflow uses trigger phrases at each stage — `"Plan this out"` → `"Do a sanity check"` → `"Harden the plan"` → `"Optimize for Kanban"` → `"Execute the plan"`. After execution, the agent checkpoints at reconciliation, cleanup, and postmortem. The user can walk away after saying "execute." Full details in the [README Interaction Model](../README.md#interaction-model).
 
 **KPIs are automatic.** The agent surfaces success rate, intervention rate, token burn, and failure-mode distribution at the reconciliation checkpoint. See the [README Agent KPIs](../README.md#agent-kpis).
 
-The orchestrator loads `kanban-advanced:kanban-planning`, `kanban-advanced:kanban-orchestrator`, and `kanban-advanced:kanban-preflight` automatically from the plugin at session start.
+On session start, the `on_session_start` hook fires: on the orchestrator profile it hints to load `kanban-advanced:kanban-orchestrator`; on other profiles it hints about trigger phrases and the bridge skill. All 11 skills are also materialized to `$HERMES_HOME/skills/kanban-advanced/` during init, making them discoverable via the system prompt's `<available_skills>` index.

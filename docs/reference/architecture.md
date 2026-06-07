@@ -5,7 +5,8 @@
 ```mermaid
 flowchart LR
     subgraph PLAN["Planning (interactive)"]
-        DRAFT["Draft<br/>'Plan this out'"] --> HARDEN["Harden<br/>'Harden the plan'"]
+        DRAFT["Draft<br/>'Plan this out'"] --> SANITY["Sanity check<br/>'Do a sanity check'"]
+        SANITY --> HARDEN["Harden<br/>'Harden the plan'"]
         HARDEN -->|"Revise section X"| HARDEN
     end
 
@@ -37,6 +38,7 @@ flowchart LR
 | Stage       | Trigger phrase                           | Skill                   | Governance gate                                            |
 | ----------- | ---------------------------------------- | ----------------------- | ---------------------------------------------------------- |
 | Draft       | `"Plan this out"`                        | `kanban-advanced:kanban-planning`       | —                                                          |
+| Sanity check | `"Do a sanity check"`                   | `kanban-advanced:kanban-planning`       | Read-only audit: anchor verification, code cross-ref, gap report |
 | Harden      | `"Harden the plan"`                      | `kanban-advanced:kanban-planning`       | Edge cases, contingencies, provider staggering             |
 | Revise      | `"Revise section X"`                     | `kanban-advanced:kanban-planning`       | —                                                          |
 | Optimize    | `"Optimize for Kanban"`                  | `kanban-advanced:kanban-planning`       | Harden (WHAT) + Optimize (HOW) checklists |
