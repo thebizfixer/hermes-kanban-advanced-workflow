@@ -12,6 +12,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | Variable | Purpose | Example |
 |----------|---------|---------|
 | `working_branch` | Integration branch; orchestrator merges completed sections here | `<branch-name>` (e.g. `main`) |
+| `coding_agent_binary` | Headless CLI coding agent binary on PATH (set during init) | `agent` (Cursor CLI), `claude`, `codex`, etc. |
 | `trigger_branch` | CI/CD trigger branch; only operator merges here manually | `production` |
 | `feature_branch_prefix` | Prefix for per-section worktree branches | `wt/` |
 | `required_secrets` | Comma-separated env vars checked by preflight | `MONGODB_URI,SECRET_KEY` |

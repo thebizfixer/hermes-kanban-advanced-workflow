@@ -25,6 +25,7 @@ Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.j
 | Key | Substituted as | Default |
 | --- | --- | --- |
 | `bundle_version` | — | Pin public release tag (documentation) |
+| `coding_agent_binary` | `${coding_agent_binary}` | `agent` (set during init; see [coding agents](coding-agents.md)) |
 | `preflight_profiles` | — | `worker,orchestrator` |
 | `plan_memory_path` | `${plan_memory_path}` | `.hermes/kanban/memory` |
 | `feature_branch_prefix` | — | `kanban/` |
