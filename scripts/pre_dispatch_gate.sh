@@ -77,7 +77,10 @@ check "kanban_db" \
   "python3 -c \"import sqlite3; db=sqlite3.connect('${HERMES_HOME}/kanban.db'); assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'\""
 
 check "cron_scripts" \
-  "test -f ${HERMES_HOME}/scripts/auto_unblock.sh && test -f ${HERMES_HOME}/scripts/board_keeper.sh"
+  "test -x ${HERMES_HOME}/scripts/auto_unblock.sh && test -x ${HERMES_HOME}/scripts/board_keeper.sh"
+
+check "cron_hermes_path" \
+  "PATH=\"${HOME}/.local/bin:${PATH}\" command -v hermes >/dev/null 2>&1"
 
 echo ""
 echo "[GATE] Result: $FAILURES failures, $WARNINGS warnings"

@@ -60,27 +60,56 @@ SCRIPT_DIR_VAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR_VAL/lib/hermes_home.sh"
 
 CRON_SCRIPTS_DIR="${HERMES_HOME}/scripts"
-if [ -f "${CRON_SCRIPTS_DIR}/auto_unblock.sh" ] && [ -f "${CRON_SCRIPTS_DIR}/board_keeper.sh" ]; then
-    pass "Cron scripts present at ${CRON_SCRIPTS_DIR}/"
+CRON_SCRIPT_PAIRS="auto_unblock.sh board_keeper.sh"
+ALL_PRESENT=true
+ALL_EXEC=true
+for s in $CRON_SCRIPT_PAIRS; do
+    if [ -f "${CRON_SCRIPTS_DIR}/$s" ]; then
+        if [ -x "${CRON_SCRIPTS_DIR}/$s" ]; then
+            :  # present and executable
+        else
+            fail "Cron script ${CRON_SCRIPTS_DIR}/$s exists but is NOT executable — cron will fail silently"
+            ALL_EXEC=false
+            ((CRON_ISSUES++))
+        fi
+    else
+        fail "Cron script ${CRON_SCRIPTS_DIR}/$s missing — run provision.sh to sync"
+        ALL_PRESENT=false
+        ((CRON_ISSUES++))
+    fi
+done
+$ALL_PRESENT && $ALL_EXEC && pass "Cron scripts present and executable at ${CRON_SCRIPTS_DIR}/"
+
+# Verify hermes is on PATH (cron environment may differ from interactive shell)
+if command -v hermes >/dev/null 2>&1; then
+    pass "hermes on PATH — cron scripts can invoke kanban commands"
 else
-    MISSING_CRON=""
-    [ -f "${CRON_SCRIPTS_DIR}/auto_unblock.sh" ] || MISSING_CRON="$MISSING_CRON auto_unblock.sh"
-    [ -f "${CRON_SCRIPTS_DIR}/board_keeper.sh" ] || MISSING_CRON="$MISSING_CRON board_keeper.sh"
-    fail "Cron scripts missing from ${CRON_SCRIPTS_DIR}/:$MISSING_CRON — run provision.sh to sync"
-    ((CRON_ISSUES++))
+    # Check common install locations
+    FOUND_HERMES=""
+    for candidate in "$HOME/.local/bin/hermes" "$HOME/.nix-profile/bin/hermes" "/usr/local/bin/hermes"; do
+        [ -x "$candidate" ] && FOUND_HERMES="$candidate" && break
+    done
+    if [ -n "$FOUND_HERMES" ]; then
+        warn "hermes found at $FOUND_HERMES but not on default PATH — cron may need explicit PATH setup"
+    else
+        fail "hermes not found on PATH or common locations — cron scripts will fail"
+        ((CRON_ISSUES++))
+    fi
 fi
 
 # Check cron jobs exist via cronjob CLI (non-blocking if CLI unavailable)
 if command -v hermes >/dev/null 2>&1; then
     CRON_LIST=$(hermes cron list 2>/dev/null || true)
-    if echo "$CRON_LIST" | grep -q "auto_unblock"; then
-        pass "auto-unblock cron found"
-    else
-        fail "auto-unblock cron NOT found — gate cannot be unblocked until cron is created"
-        ((CRON_ISSUES++))
-    fi
+    for expected in "auto_unblock" "board_keeper"; do
+        if echo "$CRON_LIST" | grep -q "$expected"; then
+            pass "$expected cron found and running"
+        else
+            fail "$expected cron NOT found — gate cannot be unblocked until cron is created"
+            ((CRON_ISSUES++))
+        fi
+    done
 else
-    warn "hermes CLI not available — cannot verify auto-unblock cron"
+    warn "hermes CLI not available — cannot verify crons are running"
 fi
 
 # ── 1. No card uses --parents flag ──────────────────────────────────────

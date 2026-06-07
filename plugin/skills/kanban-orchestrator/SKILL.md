@@ -268,24 +268,25 @@ Draft the graph out loud before creating anything:
                                      hermes kanban block <audit_id> "Awaiting parent completion"
 5. COMPLETE root immediately        hermes kanban complete <root_id> --summary "Root complete — N cards dispatched."
 6. LINK all dependencies            hermes kanban link <parent> <child>
-7. RUN validate_board.sh            bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
-                                     Checks 9–10 block worker cards without agent blocks.
-8. UNBLOCK dependent cards          Unblock cards whose parents are done.
-9. VERIFY cron scripts exist        bash validate_board.sh (includes cron health check)
-9a. CREATE auto-unblock cron         cronjob(action="create", name="kanban-auto-unblock-1m",
-                                       schedule="every 1m", deliver="local", no_agent=true,
-                                       repeat=999, script="scripts/auto_unblock.sh")
-9b. CREATE board keeper cron         cronjob(action="create", name="kanban-board-keeper-3m",
-                                       schedule="every 3m", deliver="local", no_agent=true,
-                                       repeat=999, script="scripts/board_keeper.sh")
-9c. VERIFY both crons                cronjob(action="list") — confirm both job_ids with
-                                       next_run_at in the future
-10. UNBLOCK gate                     Only after crons are verified running.
-11. COMPLETE gate immediately        hermes kanban complete <gate_id> --summary "Gate complete.
-                                       Auto-unblock cron: <id>, Board keeper cron: <id>."
+7. CREATE auto-unblock cron         cronjob(action="create", name="kanban-auto-unblock-1m",
+                                      schedule="every 1m", deliver="local", no_agent=true,
+                                      repeat=999, script="scripts/auto_unblock.sh")
+8. CREATE board keeper cron         cronjob(action="create", name="kanban-board-keeper-3m",
+                                      schedule="every 3m", deliver="local", no_agent=true,
+                                      repeat=999, script="scripts/board_keeper.sh")
+9. VERIFY both crons running        cronjob(action="list") — confirm both job_ids with
+                                      next_run_at in the future
+10. RUN validate_board.sh           bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
+                                      Full governance gate: cron health (scripts executable + hermes PATH +
+                                      crons running), agent blocks, workspace isolation, parent links,
+                                      dependency gating, test lines, budget heuristics.
+11. UNBLOCK dependent cards         Unblock cards whose parents are done.
+12. UNBLOCK gate                    Only after validate_board.sh passes.
+13. COMPLETE gate immediately       hermes kanban complete <gate_id> --summary "Gate complete.
+                                      Auto-unblock cron: <id>, Board keeper cron: <id>."
 ```
 
-**Auto-progression (mandatory):** LLM orchestrators cannot poll the board autonomously — they only act when prompted. The mechanical work of "check parents → unblock children" and "salvage iteration-limit cards" must be delegated to scripts. The auto-unblock and board keeper crons are created as a mandatory hard gate in Steps 9a–9c — the gate cannot complete until both crons are verified running.
+**Auto-progression (mandatory):** LLM orchestrators cannot poll the board autonomously — they only act when prompted. The mechanical work of "check parents → unblock children" and "salvage iteration-limit cards" must be delegated to scripts. The auto-unblock and board keeper crons are created as a mandatory hard gate in Steps 7–9 — crons are created and verified BEFORE validate_board.sh runs (Step 10), so the full governance gate includes cron health. The gate cannot complete until both crons are verified running AND validate_board.sh passes.
 
 **Cron removal during cleanup:** Both crons must be removed during `kanban-advanced:kanban-cleanup`:
 
