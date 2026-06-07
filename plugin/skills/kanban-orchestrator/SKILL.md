@@ -137,7 +137,17 @@ If none apply, use `delegate_task` or answer directly.
 - **If no specialist fits, ask the user which profile to create.**
 This skill is the deeper playbook when you're an orchestrator profile whose whole job is routing.
 
-**Interaction model:** The user moves through the workflow with explicit trigger phrases. See `references/interaction-model.md` for the full contract — planning stage order (Draft → Harden → Revise → Optimize), execution triggers, interrupt/reset commands, and post-execution checkpoint prompts. Never auto-advance through checkpoints.
+**Interaction model:** The user moves through the workflow with explicit trigger phrases. Planning: `"Plan this out"` → `"Do a sanity check"` → `"Harden the plan"` → `"Optimize for Kanban"`. Execution: `"Execute the plan"`. Post-execution: the orchestrator MUST stop at each checkpoint and ask before proceeding. Never auto-advance.
+
+### Post-execution checkpoint sequence (mandatory)
+
+After the last implementation card completes and the final audit passes:
+
+1. **Reconciliation checkpoint** — Present token burn, success rate, failure taxonomy. Ask: "Proceed to cleanup? Say yes."
+2. **Cleanup checkpoint** — Remove crons, archive board, clean worktrees. Ask: "Proceed to postmortem? Say yes."
+3. **Postmortem checkpoint** — Generate report, confirm all 8 sections. Present file path.
+
+At each checkpoint the orchestrator MUST present findings and wait for the user's explicit "yes" before proceeding. Silently finishing or skipping checkpoints is a governance violation. See `plugin/data/references/interaction-model.md` for the full contract with exact phrasing and anti-patterns.
 
 **Known vanilla hermes bugs:** See `references/vanilla-kanban-known-issues.md` — maps 12 upstream kanban bugs to structural workarounds. Load during Step 0b (Preflight) and apply fixes before decomposition.
 
