@@ -275,7 +275,8 @@
               React.createElement(Button, {
                 variant: "ghost", size: "icon",
                 onClick: function () { setEditingProfile(null); setSelectedModel(null); },
-                className: "absolute right-2 top-2 text-muted-foreground hover:text-foreground z-10"
+                className: "absolute right-2 top-2 text-foreground/70 hover:text-foreground z-10",
+                "aria-label": "Close"
               }, "✕"),
 
               // Header
