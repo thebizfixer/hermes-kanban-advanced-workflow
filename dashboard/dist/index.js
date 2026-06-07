@@ -161,132 +161,121 @@
       return React.createElement(Badge, { variant: "outline", className: "text-green-500 border-green-500/30" }, "configured (" + (info.model || "?") + ")");
     }
 
-    function gatewayBadge(gw) {
-      if (!gw) return React.createElement(Badge, { variant: "outline", className: "text-muted-foreground" }, "unknown");
-      if (gw.running) return React.createElement(Badge, { variant: "outline", className: "text-green-500 border-green-500/30" }, "running");
-      return React.createElement(Badge, { variant: "outline", className: "text-yellow-500 border-yellow-500/30" }, "not running");
-    }
-
     var statusInitialized = status && status.config_exists;
     var statusError = status && status.error;
 
     return React.createElement("div", { className: "space-y-6 max-w-2xl" },
 
-      // ── Status banner ──
+      // ── Status banner with inline buttons ──
       React.createElement(Card, { className: statusError ? "border-red-500/30" : statusInitialized ? "border-green-500/30" : "" },
         React.createElement(CardContent, { className: "flex items-center gap-3 py-4" },
           React.createElement(StatusDot, { status: statusError ? "error" : statusInitialized ? "ok" : "warn" }),
-          React.createElement("div", { className: "flex-1" },
+          React.createElement("div", { className: "flex-1 min-w-0" },
             React.createElement("p", { className: "text-sm font-medium" },
               statusError ? "Cannot reach API"
                 : statusInitialized ? "Initialized"
                 : "Not initialized"
             ),
-            React.createElement("p", { className: "text-xs text-muted-foreground mt-0.5" },
+            React.createElement("p", { className: "text-xs text-muted-foreground mt-0.5 truncate" },
               statusError ? status.error
-                : statusInitialized ? "Config: " + (status.config_path || "kanban-config.yaml") + ". Coding agent: " + (status.coding_agent || "agent") + "."
+                : statusInitialized ? "Coding agent: " + (status.coding_agent || "agent")
                 : "Run bootstrap to provision profiles, config, and cron scripts."
             )
-          )
-        )
-      ),
-
-      // ── Project ──
-      React.createElement(Card, null,
-        React.createElement(CardHeader, null,
-          React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Project")
-        ),
-        React.createElement(CardContent, { className: "space-y-4" },
-          React.createElement("div", { className: "space-y-1.5" },
-            React.createElement(Label, { className: "text-xs" }, "Working branch"),
-            React.createElement(Input, { value: workingBranch, onChange: function (e) { setWorkingBranch(e.target.value); }, placeholder: "main", className: "h-9" }),
-            React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Integration branch where completed worktree commits are merged.")
-          )
-        )
-      ),
-
-      // ── Coding agent ──
-      React.createElement(Card, null,
-        React.createElement(CardHeader, null,
-          React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Coding Agent")
-        ),
-        React.createElement(CardContent, { className: "space-y-4" },
-          React.createElement("div", { className: "space-y-1.5" },
-            React.createElement(Label, { className: "text-xs" }, "Binary on PATH"),
-            React.createElement("select", {
-              value: codingAgent,
-              onChange: function (e) { setCodingAgent(e.target.value); },
-              className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-            },
-              CODING_AGENTS.map(function (a) {
-                return React.createElement("option", { key: a.value, value: a.value }, a.label);
-              })
-            ),
-            React.createElement("p", { className: "text-[11px] text-muted-foreground" },
-              "The headless CLI coding agent workers will dispatch. ",
-              React.createElement("a", { href: "https://github.com/thebizfixer/hermes-kanban-advanced-workflow/blob/main/docs/reference/coding-agents.md", target: "_blank", className: "underline" }, "Supported agents")
-            )
           ),
-          codingAgent === "__custom__" ? React.createElement("div", { className: "space-y-1.5" },
-            React.createElement(Label, { className: "text-xs" }, "Custom binary name"),
-            React.createElement(Input, { value: customAgent, onChange: function (e) { setCustomAgent(e.target.value); }, placeholder: "e.g. my-agent", className: "h-9" })
+          React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping, size: "sm" },
+            bootstrapping ? "Running…" : "Bootstrap"
+          ),
+          initialized ? React.createElement(Button, { variant: "outline", size: "sm", onClick: runUpdate, disabled: bootstrapping },
+            "Update"
           ) : null
         )
       ),
 
-      // ── Profiles ──
-      React.createElement(Card, null,
-        React.createElement(CardHeader, null,
-          React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Profiles")
-        ),
-        React.createElement(CardContent, { className: "space-y-2" },
-          React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border" },
-            React.createElement("span", { className: "text-sm" }, "orchestrator"),
-            profileBadge(status && status.profiles && status.profiles.orchestrator)
-          ),
-          React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border" },
-            React.createElement("span", { className: "text-sm" }, "worker"),
-            profileBadge(status && status.profiles && status.profiles.worker)
-          ),
-          React.createElement("p", { className: "text-[11px] text-muted-foreground mt-1" }, "Profiles are created by bootstrap if missing. Model config is copied from the current profile.")
-        )
-      ),
+      // ── Two-column grid ──
+      React.createElement("div", { className: "grid grid-cols-2 gap-4" },
 
-      // ── Orchestrator tuning ──
-      React.createElement(Card, null,
-        React.createElement(CardHeader, null,
-          React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Orchestrator Tuning")
+        // Left column
+        React.createElement("div", { className: "space-y-4" },
+
+          // Project
+          React.createElement(Card, null,
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Project")
+            ),
+            React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Working branch"),
+                React.createElement(Input, { value: workingBranch, onChange: function (e) { setWorkingBranch(e.target.value); }, placeholder: "main", className: "h-9" }),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Integration branch for worktree commits.")
+              )
+            )
+          ),
+
+          // Profiles
+          React.createElement(Card, null,
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Profiles")
+            ),
+            React.createElement(CardContent, { className: "space-y-2" },
+              React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border" },
+                React.createElement("span", { className: "text-sm" }, "orchestrator"),
+                profileBadge(status && status.profiles && status.profiles.orchestrator)
+              ),
+              React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border" },
+                React.createElement("span", { className: "text-sm" }, "worker"),
+                profileBadge(status && status.profiles && status.profiles.worker)
+              ),
+              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-1" }, "Created by bootstrap if missing. Model config copied from current profile.")
+            )
+          )
         ),
-        React.createElement(CardContent, { className: "space-y-4" },
-          React.createElement("div", { className: "space-y-1.5" },
-            React.createElement(Label, { className: "text-xs" }, "Max turns"),
-            React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
-            React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for complex plan decomposition. Hermes default is 90.")
+
+        // Right column
+        React.createElement("div", { className: "space-y-4" },
+
+          // Coding agent
+          React.createElement(Card, null,
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Coding Agent")
+            ),
+            React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Binary on PATH"),
+                React.createElement("select", {
+                  value: codingAgent,
+                  onChange: function (e) { setCodingAgent(e.target.value); },
+                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                },
+                  CODING_AGENTS.map(function (a) {
+                    return React.createElement("option", { key: a.value, value: a.value }, a.label);
+                  })
+                ),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" },
+                  "Workers dispatch this binary. ",
+                  React.createElement("a", { href: "https://github.com/thebizfixer/hermes-kanban-advanced-workflow/blob/main/docs/reference/coding-agents.md", target: "_blank", className: "underline" }, "Supported agents")
+                )
+              ),
+              codingAgent === "__custom__" ? React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Custom binary name"),
+                React.createElement(Input, { value: customAgent, onChange: function (e) { setCustomAgent(e.target.value); }, placeholder: "e.g. my-agent", className: "h-9" })
+              ) : null
+            )
+          ),
+
+          // Orchestrator tuning
+          React.createElement(Card, null,
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Orchestrator Tuning")
+            ),
+            React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Max turns"),
+                React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for plan decomposition. Default is 90.")
+              )
+            )
           )
         )
-      ),
-
-      // ── Gateway ──
-      React.createElement(Card, null,
-        React.createElement(CardHeader, null,
-          React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Gateway")
-        ),
-        React.createElement(CardContent, null,
-          React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border" },
-            React.createElement("span", { className: "text-sm" }, "hermes gateway"),
-            gatewayBadge(status && status.gateway)
-          )
-        )
-      ),
-
-      // ── Actions ──
-      React.createElement("div", { className: "flex gap-2" },
-        React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping, className: "gap-2" },
-          bootstrapping ? "Running…" : "Bootstrap"
-        ),
-        initialized ? React.createElement(Button, { variant: "outline", onClick: runUpdate, disabled: bootstrapping },
-          "Update settings"
-        ) : null
       ),
 
       // ── Console output ──
