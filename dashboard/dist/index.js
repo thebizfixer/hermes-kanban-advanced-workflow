@@ -197,6 +197,17 @@
 
     var statusInitialized = status && status.config_exists;
     var statusError = status && status.error;
+    var statusLoading = status === null;
+
+    // ── Loading state ──
+    if (statusLoading) {
+      return React.createElement("div", { className: "flex items-center justify-center py-16" },
+        React.createElement("div", { className: "flex flex-col items-center gap-3 text-muted-foreground" },
+          React.createElement("div", { className: "w-5 h-5 border-2 border-muted-foreground/30 border-t-primary rounded-full animate-spin" }),
+          React.createElement("span", { className: "text-xs" }, "Loading settings…")
+        )
+      );
+    }
 
     return React.createElement("div", { className: "space-y-6" },
 
