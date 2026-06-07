@@ -28,12 +28,21 @@
   var SelectValue = SDK.components.SelectValue || "span";
   var Separator = SDK.components.Separator;
   var cn = SDK.utils.cn;
-  var fetchJSON = SDK.fetchJSON;
 
   // ── API helpers ──
-  function apiStatus() { return fetchJSON("/api/plugins/kanban-advanced/status"); }
-  function apiInit(data) { return fetchJSON("/api/plugins/kanban-advanced/init", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); }
-  function apiUpdate(data) { return fetchJSON("/api/plugins/kanban-advanced/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); }
+  function apiFetch(path, opts) {
+    opts = opts || {};
+    opts.credentials = "include";
+    opts.headers = opts.headers || {};
+    opts.headers["Content-Type"] = "application/json";
+    return fetch(path, opts).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    });
+  }
+  function apiStatus() { return apiFetch("/api/plugins/kanban-advanced/status"); }
+  function apiInit(data) { return apiFetch("/api/plugins/kanban-advanced/init", { method: "POST", body: JSON.stringify(data) }); }
+  function apiUpdate(data) { return apiFetch("/api/plugins/kanban-advanced/update", { method: "POST", body: JSON.stringify(data) }); }
 
   var CODING_AGENTS = [
     { value: "agent", label: "agent (Cursor CLI)" },
@@ -76,8 +85,8 @@
           else { setCodingAgent("__custom__"); setCustomAgent(s.coding_agent); }
         }
         if (s.max_turns) setMaxTurns(s.max_turns);
-      }).catch(function () {
-        setStatus({ error: "API unreachable" });
+      }).catch(function (e) {
+        setStatus({ error: e.message || "API unreachable" });
       });
     }
 
