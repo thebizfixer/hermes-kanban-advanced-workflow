@@ -272,10 +272,9 @@
               onClick: function (e) { e.stopPropagation(); }
             },
               // Close button
-              React.createElement(Button, {
-                variant: "ghost", size: "icon",
+              React.createElement("button", {
                 onClick: function () { setEditingProfile(null); setSelectedModel(null); },
-                className: "absolute right-2 top-2 text-foreground/70 hover:text-foreground z-10",
+                className: "absolute right-2 top-2 w-7 h-7 flex items-center justify-center rounded-md hover:bg-accent/20 text-muted-foreground hover:text-foreground transition-colors z-10",
                 "aria-label": "Close"
               }, "✕"),
 
