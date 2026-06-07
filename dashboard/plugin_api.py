@@ -1,8 +1,9 @@
-"""Backend API routes for the kanban-advanced dashboard tab.
+"""Kanban-Advanced dashboard plugin — backend API routes.
 
-Mounted by Hermes at /api/plugins/kanban-advanced/.
+Mounted at /api/plugins/kanban-advanced/ by the dashboard plugin system.
 Provides status, init, and update endpoints for the settings UI.
 """
+
 import json
 import logging
 import os
@@ -10,7 +11,11 @@ import re
 import subprocess
 from pathlib import Path
 
+from fastapi import APIRouter, Request
+
 logger = logging.getLogger(__name__)
+
+router = APIRouter()
 
 HERMES_BIN = os.environ.get("HERMES_BIN", "hermes")
 
@@ -20,7 +25,6 @@ def _run(cmd: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
 
 
 def _find_project_root() -> Path:
-    """Walk up from cwd to find project root (.git or .env)."""
     cwd = Path.cwd()
     for parent in [cwd] + list(cwd.parents):
         if (parent / ".git").exists() or (parent / ".env").exists():
@@ -29,7 +33,6 @@ def _find_project_root() -> Path:
 
 
 def _read_config(project_root: Path) -> dict:
-    """Read kanban-config.yaml overlay."""
     config_path = project_root / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
     if not config_path.exists():
         return {}
@@ -43,7 +46,6 @@ def _read_config(project_root: Path) -> dict:
 
 
 def _read_env(project_root: Path) -> dict:
-    """Read .env file."""
     env_file = project_root / ".env"
     if not env_file.exists():
         return {}
@@ -57,7 +59,6 @@ def _read_env(project_root: Path) -> dict:
 
 
 def _check_profiles() -> dict:
-    """Check if worker and orchestrator profiles exist and have models."""
     result = {}
     try:
         r = _run([HERMES_BIN, "profile", "list"])
@@ -81,7 +82,6 @@ def _check_profiles() -> dict:
 
 
 def _check_gateway() -> dict:
-    """Check gateway status."""
     try:
         r = _run([HERMES_BIN, "gateway", "status"], timeout=10)
         running = r.returncode == 0
@@ -92,7 +92,6 @@ def _check_gateway() -> dict:
 
 
 def _get_max_turns() -> int:
-    """Read orchestrator max_turns."""
     try:
         r = _run([HERMES_BIN, "-p", "orchestrator", "config", "show"])
         mt = re.search(r"Max turns:\s*(\d+)", r.stdout)
@@ -101,9 +100,8 @@ def _get_max_turns() -> int:
         return 90
 
 
-# ── Route handlers (called by FastAPI router) ──
-
-async def status(request) -> dict:
+@router.get("/status")
+async def status():
     """GET /api/plugins/kanban-advanced/status"""
     project_root = _find_project_root()
     config = _read_config(project_root)
@@ -124,7 +122,8 @@ async def status(request) -> dict:
     }
 
 
-async def init(request) -> dict:
+@router.post("/init")
+async def init(request: Request):
     """POST /api/plugins/kanban-advanced/init"""
     try:
         body = await request.json()
@@ -262,7 +261,8 @@ async def init(request) -> dict:
     return {"success": True, "output": output}
 
 
-async def update(request) -> dict:
+@router.post("/update")
+async def update(request: Request):
     """POST /api/plugins/kanban-advanced/update"""
     try:
         body = await request.json()
@@ -281,7 +281,6 @@ async def update(request) -> dict:
     output = []
     output.append("=== Updating settings ===")
 
-    # Update config
     overlay_dir = project_root / ".hermes" / "kanban-overrides"
     config_file = overlay_dir / "kanban-config.yaml"
     overlay_dir.mkdir(parents=True, exist_ok=True)
@@ -296,7 +295,6 @@ async def update(request) -> dict:
     )
     output.append(f"   OK Updated {config_file}")
 
-    # Update .env
     env_file = project_root / ".env"
     env_content = env_file.read_text() if env_file.exists() else ""
     for key, val in [("HERMES_ENABLE_PROJECT_PLUGINS", "true"), ("KANBAN_CODING_AGENT", coding_agent)]:
@@ -307,13 +305,11 @@ async def update(request) -> dict:
     env_file.write_text(env_content)
     output.append(f"   OK Updated .env")
 
-    # Max turns
     current_turns = _get_max_turns()
     if current_turns < max_turns:
         _run([HERMES_BIN, "-p", "orchestrator", "config", "set", "agent.max_turns", str(max_turns)])
         output.append(f"   OK max_turns set to {max_turns}")
 
-    # Re-materialize skills
     plugin_root = Path(__file__).parent.parent
     skills_src = plugin_root / "plugin" / "skills"
     hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
@@ -331,15 +327,3 @@ async def update(request) -> dict:
 
     output.append("OK Settings updated")
     return {"success": True, "output": output}
-
-
-def register_routes(app):
-    """Register FastAPI routes. Called by Hermes dashboard plugin loader.
-
-    The dashboard auto-discovers this function in dashboard/plugin_api.py
-    and passes the FastAPI app instance.
-    """
-    app.add_api_route("/api/plugins/kanban-advanced/status", status, methods=["GET"])
-    app.add_api_route("/api/plugins/kanban-advanced/init", init, methods=["POST"])
-    app.add_api_route("/api/plugins/kanban-advanced/update", update, methods=["POST"])
-    logger.info("kanban-advanced dashboard API routes registered")
