@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kanban-Advanced — Settings</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Theme variables (overridden by dashboard) ── */
+:root {
+  --ka-bg: #08090a;
+  --ka-bg-panel: #0f1011;
+  --ka-bg-surface: #191a1b;
+  --ka-bg-elevated: #28282c;
+  --ka-text: #f7f8f8;
+  --ka-text-secondary: #d0d6e0;
+  --ka-text-tertiary: #8a8f98;
+  --ka-text-quaternary: #62666d;
+  --ka-accent: #5e6ad2;
+  --ka-accent-bright: #7170ff;
+  --ka-accent-hover: #828fff;
+  --ka-green: #27a644;
+  --ka-yellow: #eab308;
+  --ka-red-bg: rgba(239,68,68,0.15);
+  --ka-red-text: #fca5a5;
+  --ka-red-border: rgba(239,68,68,0.2);
+  --ka-border: rgba(255,255,255,0.08);
+  --ka-border-subtle: rgba(255,255,255,0.05);
+  --ka-radius: 6px;
+  --ka-radius-md: 8px;
+  --ka-font: 'Inter', system-ui, -apple-system, sans-serif;
+  --ka-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--ka-font);
+  background: var(--ka-bg);
+  color: var(--ka-text-secondary);
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.5;
+  min-height: 100vh;
+  padding: 0;
+}
+.app { max-width: 680px; margin: 0 auto; padding: 40px 24px 80px; }
+.header { margin-bottom: 32px; }
+.header h1 {
+  font-size: 24px; font-weight: 590; color: var(--ka-text);
+  letter-spacing: -0.29px; margin-bottom: 6px;
+}
+.header p { font-size: 15px; color: var(--ka-text-tertiary); }
+
+.status-banner {
+  background: var(--ka-bg-surface); border: 1px solid var(--ka-border);
+  border-radius: var(--ka-radius-md); padding: 16px 20px; margin-bottom: 24px;
+  display: flex; align-items: center; gap: 12px;
+}
+.status-banner.initialized { border-color: rgba(39,166,68,0.3); }
+.status-banner.uninitialized { border-color: var(--ka-border); }
+.status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.status-dot.ok { background: var(--ka-green); }
+.status-dot.warn { background: var(--ka-yellow); }
+.status-dot.missing { background: var(--ka-text-quaternary); }
+.status-text { flex: 1; }
+.status-text .label { font-size: 14px; font-weight: 510; color: var(--ka-text); }
+.status-text .detail { font-size: 13px; color: var(--ka-text-tertiary); margin-top: 2px; }
+
+.section { margin-bottom: 28px; }
+.section-title {
+  font-size: 13px; font-weight: 590; color: var(--ka-text-tertiary);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+}
+.form-group { margin-bottom: 16px; }
+.form-label {
+  display: block; font-size: 14px; font-weight: 510; color: var(--ka-text-secondary);
+  margin-bottom: 6px;
+}
+.form-hint { font-size: 12px; color: var(--ka-text-quaternary); margin-top: 4px; }
+
+input[type="text"], input[type="number"], select {
+  width: 100%; background: var(--ka-bg-surface); color: var(--ka-text);
+  border: 1px solid var(--ka-border); border-radius: var(--ka-radius);
+  padding: 8px 12px; font-family: var(--ka-font); font-size: 14px; font-weight: 400;
+  transition: border-color 0.15s;
+}
+input:focus, select:focus {
+  outline: none; border-color: var(--ka-accent);
+  box-shadow: 0 0 0 1px var(--ka-accent);
+}
+select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238a8f98' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px;
+}
+
+.readonly-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: var(--ka-bg-surface);
+  border: 1px solid var(--ka-border-subtle); border-radius: var(--ka-radius);
+}
+.readonly-row .key { font-size: 14px; font-weight: 400; color: var(--ka-text-secondary); }
+.readonly-row .value {
+  font-size: 13px; font-weight: 510; display: flex; align-items: center; gap: 6px;
+}
+.readonly-row .value.ok { color: var(--ka-green); }
+.readonly-row .value.warn { color: var(--ka-yellow); }
+.readonly-row .value.missing { color: var(--ka-text-quaternary); }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 8px 18px; border-radius: var(--ka-radius); font-family: var(--ka-font);
+  font-size: 14px; font-weight: 510; cursor: pointer; border: none;
+  transition: background 0.15s, opacity 0.15s;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary { background: var(--ka-accent); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--ka-accent-hover); }
+.btn-secondary {
+  background: var(--ka-bg-elevated); color: var(--ka-text-secondary);
+  border: 1px solid var(--ka-border);
+}
+.btn-secondary:hover:not(:disabled) { background: var(--ka-border); }
+.btn-danger { background: var(--ka-red-bg); color: var(--ka-red-text); border: 1px solid var(--ka-red-border); }
+.btn-danger:hover:not(:disabled) { filter: brightness(1.2); }
+
+.button-row { display: flex; gap: 10px; margin-top: 24px; }
+
+.console {
+  margin-top: 20px; background: var(--ka-bg-panel); border: 1px solid var(--ka-border-subtle);
+  border-radius: var(--ka-radius-md); padding: 16px; max-height: 300px; overflow-y: auto;
+  display: none;
+}
+.console.visible { display: block; }
+.console pre {
+  font-family: var(--ka-font-mono);
+  font-size: 12px; color: var(--ka-text-tertiary); white-space: pre-wrap; line-height: 1.6;
+}
+.console .line-ok { color: var(--ka-green); }
+.console .line-warn { color: var(--ka-yellow); }
+.console .line-err { color: var(--ka-red-text); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px; border: 2px solid var(--ka-border);
+  border-top-color: var(--ka-accent-bright); border-radius: 50%;
+  animation: spin 0.6s linear infinite; display: none; margin-left: 8px;
+}
+.spinner.visible { display: inline-block; }
+
+.toast {
+  position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
+  border-radius: var(--ka-radius); font-size: 14px; font-weight: 510;
+  z-index: 100; opacity: 0; transform: translateY(10px);
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast.visible { opacity: 1; transform: translateY(0); }
+.toast.success { background: rgba(39,166,68,0.2); border: 1px solid rgba(39,166,68,0.3); color: #4ade80; }
+.toast.error { background: var(--ka-red-bg); border: 1px solid var(--ka-red-border); color: var(--ka-red-text); }
+
+a { color: var(--ka-accent-bright); text-decoration: none; }
+a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Kanban-Advanced Settings</h1>
+    <p>Multi-agent governance workflow — configure once, then plan, harden, and execute.</p>
+  </div>
+
+  <div id="statusBanner" class="status-banner uninitialized">
+    <span id="statusDot" class="status-dot missing"></span>
+    <div class="status-text">
+      <div id="statusLabel" class="label">Not initialized</div>
+      <div id="statusDetail" class="detail">Run bootstrap to provision profiles, config, and cron scripts.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Project</div>
+    <div class="form-group">
+      <label class="form-label" for="workingBranch">Working branch</label>
+      <input type="text" id="workingBranch" value="main" placeholder="main">
+      <div class="form-hint">Integration branch where completed worktree commits are merged.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Coding Agent</div>
+    <div class="form-group">
+      <label class="form-label" for="codingAgent">Binary on PATH</label>
+      <select id="codingAgent">
+        <option value="agent">agent (Cursor CLI)</option>
+        <option value="claude">claude (Claude Code)</option>
+        <option value="codex">codex (OpenAI Codex)</option>
+        <option value="grok">grok (grok-cli)</option>
+        <option value="aider">aider (Aider)</option>
+        <option value="gemini">gemini (Gemini CLI)</option>
+        <option value="__custom__">Other (custom binary)…</option>
+      </select>
+      <div class="form-hint">The headless CLI coding agent workers will dispatch. <a href="https://github.com/thebizfixer/hermes-kanban-advanced-workflow/blob/main/docs/reference/coding-agents.md" target="_blank">Supported agents</a></div>
+    </div>
+    <div class="form-group" id="customAgentGroup" style="display:none">
+      <label class="form-label" for="customAgentBinary">Custom binary name</label>
+      <input type="text" id="customAgentBinary" placeholder="e.g. my-agent">
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Profiles</div>
+    <div class="readonly-row">
+      <span class="key">orchestrator</span>
+      <span id="profileOrch" class="value missing">checking…</span>
+    </div>
+    <div class="readonly-row" style="margin-top:1px">
+      <span class="key">worker</span>
+      <span id="profileWorker" class="value missing">checking…</span>
+    </div>
+    <div class="form-hint" style="margin-top:6px">Profiles are created by bootstrap if missing. Model config is copied from the current profile.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Orchestrator Tuning</div>
+    <div class="form-group">
+      <label class="form-label" for="maxTurns">Max turns</label>
+      <input type="number" id="maxTurns" value="180" min="90" max="500">
+      <div class="form-hint">Recommended 180 for complex plan decomposition. Hermes default is 90.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Gateway</div>
+    <div class="readonly-row">
+      <span class="key">hermes gateway</span>
+      <span id="gatewayStatus" class="value missing">checking…</span>
+    </div>
+  </div>
+
+  <div class="button-row">
+    <button id="btnBootstrap" class="btn btn-primary" onclick="runBootstrap()">
+      Bootstrap
+      <span id="bootstrapSpinner" class="spinner"></span>
+    </button>
+    <button id="btnUpdate" class="btn btn-secondary" onclick="runUpdate()" disabled>
+      Update settings
+    </button>
+  </div>
+
+  <div id="console" class="console">
+    <pre id="consoleOutput"></pre>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+var configLoaded = false;
+var initRun = false;
+
+async function apiCall(endpoint, method, body) {
+  method = method || 'GET';
+  var opts = { method: method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    var resp = await fetch('/api/plugins/kanban-advanced/' + endpoint, opts);
+    return await resp.json();
+  } catch (e) {
+    return { error: 'API unreachable: ' + e.message + '. Ensure the gateway is running.' };
+  }
+}
+
+function logLine(text, cls) {
+  var c = document.getElementById('console');
+  var o = document.getElementById('consoleOutput');
+  c.classList.add('visible');
+  var span = document.createElement('span');
+  span.className = cls || '';
+  span.textContent = text + '\n';
+  o.appendChild(span);
+  c.scrollTop = c.scrollHeight;
+}
+
+function clearConsole() {
+  document.getElementById('consoleOutput').textContent = '';
+}
+
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast ' + (type || 'success') + ' visible';
+  setTimeout(function() { t.classList.remove('visible'); }, 3000);
+}
+
+function setBanner(state, label, detail) {
+  var b = document.getElementById('statusBanner');
+  b.className = 'status-banner ' + state;
+  document.getElementById('statusLabel').textContent = label;
+  document.getElementById('statusDetail').textContent = detail;
+  var d = document.getElementById('statusDot');
+  d.className = 'status-dot ' + (state === 'initialized' ? 'ok' : 'missing');
+}
+
+function setProfileStatus(id, info) {
+  var el = document.getElementById(id);
+  if (!info || !info.exists) {
+    el.textContent = 'not found'; el.className = 'value missing';
+  } else if (!info.has_model) {
+    el.textContent = 'exists (no model)'; el.className = 'value warn';
+  } else {
+    el.textContent = 'configured (' + (info.model || '?') + ')'; el.className = 'value ok';
+  }
+}
+
+function setGatewayStatus(info) {
+  var el = document.getElementById('gatewayStatus');
+  if (!info) { el.textContent = 'unknown'; el.className = 'value missing'; }
+  else if (info.running) { el.textContent = 'running'; el.className = 'value ok'; }
+  else { el.textContent = 'not running'; el.className = 'value warn'; }
+}
+
+function toggleCustomAgent() {
+  var sel = document.getElementById('codingAgent');
+  document.getElementById('customAgentGroup').style.display = sel.value === '__custom__' ? 'block' : 'none';
+}
+
+function getFormData() {
+  var sel = document.getElementById('codingAgent');
+  var agent = sel.value;
+  if (agent === '__custom__') {
+    agent = (document.getElementById('customAgentBinary').value || '').trim() || 'agent';
+  }
+  return {
+    working_branch: (document.getElementById('workingBranch').value || '').trim() || 'main',
+    coding_agent_binary: agent,
+    max_turns: parseInt(document.getElementById('maxTurns').value) || 180,
+  };
+}
+
+async function runBootstrap() {
+  var btn = document.getElementById('btnBootstrap');
+  var spinner = document.getElementById('bootstrapSpinner');
+  btn.disabled = true; spinner.classList.add('visible');
+  clearConsole();
+
+  var data = getFormData();
+  logLine('=== Bootstrap starting ===');
+  logLine('Working branch: ' + data.working_branch);
+  logLine('Coding agent: ' + data.coding_agent_binary);
+  logLine('Max turns: ' + data.max_turns);
+  logLine('');
+
+  var result = await apiCall('init', 'POST', data);
+
+  if (result.error) {
+    logLine('ERROR: ' + result.error, 'line-err');
+    showToast('Bootstrap failed', 'error');
+  } else {
+    var lines = result.output || [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var cls = line.indexOf('   X') === 0 || line.indexOf('Error') === 0 ? 'line-err'
+              : line.indexOf('   !') === 0 ? 'line-warn'
+              : line.indexOf('   OK') === 0 ? 'line-ok'
+              : '';
+      logLine(line, cls);
+    }
+    if (result.success) {
+      showToast('Bootstrap complete — plugin is ready', 'success');
+      configLoaded = true; initRun = true;
+      document.getElementById('btnUpdate').disabled = false;
+    }
+  }
+
+  btn.disabled = false; spinner.classList.remove('visible');
+  await loadState();
+}
+
+async function runUpdate() {
+  if (!configLoaded) { showToast('Run bootstrap first', 'error'); return; }
+  var btn = document.getElementById('btnUpdate');
+  btn.disabled = true; clearConsole();
+
+  var data = getFormData();
+  logLine('=== Updating settings ===');
+  logLine('Working branch: ' + data.working_branch);
+  logLine('Coding agent: ' + data.coding_agent_binary);
+  logLine('Max turns: ' + data.max_turns);
+  logLine('');
+
+  var result = await apiCall('update', 'POST', data);
+
+  if (result.error) {
+    logLine('ERROR: ' + result.error, 'line-err');
+    showToast('Update failed', 'error');
+  } else {
+    var lines = result.output || [];
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var cls = line.indexOf('   X') === 0 ? 'line-err'
+              : line.indexOf('   !') === 0 ? 'line-warn'
+              : line.indexOf('   OK') === 0 ? 'line-ok'
+              : '';
+      logLine(line, cls);
+    }
+    showToast('Settings updated', 'success');
+  }
+
+  btn.disabled = false;
+  await loadState();
+}
+
+async function loadState() {
+  var status = await apiCall('status');
+  if (status.error) {
+    setBanner('uninitialized', 'Cannot reach API', status.error);
+    return;
+  }
+
+  configLoaded = status.config_exists;
+  initRun = status.config_exists;
+
+  if (status.config_exists) {
+    setBanner('initialized', 'Initialized', 'Config: ' + (status.config_path || 'kanban-config.yaml') + '. Coding agent: ' + (status.coding_agent || 'agent') + '.');
+  } else {
+    setBanner('uninitialized', 'Not initialized', 'Run bootstrap to provision profiles, config, and cron scripts.');
+  }
+
+  if (status.working_branch) document.getElementById('workingBranch').value = status.working_branch;
+  if (status.coding_agent) {
+    var sel = document.getElementById('codingAgent');
+    var opts = sel.options;
+    var found = false;
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i].value === status.coding_agent) { sel.value = status.coding_agent; found = true; break; }
+    }
+    if (!found) {
+      sel.value = '__custom__';
+      document.getElementById('customAgentBinary').value = status.coding_agent;
+      toggleCustomAgent();
+    }
+  }
+  if (status.max_turns) document.getElementById('maxTurns').value = status.max_turns;
+
+  setProfileStatus('profileOrch', status.profiles && status.profiles.orchestrator);
+  setProfileStatus('profileWorker', status.profiles && status.profiles.worker);
+  setGatewayStatus(status.gateway);
+
+  document.getElementById('btnUpdate').disabled = !status.config_exists;
+}
+
+document.getElementById('codingAgent').addEventListener('change', toggleCustomAgent);
+toggleCustomAgent();
+loadState();
+</script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+{
+  "name": "kanban-advanced",
+  "label": "Kanban-Advanced",
+  "version": "1.0.0",
+  "description": "Multi-agent governance workflow settings — configure profiles, coding agent, and cron scripts.",
+  "icon": "layers",
+  "order": 9,
+  "tabs": [
+    {
+      "path": "/kanban-advanced",
+      "label": "Kanban-Advanced",
+      "component": "KanbanAdvancedSettings"
+    }
+  ],
+  "api": {
+    "base_path": "/api/plugins/kanban-advanced"
+  }
+}
