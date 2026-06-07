@@ -28,7 +28,7 @@
   var SelectValue = SDK.components.SelectValue || "span";
   var Separator = SDK.components.Separator;
   var cn = SDK.utils.cn;
-  var fetchJSON = SDK.api.fetchJSON || SDK.fetchJSON;
+  var fetchJSON = SDK.fetchJSON;
 
   // ── API helpers ──
   function apiStatus() { return fetchJSON("/api/plugins/kanban-advanced/status"); }
