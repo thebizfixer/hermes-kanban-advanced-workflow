@@ -370,11 +370,11 @@ profiles:
         print(f"   X Skills not found at {skills_src}")
         return 1
 
-    # ── 3. Cron scripts ──────────────────────────────────────────────
-    print("3. Provisioning cron scripts...")
+    # ── 3. Cron scripts + token tracker ───────────────────────────────
+    print("3. Provisioning cron scripts + token tracker...")
     cron_dir = hermes_home / "scripts"
     cron_dir.mkdir(parents=True, exist_ok=True)
-    for script_name in ["auto_unblock.sh", "board_keeper.sh"]:
+    for script_name in ["auto_unblock.sh", "board_keeper.sh", "token_tracker.py"]:
         src = SCRIPTS_DIR / script_name
         dst = cron_dir / script_name
         if src.exists():

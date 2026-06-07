@@ -142,8 +142,33 @@ agent_usage = agent_output.get("usage", {})
 agent_duration_ms = agent_output.get("duration_api_ms", 0)
 
 # Log token usage — mandatory for KPI reconciliation (unconditional import, no try/except)
-# Use log_from_env (preferred) — reads task_id, model, etc. from environment:
-from scripts.token_tracker import log_from_env
+# Resolution chain (try each until import succeeds):
+#   1. Project-local scripts/token_tracker.py
+#   2. $HERMES_HOME/scripts/token_tracker.py (provisioned by init)
+#   3. hermes-kanban-advanced-workflow/scripts/token_tracker.py (bundle fallback)
+import sys, os
+
+token_tracker_loaded = False
+for candidate in [
+    os.environ.get("HERMES_KANBAN_REPO_ROOT", ""),
+    os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes")),
+]:
+    if candidate and os.path.isdir(candidate):
+        sys.path.insert(0, candidate)
+        try:
+            from scripts.token_tracker import log_from_env
+            token_tracker_loaded = True
+            break
+        except ImportError:
+            sys.path.pop(0)
+
+if not token_tracker_loaded:
+    kanban_block(
+        task_id=os.environ["HERMES_KANBAN_TASK"],
+        reason="Token tracker unavailable — cannot attribute burn to plan (E018). "
+               "Re-run 'hermes kanban-advanced init' to provision token_tracker.py."
+    )
+    sys.exit(1)
 
 log_from_env(
     plan_id=os.environ.get("HERMES_KANBAN_PLAN_ID", ""),
@@ -158,13 +183,7 @@ log_from_env(
 # Or use log_token_run() directly for full control over all fields.
 ```
 
-If `result.stdout` is not valid JSON, `scripts.token_tracker` cannot be imported, or the call raises, `kanban_block` with the error — do not call `kanban_complete`.
-
-If the import path needs customization, add the repo root to `sys.path` before importing:
-```python
-import sys
-sys.path.insert(0, "/path/to/your/repo")
-```
+If `result.stdout` is not valid JSON or the `log_from_env` call raises, `kanban_block` with the error — do not call `kanban_complete`.
 
 ```python
 kanban_complete(
