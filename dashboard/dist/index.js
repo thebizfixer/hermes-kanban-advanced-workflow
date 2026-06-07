@@ -258,34 +258,47 @@
               React.createElement("p", { className: "text-[11px] text-muted-foreground mt-1" }, "Created by bootstrap if missing. Model config copied from current profile.")
             )
           ),
-          // ── Inline model picker ──
-          editingProfile ? React.createElement(Card, { className: "border-accent/30" },
-            React.createElement(CardHeader, null,
-              React.createElement("div", { className: "flex items-center justify-between" },
-                React.createElement(CardTitle, { className: "text-sm font-medium" }, "Change model for " + editingProfile),
-                React.createElement(Button, { variant: "ghost", size: "sm", onClick: function () { setEditingProfile(null); } }, "✕")
+          // ── Model picker modal ──
+          editingProfile ? React.createElement("div", {
+            className: "fixed inset-0 z-50 flex items-center justify-center",
+            style: { backgroundColor: "rgba(0,0,0,0.6)" },
+            onClick: function (e) { if (e.target === e.currentTarget) setEditingProfile(null); }
+          },
+            React.createElement(Card, { className: "w-96 max-h-[70vh] flex flex-col shadow-2xl border-accent/30", onClick: function (e) { e.stopPropagation(); } },
+              React.createElement(CardHeader, { className: "flex-shrink-0" },
+                React.createElement("div", { className: "flex items-center justify-between" },
+                  React.createElement(CardTitle, { className: "text-sm font-medium" }, "Change model — " + editingProfile),
+                  React.createElement(Button, { variant: "ghost", size: "sm", onClick: function () { setEditingProfile(null); } }, "✕")
+                )
+              ),
+              React.createElement(CardContent, { className: "overflow-y-auto flex-1 space-y-3" },
+                !modelOptions ? React.createElement("p", { className: "text-xs text-muted-foreground" }, "Loading models…")
+                : modelOptions.error ? React.createElement("p", { className: "text-xs text-red-400" }, "Could not load model list")
+                : (modelOptions.providers || []).map(function (prov) {
+                    var provName = prov.name || prov;
+                    var provModels = prov.models || [];
+                    if (!provModels.length) return null;
+                    return React.createElement("div", { key: provName },
+                      React.createElement("p", { className: "text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5" }, provName),
+                      React.createElement("div", { className: "space-y-0.5" },
+                        provModels.map(function (m) {
+                          var modelId = typeof m === "string" ? m : m.id || m.name;
+                          var modelLabel = typeof m === "string" ? m : m.name || m.id;
+                          var isActive = status && status.profiles && status.profiles[editingProfile] && status.profiles[editingProfile].model === modelId;
+                          return React.createElement("div", {
+                            key: modelId,
+                            className: "flex items-center justify-between py-1.5 px-2.5 rounded-md text-sm hover:bg-accent/10 cursor-pointer transition-colors" + (isActive ? " bg-accent/10" : ""),
+                            onClick: function () { setProfileModel(editingProfile, provName, modelId); }
+                          },
+                            React.createElement("span", { className: isActive ? "font-medium" : "" }, modelLabel),
+                            isActive ? React.createElement(Badge, { variant: "outline", className: "text-[10px] h-4 px-1.5" }, "active") : null,
+                            changingModel ? React.createElement("span", { className: "text-muted-foreground text-xs" }, "…") : null
+                          );
+                        })
+                      )
+                    );
+                  })
               )
-            ),
-            React.createElement(CardContent, { className: "space-y-2" },
-              !modelOptions ? React.createElement("p", { className: "text-xs text-muted-foreground" }, "Loading models…")
-              : modelOptions.error ? React.createElement("p", { className: "text-xs text-red-400" }, "Could not load model list")
-              : (modelOptions.providers || []).map(function (prov) {
-                  return React.createElement("div", { key: prov.name || prov, className: "space-y-1" },
-                    React.createElement("p", { className: "text-[11px] font-medium text-muted-foreground uppercase tracking-wide" }, prov.name || prov),
-                    (prov.models || []).slice(0, 8).map(function (m) {
-                      var modelId = typeof m === "string" ? m : m.id || m.name;
-                      var modelLabel = typeof m === "string" ? m : m.name || m.id;
-                      return React.createElement("div", {
-                        key: modelId,
-                        className: "flex items-center justify-between py-1 px-2 rounded text-xs hover:bg-accent/10 cursor-pointer transition-colors",
-                        onClick: function () { setProfileModel(editingProfile, prov.name || prov, modelId); }
-                      },
-                        React.createElement("span", null, modelLabel),
-                        changingModel ? React.createElement("span", { className: "text-muted-foreground" }, "…") : null
-                      );
-                    })
-                  );
-                })
             )
           ) : null
         ),
