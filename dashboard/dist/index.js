@@ -164,7 +164,7 @@
     var statusInitialized = status && status.config_exists;
     var statusError = status && status.error;
 
-    return React.createElement("div", { className: "space-y-6 max-w-2xl" },
+    return React.createElement("div", { className: "space-y-6" },
 
       // ── Status banner with inline buttons ──
       React.createElement(Card, { className: statusError ? "border-red-500/30" : statusInitialized ? "border-green-500/30" : "" },
