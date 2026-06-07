@@ -270,7 +270,7 @@
                 React.createElement("span", { className: "text-sm" }, "worker"),
                 profileBadge(status && status.profiles && status.profiles.worker)
               ),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-1" }, "Created by bootstrap if missing. Model config copied from current profile.")
+              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-1" }, "Created by bootstrap if missing. Model config copied from current profile. Click profile to change model.")
             )
           ),
           // ── Model picker modal (dropdown menu) ──
