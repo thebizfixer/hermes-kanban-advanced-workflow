@@ -217,11 +217,11 @@
               React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Profiles")
             ),
             React.createElement(CardContent, { className: "space-y-2" },
-              React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border" },
+              React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors", onClick: function () { window.location.href = "/profiles"; } },
                 React.createElement("span", { className: "text-sm" }, "orchestrator"),
                 profileBadge(status && status.profiles && status.profiles.orchestrator)
               ),
-              React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border" },
+              React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors", onClick: function () { window.location.href = "/profiles"; } },
                 React.createElement("span", { className: "text-sm" }, "worker"),
                 profileBadge(status && status.profiles && status.profiles.worker)
               ),
