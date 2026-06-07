@@ -82,6 +82,7 @@
     var _useState12 = useState(false), changingModel = _useState12[0], setChangingModel = _useState12[1];
     var _useState13 = useState(null), selectedProvider = _useState13[0], setSelectedProvider = _useState13[1];
     var _useState14 = useState(null), selectedModel = _useState14[0], setSelectedModel = _useState14[1];
+    // selectedModel is {provider: string, model: string} | null
     var _useState15 = useState(""), modelQuery = _useState15[0], setModelQuery = _useState15[1];
 
     function loadStatus() {
@@ -261,89 +262,66 @@
               React.createElement("p", { className: "text-[11px] text-muted-foreground mt-1" }, "Created by bootstrap if missing. Model config copied from current profile.")
             )
           ),
-          // ── Model picker modal (two-stage: provider → model) ──
+          // ── Model picker modal (dropdown menu) ──
           editingProfile ? React.createElement("div", {
             className: "fixed inset-0 z-[100] flex items-center justify-center bg-background/85 backdrop-blur-sm p-4",
             onClick: function (e) { if (e.target === e.currentTarget) setEditingProfile(null); }
           },
             React.createElement("div", {
-              className: "relative w-full max-w-2xl max-h-[75vh] border border-border bg-card shadow-2xl flex flex-col overflow-hidden",
+              className: "relative w-full max-w-sm border border-border bg-card shadow-2xl flex flex-col overflow-hidden",
               onClick: function (e) { e.stopPropagation(); }
             },
               // Close button
               React.createElement(Button, {
                 variant: "ghost", size: "icon",
-                onClick: function () { setEditingProfile(null); setSelectedProvider(null); setModelQuery(""); },
+                onClick: function () { setEditingProfile(null); setSelectedModel(null); },
                 className: "absolute right-2 top-2 text-muted-foreground hover:text-foreground z-10"
               }, "✕"),
 
               // Header
-              React.createElement("header", { className: "p-4 pb-3 border-b border-border flex-shrink-0" },
-                React.createElement("h2", { className: "text-sm font-semibold tracking-wide" }, "Change model — " + editingProfile),
-                React.createElement("p", { className: "text-xs text-muted-foreground mt-1 font-mono" },
-                  "current: " + ((status && status.profiles && status.profiles[editingProfile] && status.profiles[editingProfile].model) || "(unknown)")
-                )
+              React.createElement("header", { className: "p-4 pb-3 border-b border-border" },
+                React.createElement("h2", { className: "text-sm font-semibold tracking-wide" }, "Change model — " + editingProfile)
               ),
 
-              // Two-column body
-              React.createElement("div", { className: "flex-1 min-h-0 grid grid-cols-[180px_1fr] overflow-hidden" },
-                // Provider column
-                React.createElement("div", { className: "border-r border-border overflow-y-auto" },
-                  !modelOptions ? React.createElement("div", { className: "p-3 text-xs text-muted-foreground" }, "Loading…")
-                  : modelOptions.error ? React.createElement("div", { className: "p-3 text-xs text-red-400" }, "Could not load")
-                  : (modelOptions.providers || []).map(function (prov) {
-                      var slug = prov.slug || prov.name || prov;
-                      var name = prov.name || prov;
-                      var count = (prov.models || []).length;
-                      if (!count) return null;
-                      var isSel = selectedProvider === slug;
-                      return React.createElement("div", {
-                        key: slug,
-                        className: "px-3 py-2 text-xs cursor-pointer border-l-2 transition-colors" + (isSel ? " border-l-primary bg-accent/5" : " border-l-transparent hover:bg-accent/5"),
-                        onClick: function () { setSelectedProvider(slug); setSelectedModel(""); }
-                      },
-                        React.createElement("div", { className: "font-medium truncate" }, name),
-                        React.createElement("div", { className: "text-[10px] text-muted-foreground font-mono truncate" }, slug + " · " + count + " models")
-                      );
-                    })
-                ),
-                // Model column
-                React.createElement("div", { className: "overflow-y-auto" },
-                  !selectedProvider ? React.createElement("div", { className: "p-4 text-xs text-muted-foreground italic" }, "pick a provider →")
-                  : (function () {
-                      var prov = (modelOptions && modelOptions.providers || []).find(function (p) { return (p.slug || p.name || p) === selectedProvider; });
-                      var models = prov ? (prov.models || []) : [];
-                      if (!models.length) return React.createElement("div", { className: "p-4 text-xs text-muted-foreground italic" }, "no models listed");
-                      return models.map(function (m) {
+              // Dropdown list
+              React.createElement("div", { className: "overflow-y-auto max-h-64" },
+                !modelOptions ? React.createElement("div", { className: "p-4 text-xs text-muted-foreground" }, "Loading…")
+                : modelOptions.error ? React.createElement("div", { className: "p-4 text-xs text-red-400" }, "Could not load")
+                : (modelOptions.providers || []).map(function (prov) {
+                    var provName = prov.name || prov;
+                    var provModels = prov.models || [];
+                    if (!provModels.length) return null;
+                    return React.createElement("div", { key: provName || prov },
+                      React.createElement("div", { className: "px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/30" }, provName),
+                      provModels.map(function (m) {
                         var modelId = typeof m === "string" ? m : m.id || m.name;
                         var modelLabel = typeof m === "string" ? m : m.name || m.id;
-                        var isActive = selectedModel === modelId;
                         var isCurrent = status && status.profiles && status.profiles[editingProfile] && status.profiles[editingProfile].model === modelId;
+                        var isSel = selectedModel && selectedModel.model === modelId && selectedModel.provider === provName;
                         return React.createElement("div", {
                           key: modelId,
-                          className: "flex items-center gap-2 px-3 py-1.5 text-xs font-mono cursor-pointer hover:bg-accent/10 transition-colors" + (isActive ? " bg-accent/10" : ""),
-                          onClick: function () { setSelectedModel(modelId); },
-                          onDoubleClick: function () { setProfileModel(editingProfile, selectedProvider, modelId); }
+                          className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (isSel ? " bg-accent/10" : ""),
+                          onClick: function () { setSelectedModel({ provider: provName, model: modelId }); }
                         },
-                          React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, isActive ? "✓" : ""),
-                          React.createElement("span", { className: "flex-1 truncate" }, modelLabel),
+                          React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, isSel ? "✓" : ""),
+                          React.createElement("span", { className: "flex-1 truncate font-mono" }, modelLabel),
                           isCurrent ? React.createElement("span", { className: "text-[10px] text-primary shrink-0" }, "current") : null
                         );
-                      });
-                    })()
-                )
+                      })
+                    );
+                  })
               ),
 
               // Footer
-              React.createElement("footer", { className: "border-t border-border p-3 flex items-center justify-between gap-2 flex-shrink-0" },
-                React.createElement("span", { className: "text-xs text-muted-foreground" }, "Saves to config.yaml — applies to new sessions."),
-                React.createElement("div", { className: "flex items-center gap-2" },
-                  React.createElement(Button, { variant: "outline", size: "sm", onClick: function () { setEditingProfile(null); setSelectedProvider(null); setModelQuery(""); } }, "Cancel"),
+              React.createElement("footer", { className: "border-t border-border p-3 flex items-center justify-between gap-2" },
+                React.createElement("span", { className: "text-[11px] text-muted-foreground" }, selectedModel ? selectedModel.model : "Select a model"),
+                React.createElement("div", { className: "flex items-center gap-1.5" },
+                  React.createElement(Button, { variant: "outline", size: "sm", onClick: function () { setEditingProfile(null); setSelectedModel(null); } }, "Cancel"),
                   React.createElement(Button, {
                     size: "sm",
                     disabled: !selectedModel || changingModel,
-                    onClick: function () { if (selectedModel && selectedProvider) setProfileModel(editingProfile, selectedProvider, selectedModel); }
-                  }, changingModel ? "Applying…" : "Switch")
+                    onClick: function () { if (selectedModel) setProfileModel(editingProfile, selectedModel.provider, selectedModel.model); }
+                  }, changingModel ? "…" : "Switch")
                 )
               )
             )
