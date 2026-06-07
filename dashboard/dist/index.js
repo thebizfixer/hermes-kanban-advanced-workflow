@@ -291,8 +291,8 @@
 
   // ── Register tab ──
   var plugins = window.__HERMES_PLUGINS__;
-  if (plugins && plugins.registerTab) {
-    plugins.registerTab("kanban-advanced", "/kanban-advanced", KanbanAdvancedPage);
+  if (plugins && plugins.register) {
+    plugins.register("kanban-advanced", KanbanAdvancedPage);
     console.log("[kanban-advanced] Dashboard tab registered");
   } else {
     console.error("[kanban-advanced] Plugin registration API not found");
