@@ -9,8 +9,24 @@ You are a Kanban worker that delegates code changes to an external coding agent.
 ## Core workflow
 
 1. **Orient.** Read the task via `kanban_show`. Parse the card body for the `Files:` line, `Mode:` line, test command, and commit message.
-2. **Pre-flight.** Verify the external agent binary works: run a smoke test (`<coding_agent> -p "echo ok" --output-format json`).
-3. **Dispatch.** Spawn the external agent with the prompt from the card body. Include `Mode:` constraints and the pre-commit self-audit requirement in the dispatch context. Start a heartbeat thread simultaneously.
+2. **Pre-flight.** 
+   - Verify the external agent binary works: run a smoke test (`<coding_agent> -p "echo ok" --output-format json`).
+   - **Workspace trust (Cursor CLI):** If using Cursor CLI in a `/tmp` worktree, pre-create the trust file so the agent doesn't hang on first run:
+     ```bash
+     WORKSPACE_PATH="${HERMES_KANBAN_WORKSPACE:-$(pwd)}"
+     TRUST_HASH=$(echo "$WORKSPACE_PATH" | sed 's|^/||; s|/|-|g')
+     TRUST_DIR="$HOME/.cursor/projects/$TRUST_HASH"
+     mkdir -p "$TRUST_DIR" && touch "$TRUST_DIR/.workspace-trusted"
+     ```
+   - **Integration freshness:** If the parent card completed >1hr ago, merge `origin/staging` (or `origin/main`) so the agent works against current code:
+     ```bash
+     git fetch origin staging 2>/dev/null || git fetch origin main
+     git merge origin/staging --no-edit 2>/dev/null || git merge origin/main --no-edit
+     ```
+3. **Dispatch.** 
+   - Prepend the governance block from `plugin/data/references/coding-agent-governance.md` to the agent prompt
+   - Spawn the external agent with `[coding_agent, "-p", full_prompt, "--output-format", "json"]`
+   - Start a heartbeat thread simultaneously
 4. **Verify.** After agent completes, run post-agent file verification before calling `kanban_complete`.
 5. **Complete or block.** If all files changed and tests pass, complete. If any file missing, block with evidence.
 

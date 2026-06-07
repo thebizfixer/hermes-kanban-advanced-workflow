@@ -1,93 +1,43 @@
-## Coding Agent Governance (Ordinal Contract)
+# Coding Agent Governance Block
 
-The coding agent (Cursor CLI) operates under an idempotent ordinal contract. Every
-positive instruction has a corresponding negative boundary. The worker injects this
-block before every `agent -p` handoff. Violations are caught post-hoc by the
-evaluation chain (E001–E006).
+Prepend this to every coding agent dispatch prompt. The governance block is enforced post-hoc by the evaluation chain (E001–E006), but prompt-level guardrails reduce the remediation burden.
 
----
+## Files boundary
 
-### 1. What is Needed?
+You MUST ONLY modify files listed in `Files:` below. Do NOT install packages, modify configs, or touch files outside the `Files:` list. If you need a dependency that isn't installed, report it to the worker — do NOT run `pip install`, `npm install`, or any package manager.
 
-Implement the task described below. Produce exactly what is requested — no
-additional features, creative extensions, or "improvements." Follow instructions
-to the letter.
+## Mode constraint
 
-### 2. How is it Needed?
+The `Mode:` line declares the expected file operation:
+- `modify-only` — edit existing files only; do NOT create new files
+- `create-only` — create new files only; do NOT modify existing files
+- `any` — create or modify as needed
 
-Modify ONLY the files listed in `Files:` below. Use the specified `Mode:` (modify-only
-or create-only). Create exactly one commit with the exact `Commit:` message below.
+## Pre-commit self-audit (mandatory, before git commit)
 
-### 3. What is Wanted?
+1. Run `git diff --stat` (include staged + unstaged: `git diff --stat HEAD` if needed)
+2. Compare the diff against `Files:` — only listed paths may remain changed
+3. Revert unlisted changes: `git checkout -- <path>` for modified tracked files not on `Files:`, and remove untracked files not on `Files:`
+4. If any file on `Files:` shows 0 lines changed, stop and fix BEFORE committing
+5. Mode check: `modify-only` → confirm no accidental file creation; `create-only` → confirm listed paths are new additions
 
-All `Tests:` pass. `git diff --stat` shows ONLY files in the `Files:` list. The
-commit message matches `Commit:` exactly. Zero scope violations.
+## Issue reporting
 
-### 4. How is it Wanted?
+If you hit an error, report the EXACT error message to the worker. Do NOT guess at a fix. Include: what you were doing, the exact error text, and which file/line.
 
-1. Read the files listed in `Files:` to understand context.
-2. Make the minimal changes needed.
-3. Run `Tests:` and confirm all pass.
-4. Run `git diff --stat` and confirm only `Files:` files changed.
-5. Commit with `git add <Files: files> && git commit -m "<Commit: message>"`.
+## Prohibited actions
 
-### 5. Where does it belong?
+- Do NOT run `git add -A` — use `git add <specific files>`
+- Do NOT push to any remote branch
+- Do NOT modify `.hermes/`, `.cursor/`, `.agent/`, or any config files
+- Do NOT change the build system, CI config, or package manifests
+- Do NOT install packages or modify the environment
 
-In the git worktree at the current working directory. Commit to the worktree branch
-only. Do NOT push to any remote.
+## Verification
 
-### 6. How does it belong there?
+After committing, the worker will run:
+1. `git diff --stat <baseline>..HEAD` — every `Files:` path must show >0 changes
+2. The test command from `Tests:`
+3. The evaluation chain (E001–E020)
 
-Isolated to the files in `Files:`. Do not cross module boundaries unless the
-`Files:` list explicitly includes the boundary module.
-
----
-
-### 9. What is NOT Wanted? (failure modes → E001–E006)
-
-- E001: Files in `git diff` that are NOT in `Files:` → will be auto-reverted.
-- E003: Tests that fail → task will be blocked.
-- E004: Commit message that doesn't match `Commit:` → task will be blocked.
-
-### 10. How is it NOT Wanted? (sad paths → recovery)
-
-If you hit an error, missing import, or unexpected behavior:
-1. Report the **exact error message**.
-2. Do **NOT** guess, work around, or skip.
-3. Do **NOT** touch files outside `Files:` to fix it.
-4. The worker will triage and provide updated instructions.
-
-### 11. Where does it NOT belong? (restricted paths → E002/E009/E011)
-
-Do **NOT** modify:
-- `.agent/plans/` — plan files (or `.cursor/plans/` for Cursor users)
-- `.cursor/rules/` — governance rules
-- `docs/` — documentation
-- `CHANGELOG.md` — release notes
-- `.git/config` — repository configuration
-- Any file not in the `Files:` list
-
-### 12. How does it NOT belong there? (boundary enforcement → P001–P004)
-
-Do **NOT**:
-- Run package managers (`npm install`, `pip install`, `yarn`, `pnpm`)
-- Install dependencies or modify `package.json` / `requirements.txt`
-- Create new files unless `Mode: create-only` and the file is in `Files:`
-- Change git remotes, branches, or configuration
-- Push to any remote
-
-### 13. When is it NOT received? (environmental failures → E007/E008)
-
-If the worktree is missing, a dependency is unavailable, or the test runner can't
-be found: report the issue to the worker. Do NOT attempt to install, configure, or
-work around environmental gaps.
-
-### 14. How will it NOT be received? (governance → E013)
-
-If you cannot complete the task within the specified constraints, report:
-- What you tried
-- The exact error
-- What file/line the error occurred on
-
-Do NOT produce partial work. Do NOT commit incomplete changes. A blocked task is
-better than a wrong task.
+Your commit message must match the `Commit:` line. Token usage is extracted from your JSON output.

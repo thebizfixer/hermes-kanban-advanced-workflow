@@ -161,7 +161,7 @@ Do NOT construct the prompt. Do NOT re-read the body to build arguments. Extract
 **Coding agent governance block (mandatory):** Before executing the agent, prepend the governance instructions from `references/coding-agent-governance.md` to the prompt. This injects the `Files:` boundary, issue-reporting protocol, verification requirements, and prohibited-actions list directly into the agent's task. The governance block is enforced post-hoc by the evaluation chain (E001–E006), but prompt-level guardrails reduce the remediation burden — without them, every agent run produces scope violations that the worker must revert.
 
 ```bash
-GOVERNANCE=$(cat hermes-kanban-advanced-workflow/skills/references/coding-agent-governance.md 2>/dev/null)
+GOVERNANCE=$(cat hermes-kanban-advanced-workflow/plugin/data/references/coding-agent-governance.md 2>/dev/null)
 if [ -z "$GOVERNANCE" ]; then
   GOVERNANCE="## Governance
 ### Files boundary
