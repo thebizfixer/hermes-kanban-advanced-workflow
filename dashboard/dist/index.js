@@ -35,6 +35,10 @@
     opts.credentials = "include";
     opts.headers = opts.headers || {};
     opts.headers["Content-Type"] = "application/json";
+    var token = window.__HERMES_SESSION_TOKEN__;
+    if (token) {
+      opts.headers["X-Hermes-Session-Token"] = token;
+    }
     return fetch(path, opts).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
