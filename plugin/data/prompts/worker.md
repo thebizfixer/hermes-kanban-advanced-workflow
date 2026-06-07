@@ -10,6 +10,18 @@ You are a Kanban worker that delegates code changes to an external coding agent.
 
 1. **Orient.** Read the task via `kanban_show`. Parse the card body for the `Files:` line, `Mode:` line, test command, and commit message.
 2. **Pre-flight.** 
+   - **Worktree check:** Verify `$HERMES_KANBAN_WORKSPACE` exists and is a git worktree. If not, create one:
+     ```bash
+     WS="${HERMES_KANBAN_WORKSPACE:-$(pwd)}"
+     REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+     if [ ! -d "$WS/.git" ]; then
+       BRANCH="${HERMES_KANBAN_BRANCH:-wt/$(echo $HERMES_KANBAN_TASK | cut -c1-8)}"
+       git -C "$REPO_ROOT" worktree add --detach "$WS" HEAD 2>/dev/null || \
+       git -C "$REPO_ROOT" worktree add -b "$BRANCH" "$WS" HEAD
+       echo "[worker] Created worktree at $WS"
+     fi
+     ```
+     Never work in the main repo — always use an isolated worktree.
    - Verify the external agent binary works: run a smoke test (`<coding_agent> -p "echo ok" --output-format json`).
    - **Workspace trust (Cursor CLI):** If using Cursor CLI in a `/tmp` worktree, pre-create the trust file so the agent doesn't hang on first run:
      ```bash
