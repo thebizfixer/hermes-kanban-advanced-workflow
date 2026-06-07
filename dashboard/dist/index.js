@@ -223,7 +223,7 @@
             ),
             React.createElement("p", { className: "text-xs text-muted-foreground mt-0.5 truncate" },
               statusError ? status.error
-                : statusInitialized ? "Coding agent: " + (status.coding_agent || "agent")
+                : statusInitialized ? "Config: " + (status.config_path || "kanban-config.yaml")
                 : "Run bootstrap to provision profiles, config, and cron scripts."
             )
           ),
