@@ -29,6 +29,25 @@ import yaml
 
 # ── Registry loader ────────────────────────────────────────────────────
 
+def read_trigger_branch(repo_root: Optional[str] = None) -> str:
+    """Read trigger_branch from kanban overlay config — no hardcoded fallback."""
+    root = Path(repo_root or os.getcwd())
+    config_path = os.environ.get("HERMES_KANBAN_CONFIG", "")
+    if not config_path:
+        candidate = root / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
+        if candidate.is_file():
+            config_path = str(candidate)
+    if not config_path or not os.path.isfile(config_path):
+        raise RuntimeError(
+            "kanban-config.yaml not found — run: hermes kanban-advanced init"
+        )
+    for line in Path(config_path).read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("trigger_branch:"):
+            return stripped.split(":", 1)[1].strip().strip("\"'")
+    raise RuntimeError(f"trigger_branch not set in {config_path}")
+
+
 def load_registry(registry_path: str) -> dict:
     try:
         with open(registry_path) as f:
@@ -123,12 +142,13 @@ def recover_e007_disk_full(task_id: str, workspace: str, registry: dict):
 
 
 def recover_e009_push_to_development(task_id: str, workspace: str, registry: dict):
-    """E009: Agent pushed to development."""
-    print(f"[recover] E009: Unauthorized push to development for {task_id}")
+    """E009: Agent pushed to trigger_branch (unauthorized)."""
+    trigger_branch = read_trigger_branch(workspace)
+    print(f"[recover] E009: Unauthorized push to {trigger_branch} for {task_id}")
     repo_root = workspace
-    subprocess.run(["git", "push", "origin", "--delete", "development"], cwd=repo_root)
+    subprocess.run(["git", "push", "origin", "--delete", trigger_branch], cwd=repo_root)
     subprocess.run(["hermes", "kanban", "block", task_id,
-                    "E009: Agent pushed to development. Remote branch deleted. Agent restart required."])
+                    f"E009: Agent pushed to {trigger_branch}. Remote branch deleted. Agent restart required."])
 
 
 def recover_e011_cross_mount(task_id: str, workspace: str, registry: dict):

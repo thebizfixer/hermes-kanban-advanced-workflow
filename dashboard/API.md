@@ -1,10 +1,14 @@
 # Dashboard API
 
-Base path: `/api/kanban-advanced/`
+The Kanban-Advanced settings tab registers as a Hermes dashboard tab at `/kanban-advanced`
+(positioned after the Skills tab). The UI is served from `dashboard/index.html` /
+`dashboard/dist/index.js`; the backend routes live in `dashboard/plugin_api.py`.
 
-All endpoints return JSON. The dashboard settings page (`plugin/dashboard/index.html`) calls these endpoints.
+Base path: `/api/plugins/kanban-advanced/`
 
-## `GET /api/kanban-advanced/status`
+All endpoints return JSON.
+
+## `GET /api/plugins/kanban-advanced/status`
 
 Returns current initialization state and config values.
 
@@ -30,7 +34,7 @@ Returns current initialization state and config values.
 
 When `config_exists` is false, the dashboard shows the bootstrap form.
 
-## `POST /api/kanban-advanced/init`
+## `POST /api/plugins/kanban-advanced/init`
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
 
@@ -67,7 +71,7 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 }
 ```
 
-## `POST /api/kanban-advanced/update`
+## `POST /api/plugins/kanban-advanced/update`
 
 Updates settings in an already-initialized config. Writes to `kanban-config.yaml` and `.env`.
 

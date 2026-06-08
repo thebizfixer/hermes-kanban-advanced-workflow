@@ -42,7 +42,7 @@ A Six Sigma black belt will recognize these as our quality metrics:
 | **DPMO** (defects per million opportunities) | Failed evaluation chain steps / total steps run | Tracked per reconciliation |
 | **Process capability (Cp/Cpk)** | Token burn variance across tasks | Flag outliers > 2σ from mean |
 | **Control limits** | Policy profiles (advisory/balanced/strict) | Escalation at strict level |
-| **Root cause analysis** | Failure-mode taxonomy with categorized error codes (E001-E013, P001-P004, A001-A003) | Every blocked task classified |
+| **Root cause analysis** | Failure-mode taxonomy with categorized error codes (E001–E020, P001–P009, A001–A003, PR001, G001–G003) | Every blocked task classified |
 
 ## The "belt" model
 
@@ -65,7 +65,7 @@ Quality requirement: "Plan executes correctly without human intervention"
 ├── CTQ 2: No unlisted files are changed (E002)
 ├── CTQ 3: All tests pass (E003)
 ├── CTQ 4: Commit messages match plan (E004)
-├── CTQ 5: Token usage is tracked (E005)
+├── CTQ 5: Token usage is tracked (E018; legacy E005 existence check superseded)
 ├── CTQ 6: Cards have complete bodies (P001-P003)
 ├── CTQ 7: Preflight passes before decomposition (A001)
 └── CTQ 8: Environment is valid (profiles, gateway, filesystem)

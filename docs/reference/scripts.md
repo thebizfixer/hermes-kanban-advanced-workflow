@@ -65,10 +65,35 @@ Proactive board manager for walk-away execution.  Runs every 180s.  5 functions:
 1. Salvage iteration-limit cards (check worktree, commit, merge, complete)
 2. Kill orphaned agent processes from archived cards
 3. Unstick ready cards stalled >3 minutes
-4. Merge completed worktree branches to staging
+4. Detect unmerged done cards (commits ahead of `${working_branch}`)
 5. Report board status
 
-Designed for LLM-driven cron (`no_agent=false`) — the script output feeds the agent's decision loop.
+Designed for LLM-driven cron (`no_agent=false`) — the script output feeds the agent's decision loop. Calls `kanban_escalation_tracker.sh` for **every** blocked card and emits `ESCALATE:` / `HUMAN_INTERVENTION:` signals to stdout (`RETRY:` auto-unblocks silently).
+
+### `kanban_escalation_tracker.sh`
+
+```bash
+bash scripts/kanban_escalation_tracker.sh \
+  --task-id t_abc123 \
+  --block-reason "[escalation:coding_agent:attempt:3] E003: tests failed" \
+  --config .hermes/kanban-overrides/kanban-config.yaml
+```
+
+Per-card escalation state machine (`coding_agent` → `worker` → `orchestrator` → human). Reads `escalation_max_attempts` from config. Writes state to `.hermes/kanban/escalation/<task_id>.json`.
+
+### `worktree_setup.sh`
+
+```bash
+bash scripts/worktree_setup.sh \
+  --task-id t_abc123 \
+  --repo-root .
+```
+
+Atomic worktree lifecycle: prune stale entries → create/reuse worktree → cross-platform workspace trust → install pre-push and pre-commit hooks. Reads `working_branch` and `trigger_branch` from config (no hardcoded fallbacks). Outputs `WORKTREE_PATH=<path>` on stdout.
+
+### `install_pre_push_hook.sh` / `install_pre_commit_hook.sh`
+
+Called by `worktree_setup.sh`. Pre-push blocks pushes to branches other than the card worktree branch (`wt/<task_id>`). Pre-commit enforces the `Files:` boundary via `.kanban-scope` written by the worker before agent spawn.
 
 ## Provisioning (`provision.sh`)
 
@@ -134,7 +159,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_recover.py --cascade      
 python hermes-kanban-advanced-workflow/scripts/kanban_recover.py --list                             # list all recovery actions
 ```
 
-Maps 23 error codes to recovery actions. Cascade triage: pause downstream → env first → agent second → governance infra last → verify.
+Maps the registry's 36 error codes to recovery actions — 10 have dedicated automated recovery functions (shown by `--list`); the rest surface the registry's documented recovery guidance for manual intervention. Cascade triage: pause downstream → env first → agent second → governance infra last → verify.
 
 ## Post-merge gate (`post_merge_gate.sh`)
 

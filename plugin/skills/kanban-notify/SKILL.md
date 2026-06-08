@@ -191,6 +191,7 @@ Cross-reference: `hermes-kanban-advanced-workflow/prompts/orchestrator.md` § In
 - **Paging for token burn advisories.** >50K token alerts are orchestrator-only investigation; do not gateway-notify unless the task also hits an intervention trigger.
 - **CLI-only environments.** Do not promise push; use tmux `kanban watch` and log fallback.
 - **Final-audit subscribe vs intervention list.** `notify-subscribe` on the audit card is optional convenience; default walk-away stays silent until `NOTIFY_ON_COMPLETE=true`.
+- **Notifying after exhausted code-problem retries.** If all three escalation levels (coding agent → worker → orchestrator) failed to resolve a code or test failure, the correct response is a plan review, not a gateway page. Notify only if the block cause is environmental or requires approval outside the agents' authority (`HUMAN_INTERVENTION` from `board_keeper.sh`).
 
 ## Cross-references
 

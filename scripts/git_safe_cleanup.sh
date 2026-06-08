@@ -43,9 +43,18 @@ case "$_fs_type" in
     ;;
 esac
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if ! _load_branch_config "$REPO_ROOT"; then
+    exit 1
+fi
+
 MODE="audit"
 DRY_RUN=false
-STAGING_BRANCH="${KANBAN_STAGING_BRANCH:-staging}"
+STAGING_BRANCH="$WORKING_BRANCH"
 WORKTREE_PATTERN="${KANBAN_WORKTREE_PATTERN:-/tmp/wt-*}"
 
 while [[ $# -gt 0 ]]; do

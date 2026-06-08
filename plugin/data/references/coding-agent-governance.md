@@ -29,6 +29,9 @@ If you hit an error, report the EXACT error message to the worker. Do NOT guess 
 
 - Do NOT run `git add -A` — use `git add <specific files>`
 - Do NOT push to any remote branch
+  (a pre-push hook is installed in this worktree — the push will be blocked)
+- Do NOT commit files outside the `Files:` list
+  (a pre-commit hook is installed in this worktree — the commit will be rejected)
 - Do NOT modify `.hermes/`, `.cursor/`, `.agent/`, or any config files
 - Do NOT change the build system, CI config, or package manifests
 - Do NOT install packages or modify the environment

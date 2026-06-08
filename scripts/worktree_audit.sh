@@ -20,9 +20,17 @@
 
 set -euo pipefail
 
-STAGING_BRANCH="${KANBAN_STAGING_BRANCH:-staging}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
+
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
 cd "$REPO_ROOT"
+
+if ! _load_branch_config "$REPO_ROOT"; then
+    exit 1
+fi
+STAGING_BRANCH="$WORKING_BRANCH"
 
 red()    { echo -e "\033[31m$*\033[0m"; }
 yellow() { echo -e "\033[33m$*\033[0m"; }

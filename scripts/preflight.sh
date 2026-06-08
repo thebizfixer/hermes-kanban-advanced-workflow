@@ -13,7 +13,7 @@ PREFLIGHT_MEMORY_MIN_MB="${PREFLIGHT_MEMORY_MIN_MB:-1024}"
 PREFLIGHT_MEMORY_WARN_MB="${PREFLIGHT_MEMORY_WARN_MB:-2048}"
 PREFLIGHT_API_URL="${PREFLIGHT_API_URL:-http://127.0.0.1:8000/healthz}"
 PREFLIGHT_PROFILES="${PREFLIGHT_PROFILES:-code-worker,orchestrator}"
-PREFLIGHT_REQUIRED_SECRETS="${PREFLIGHT_REQUIRED_SECRETS:-MONGODB_URI,TINYFISH_API_KEY}"
+PREFLIGHT_REQUIRED_SECRETS="${PREFLIGHT_REQUIRED_SECRETS:-}"
 WORKER_PROFILE="${WORKER_PROFILE:-code-worker}"
 
 find_repo_root() {
@@ -147,7 +147,10 @@ check_secret_availability() {
     missing+=("SECRET_KEY")
   fi
 
-  if ((${#missing[@]} > 0)); then
+  if [[ -z "${PREFLIGHT_REQUIRED_SECRETS// /}" ]]; then
+    record_check "secret_availability" "pass" "blocking" \
+      "No required_secrets configured in kanban-config.yaml (skipped)"
+  elif ((${#missing[@]} > 0)); then
     local joined
     joined="$(IFS=,; printf '%s' "${missing[*]}")"
     record_check "secret_availability" "fail" "blocking" \
@@ -251,8 +254,17 @@ check_environment_parity() {
       ;;
   esac
 
-  if [[ "$ENVIRONMENT" == "staging" ]]; then
-    issues+=("ENVIRONMENT=staging is not provisioned on this project")
+  _allowed_envs="$(grep -E '^allowed_environments:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^allowed_environments: *//; s/["'\'']//g' || true)"
+  if [[ -n "$_allowed_envs" ]]; then
+    IFS=',' read -ra _env_list <<< "$_allowed_envs"
+    _env_ok=false
+    for _e in "${_env_list[@]}"; do
+      _e="${_e// /}"
+      [[ "$_e" == "$ENVIRONMENT" ]] && _env_ok=true
+    done
+    if [[ "$_env_ok" == false ]]; then
+      issues+=("ENVIRONMENT=${ENVIRONMENT} not in allowed_environments (${_allowed_envs})")
+    fi
   fi
 
   if [[ "$ENVIRONMENT" == "production" && -z "${SECRET_KEY:-}" ]]; then
@@ -261,12 +273,6 @@ check_environment_parity() {
 
   if [[ "$ENVIRONMENT" == "production" && "${PUBLIC_APP_URL:-}" == *localhost* ]]; then
     warnings+=("PUBLIC_APP_URL points at localhost in production")
-  fi
-
-  if [[ "$ENVIRONMENT" == "local" && -n "${MONGODB_URI:-}" ]]; then
-    if printf '%s' "$MONGODB_URI" | grep -qiE 'prod|production'; then
-      warnings+=("MONGODB_URI may reference production while ENVIRONMENT=local")
-    fi
   fi
 
   if ((${#issues[@]} > 0)); then

@@ -76,10 +76,14 @@ def on_session_start(**kwargs: Any) -> None:
         logger.error("plugin: on_session_start hook failed: %s", exc)
 
 
-def post_tool_call(tool_name: str, params: dict, result: str):
+def post_tool_call(tool_name: str = "", args: Any = None, result: str = "",
+                   task_id: str = "", duration_ms: int = 0, **kwargs: Any) -> None:
     """Log board events after kanban tool calls.
 
-    Signature: callback(tool_name: str, params: dict, result: str)
+    Hermes invokes this via ``invoke_hook("post_tool_call", ...)`` with
+    keyword arguments: ``tool_name``, ``args``, ``result``, ``task_id``,
+    ``duration_ms``. The signature mirrors that contract exactly and accepts
+    ``**kwargs`` for forward compatibility.
 
     Logs a JSONL entry for every kanban tool call, tracking what changed on the
     board. This enables postmortem analysis and audit trails.
@@ -101,7 +105,9 @@ def post_tool_call(tool_name: str, params: dict, result: str):
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "tool": tool_name,
-            "params": params,
+            "task_id": task_id or None,
+            "duration_ms": duration_ms or None,
+            "params": args,
             "result_snippet": str(result)[:500] if result else None,
         }
 

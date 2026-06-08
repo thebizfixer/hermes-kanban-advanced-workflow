@@ -19,6 +19,8 @@ def _load_yaml_simple(path: Path) -> dict[str, str]:
             continue
         if stripped.startswith("# yaml-language-server"):
             continue
+        if line[:1].isspace():
+            continue
         if ":" not in line:
             continue
         key, _, value = line.partition(":")

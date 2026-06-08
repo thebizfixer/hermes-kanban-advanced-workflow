@@ -94,7 +94,7 @@ Files: path/to/file1, path/to/file2.
 Mode: modify-only|create-only|any.
 Tests: <exact test command>.
 Commit: <commit message>.
-Do NOT push to development — commit to worktree branch only."
+Do NOT push to ${trigger_branch} or ${working_branch} — commit to worktree branch only."
 --model <model-name>
 ```
 
@@ -158,6 +158,31 @@ Before pushing:
 - [ ] Cross-task consistency (no merge conflicts, line counts match)
 - [ ] Git log review (all commits present, no revert chains)
 - [ ] Push + poll CI every 300s until green
+
+## Escalation response (board_keeper signals)
+
+When board_keeper emits `ESCALATE` or `HUMAN_INTERVENTION`:
+
+**`ESCALATE:<tid>:coding_agent:worker`**
+- The coding agent exhausted its retries. A worker diagnostic run is needed.
+- Read `hermes kanban show <tid>` block reason for context.
+- Unblock: `hermes kanban unblock <tid> --reason "escalated to worker diagnostic level"`
+- Re-dispatch to the worker profile — do NOT update the card body yourself.
+- The worker reads the escalation tag and follows the diagnostic path in `kanban-worker` Step 1.
+- Increment: `bash scripts/kanban_intervention_inc.sh`
+
+**`ESCALATE:<tid>:worker:orchestrator`**
+- Read escalation state at `.hermes/kanban/escalation/<tid>.json`.
+- Diagnose: is the plan section flawed? Environmental problem? Wrong approach?
+- Coach the **worker** via unblock reason — do NOT supervise the coding agent directly.
+- Unblock: `hermes kanban unblock <tid> --reason "<diagnosis + revised approach>"`
+- Increment: `bash scripts/kanban_intervention_inc.sh`
+
+**`HUMAN_INTERVENTION:<tid>:<reason>`**
+- Catastrophic environmental failures only: credentials gone, API permanently unreachable, infrastructure destroyed, legal/approval gate.
+- Load `kanban-advanced:kanban-notify`. Send gateway notification with full escalation history.
+- Halt — wait for operator response.
+- Exhausted **code/test** escalation → plan review, not a gateway page.
 
 ## Pitfalls
 

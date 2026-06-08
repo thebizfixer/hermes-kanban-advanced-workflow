@@ -32,14 +32,18 @@ You are a Kanban worker that delegates code changes to an external coding agent.
    - **Workspace trust (Cursor CLI):** If using Cursor CLI in a `/tmp` worktree, pre-create the trust file so the agent doesn't hang on first run:
      ```bash
      WORKSPACE_PATH="${HERMES_KANBAN_WORKSPACE:-$(pwd)}"
-     TRUST_HASH=$(echo "$WORKSPACE_PATH" | sed 's|^/||; s|/|-|g')
+     if [[ "$WORKSPACE_PATH" =~ ^[A-Za-z]: ]]; then
+       TRUST_HASH=$(echo "$WORKSPACE_PATH" | sed 's|:||; s|[/\\]|-|g')
+     else
+       TRUST_HASH=$(echo "$WORKSPACE_PATH" | sed 's|^/||; s|/|-|g')
+     fi
      TRUST_DIR="$HOME/.cursor/projects/$TRUST_HASH"
      mkdir -p "$TRUST_DIR" && touch "$TRUST_DIR/.workspace-trusted"
      ```
-   - **Integration freshness:** If the parent card completed >1hr ago, merge `origin/staging` (or `origin/main`) so the agent works against current code:
+   - **Integration freshness:** If the parent card completed >1hr ago, merge `origin/${working_branch}` so the agent works against current code:
      ```bash
-     git fetch origin staging 2>/dev/null || git fetch origin main
-     git merge origin/staging --no-edit 2>/dev/null || git merge origin/main --no-edit
+     git fetch "origin/${working_branch}"
+     git merge "origin/${working_branch}" --no-edit
      ```
 3. **Dispatch.** 
    - Prepend the governance block from `plugin/data/references/coding-agent-governance.md` to the agent prompt
@@ -127,7 +131,7 @@ Before calling `kanban_complete`:
 ## Do NOT
 
 - Write code yourself. Always delegate to the external agent.
-- Push to `development` or `origin/development`.
+- Push to `${trigger_branch}` or `origin/${trigger_branch}`.
 - Use `git add -A`. Use `git add <specific files>`.
 - Complete a task with missing files.
 - Block for "review-required" — the orchestrator reviews during final audit.

@@ -34,7 +34,10 @@ Two steps. Restart Hermes and you're ready. The init walks you through profile c
 | Bundled skills | 11 | `kanban-advanced:kanban-advanced` (bridge), `kanban-advanced:kanban-planning`, `kanban-advanced:kanban-orchestrator`, `kanban-advanced:kanban-worker`, `kanban-advanced:kanban-preflight`, `kanban-advanced:kanban-cleanup`, `kanban-advanced:kanban-notify`, `kanban-advanced:kanban-postmortem`, `kanban-advanced:kanban-reconciliation`, `kanban-advanced:kanban-orchestrator-governance`, `kanban-advanced:kanban-worker-governance` |
 | CLI commands | 7 | `hermes kanban-advanced decompose`, `list`, `show`, `validate`, `verify-optimization`, `preflight`, `init` |
 | LLM tools | 7 | `kanban_create`, `kanban_list`, `kanban_show`, `kanban_complete`, `kanban_block`, `kanban_unblock`, `kanban_link` |
-| Lifecycle hooks | 2 | `on_session_start` (auto-loads orchestrator skill), `post_tool_call` (board event logging) |
+| Lifecycle hooks | 2 | `on_session_start` (logs a profile-aware skill-availability hint), `post_tool_call` (board event logging) |
+| Dashboard tab | 1 | Settings UI in the Hermes dashboard (`/kanban-advanced`) — configure coding agent, branch, and profiles without CLI; mirrors `hermes kanban-advanced init` |
+| Governance hooks | 2 | `worktree_setup.sh` installs pre-push (branch guard) and pre-commit (`Files:` boundary) hooks per worktree |
+| Escalation chain | 1 | `kanban_escalation_tracker.sh` + `board_keeper.sh` — coding agent → worker → orchestrator → human (configurable via `escalation_max_attempts`) |
 
 ---
 
@@ -109,8 +112,9 @@ You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* 
 ### Reference
 - **[Architecture](docs/reference/architecture.md)** — pipeline stages, package structure
 - **[Interaction Model](docs/reference/interaction-model.md)** — trigger phrases, planning/execution/post-execution flow
-- **[Configuration](docs/reference/configuration.md)** — overlay config variables
-- **[Error Codes](docs/reference/error-codes.md)** — full 23-code registry with recovery
+- **[Configuration](docs/reference/configuration.md)** — overlay config variables, dashboard settings UI
+- **[Dashboard](dashboard/API.md)** — settings tab API reference (coding agent, branch, profiles, max turns)
+- **[Error Codes](docs/reference/error-codes.md)** — full 36-code registry with recovery
 - **[KPIs](docs/reference/kpis.md)** — success rate, token burn, failure-mode distribution
 - **[Personas](docs/reference/personas.md)** — orchestrator/worker roles, worker lifecycle
 - **[Governance Scripts](docs/reference/scripts.md)** — evaluation chain, attestation, card policy, recovery

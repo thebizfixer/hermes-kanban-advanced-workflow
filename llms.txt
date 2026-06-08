@@ -26,7 +26,6 @@ After any path, the plugin registers:
 - 7 LLM-callable tools (kanban_create, kanban_list, kanban_show, kanban_complete, kanban_block, kanban_unblock, kanban_link)
 - 7 CLI subcommands under `hermes kanban-advanced`
 - 2 lifecycle hooks (on_session_start, post_tool_call)
-- 1 skill bundle at `bundles/kanban-advanced.yaml` (fallback for non-plugin sessions)
 
 ## Platform
 
@@ -60,11 +59,22 @@ When users ask platform-specific questions, cite upstream sources from `wiki/ext
 - Explanation: `docs/explanation/` (why-kanban-advanced, six-sigma-mapping)
 - Agent wiki: `wiki/` (setup, configuration, governance, troubleshooting, provider-strategy, six-sigma-mapping, external-references)
 
+## Dashboard tab
+
+Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Skills tab). Provides a settings UI equivalent to `hermes kanban-advanced init` — no CLI required.
+
+- **Status:** GET `/api/plugins/kanban-advanced/status` — config existence, profiles, gateway, coding agent
+- **Bootstrap:** POST `/api/plugins/kanban-advanced/init` — creates profiles, writes config overlay, materializes skills, provisions cron scripts
+- **Update settings:** POST `/api/plugins/kanban-advanced/update` — updates working branch, coding agent binary, orchestrator max turns
+- Fields: `working_branch`, `coding_agent_binary` (dropdown: agent/claude/codex/grok/aider/gemini/custom), `max_turns`
+- Source: `dashboard/plugin_api.py` (backend), `dashboard/index.html` / `dashboard/dist/index.js` (UI)
+- API reference: `dashboard/API.md`
+
 ## Architecture
 
 - Plugin entry: `__init__.py` → `plugin/__init__.py` → `register(ctx)`
 - Skills: `plugin/skills/<name>/SKILL.md` (11 skills)
 - Data: `plugin/data/` (references, registry, policies, prompts)
-- Scripts: `scripts/` (governance, cron, bootstrap)
-- Skill bundle: `bundles/kanban-advanced.yaml`
+- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh)
+- Dashboard: `dashboard/` (settings tab — `manifest.json`, `plugin_api.py`, `index.html`)
 - README: `README.md`

@@ -23,6 +23,15 @@ export HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
+
+pass() { echo "  ✓ $*"; }
+warn() { echo "  ⚠ $*"; }
+green() { echo -e "\033[32m$*\033[0m"; }
+yellow() { echo -e "\033[33m$*\033[0m"; }
+
 # ── Startup guard: validate repo root ──────────────────────────────────
 _startup_guard() {
   local resolved_root
@@ -51,6 +60,11 @@ _startup_guard() {
 _startup_guard
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+if ! _load_branch_config "$REPO_ROOT"; then
+    exit 1
+fi
+INTEGRATION_BRANCH="$WORKING_BRANCH"
+CONFIG_FILE="$CONFIG_FILE"
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
 
@@ -126,13 +140,13 @@ for tid in $BLOCKED_IDS; do
                     if git commit -m "feat: $CARD_NAME ($tid) — salvaged from iteration limit" 2>/dev/null; then
                         echo "  → Committed to worktree branch"
                         
-                        # Fetch and merge to staging
+                        # Fetch and merge to integration branch (working_branch)
                         BRANCH=$(git branch --show-current)
                         cd "$REPO_ROOT"
                         git remote add "wt-$tid" "$WS" 2>/dev/null || true
                         git fetch "wt-$tid" 2>/dev/null
                         if git merge "wt-$tid/$BRANCH" --no-edit 2>/dev/null; then
-                            echo "  → Merged to staging"
+                            echo "  → Merged to $INTEGRATION_BRANCH"
                             hermes kanban complete "$tid" --summary "$CARD_NAME shipped (salvaged from iteration limit by board keeper)." 2>/dev/null
                             echo "  → Card completed"
                             ((SALVAGE_COUNT++))
@@ -151,6 +165,27 @@ for tid in $BLOCKED_IDS; do
     fi
 done
 [ $SALVAGE_COUNT -eq 0 ] && echo "(no salvageable cards)"
+
+# ── 2b. Escalation triage (all blocked cards) ───────────────────────────
+
+echo ""
+echo "--- Escalation triage ---"
+ESCALATION_COUNT=0
+for tid in $BLOCKED_IDS; do
+    REASON=$(hermes kanban show "$tid" 2>/dev/null | grep -iE 'block|reason|summary' | head -1 || true)
+    TRACKER_OUT=$(bash "$SCRIPT_DIR/kanban_escalation_tracker.sh" \
+        --task-id "$tid" \
+        --block-reason "$REASON" \
+        --config "$CONFIG_FILE" \
+        --repo-root "$REPO_ROOT" 2>/dev/null || true)
+    case "$TRACKER_OUT" in
+        ESCALATE:*|HUMAN_INTERVENTION:*)
+            echo "$TRACKER_OUT"
+            ((ESCALATION_COUNT++)) || true
+            ;;
+    esac
+done
+[ "$ESCALATION_COUNT" -eq 0 ] && echo "(no escalation signals this tick)"
 
 # ── 3. Stuck ready cards (>3 min) — check provider slots ─────────────────
 
@@ -186,8 +221,9 @@ fi
 
 echo ""
 echo "--- Max-retries check ---"
+ALL_CARD_IDS=$(hermes kanban list 2>/dev/null | awk '{print $2}' | grep -E '^t_' || true)
 RETRY_ISSUES=0
-for tid in $PARENTLESS_CARDS; do
+for tid in $ALL_CARD_IDS; do
     MAX_RETRIES=$(hermes kanban show "$tid" 2>/dev/null | grep "max-retries:" | head -1 | grep -oP '\d+' || echo "0")
     if [ "$MAX_RETRIES" -gt 2 ] 2>/dev/null || [ "$MAX_RETRIES" -eq 0 ] 2>/dev/null; then
         CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
@@ -206,15 +242,15 @@ UNMERGED=0
 for tid in $DONE_IDS; do
     WS=$(hermes kanban show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
     [ -z "$WS" ] || [ ! -d "$WS" ] && continue
-    # Check if worktree has commits not in staging
-    BEHIND=$(cd "$WS" 2>/dev/null && git rev-list --count staging..HEAD 2>/dev/null || echo "0")
+    # Check if worktree has commits not in integration branch
+    BEHIND=$(cd "$WS" 2>/dev/null && git rev-list --count "${INTEGRATION_BRANCH}..HEAD" 2>/dev/null || echo "0")
     if [ "${BEHIND:-0}" -gt 0 ] 2>/dev/null; then
         CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
-        echo "  UNMERGED: $tid ($CARD_NAME) — $BEHIND commits ahead of staging in $WS"
+        echo "  UNMERGED: $tid ($CARD_NAME) — $BEHIND commits ahead of $INTEGRATION_BRANCH in $WS"
         ((UNMERGED++))
     fi
 done
-[ $UNMERGED -eq 0 ] && pass "All done cards merged to staging"
+[ $UNMERGED -eq 0 ] && pass "All done cards merged to $INTEGRATION_BRANCH"
 
 # ── 8. Stale worktree cleanup ──────────────────────────────────────────
 
@@ -226,7 +262,7 @@ for wt in /tmp/wt-*; do
     # Check if this worktree corresponds to an active card
     WT_NAME=$(basename "$wt")
     IN_USE=false
-    for tid in $PARENTLESS_CARDS; do
+    for tid in $ALL_CARD_IDS; do
         WS=$(hermes kanban show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
         [[ "$WS" == "$wt" ]] && IN_USE=true && break
     done
@@ -246,7 +282,6 @@ done
 # ── 5. Completion signal + post-execution pipeline ─────────────────────
 
 # Pipeline scripts (relative to board_keeper.sh location)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKTREE_AUDIT="$SCRIPT_DIR/worktree_audit.sh"
 GIT_SAFE_CLEANUP="$SCRIPT_DIR/git_safe_cleanup.sh"
 GENERATE_POSTMORTEM="$SCRIPT_DIR/generate_postmortem.py"
@@ -263,7 +298,7 @@ if [ "$RUNNING" -eq 0 ] && [ "$READY" -eq 0 ] && [ "$BLOCKED" -eq 0 ] && [ "$TOD
     echo "=== Pipeline Stage 1/4: Worktree Audit ==="
     if [[ -x "$WORKTREE_AUDIT" ]]; then
         AUDIT_EXIT=0
-        bash "$WORKTREE_AUDIT" --staging "${KANBAN_STAGING_BRANCH:-staging}" || AUDIT_EXIT=$?
+        bash "$WORKTREE_AUDIT" --staging "$INTEGRATION_BRANCH" || AUDIT_EXIT=$?
         if [[ $AUDIT_EXIT -eq 0 ]]; then
             green "  ✓ All worktrees verified — no lost work"
             echo "READY_FOR_AUDIT" > "$PIPELINE_STATE"
@@ -318,9 +353,9 @@ if [[ "$AUDIT_COMPLETE" == "true" ]] && [[ "$PIPELINE_CURRENT" == "READY_FOR_AUD
     if [[ -x "$GIT_SAFE_CLEANUP" ]]; then
         echo "→ Running git cleanup..."
         if [ "$DRY_RUN" = false ]; then
-            bash "$GIT_SAFE_CLEANUP" --clean --staging "${KANBAN_STAGING_BRANCH:-staging}" || true
+            bash "$GIT_SAFE_CLEANUP" --clean --staging "$INTEGRATION_BRANCH" || true
         else
-            bash "$GIT_SAFE_CLEANUP" --clean --dry-run --staging "${KANBAN_STAGING_BRANCH:-staging}" || true
+            bash "$GIT_SAFE_CLEANUP" --clean --dry-run --staging "$INTEGRATION_BRANCH" || true
         fi
         echo "  Cleanup complete"
     else

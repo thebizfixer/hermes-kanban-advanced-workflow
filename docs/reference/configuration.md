@@ -1,12 +1,17 @@
 # Configuration reference
 
-Overlay file: `.hermes/kanban-overrides/kanban-config.yaml` — created automatically by `hermes kanban-advanced init`. To create manually:
+Overlay file: `.hermes/kanban-overrides/kanban-config.yaml` — created automatically by:
+
+- **CLI:** `hermes kanban-advanced init` (interactive, sets `coding_agent_binary` from PATH detection)
+- **Dashboard:** Hermes dashboard → **Kanban-Advanced** tab → Bootstrap (equivalent UI, no CLI needed)
+
+To create manually:
 
 ```bash
 cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-overrides/kanban-config.yaml
 ```
 
-Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.json) · Example: [`kanban-config.example.yaml`](../../kanban-config.example.yaml)
+Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.json) · Example: [`kanban-config.example.yaml`](../../kanban-config.example.yaml) · Dashboard API: [`dashboard/API.md`](../../dashboard/API.md)
 
 ## Required
 
@@ -32,6 +37,7 @@ Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.j
 | `required_secrets` | — | project-specific |
 | `preflight_api_url` | — | empty skips API check |
 | `gateway_timeout_seconds` | — | `1800` |
+| `escalation_max_attempts` | — | Per-level retry thresholds (`coding_agent`, `worker`, `orchestrator`; default `3` each). Required by `kanban_escalation_tracker.sh`. |
 | `hermes_home_hint` | — | Operator docs only (not written to skills) |
 
 ## Policy profiles

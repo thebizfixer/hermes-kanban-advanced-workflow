@@ -27,6 +27,20 @@ The worker lifecycle is gated by a deterministic evaluation chain — not by ins
 ### Step 1 — Orient
 Read the card via `kanban_show`. Extract: `Files:` line, `Mode:` line, `Tests:` line, `Commit:` message, and the `agent -p` fenced code block. Confirm the workspace is a valid worktree. If the card has no `agent -p` block, block it immediately — the plan wasn't ready for decomposition (P002).
 
+## Escalation diagnostic path (triggered at Step 1 Orient)
+
+If `hermes kanban show <task_id>` block reason contains `[escalation:coding_agent:attempt:N]`:
+
+1. This is a **DIAGNOSTIC run** — do NOT immediately spawn the coding agent.
+2. Read the block reason and the eval chain output file referenced in it. (e.g. E003 → check test output; E002 → check which files were out of scope.) Do NOT open the codebase — the diagnosis comes from the error record, not code reading.
+3. Diagnose root cause: was the `agent -p` prompt too broad? Ambiguous `Files:` path? Test command assumes a missing tool? Wrong approach for this card's scope?
+4. Write a **REVISED** `agent -p` block: narrower scope, different strategy, explicit constraints. Do NOT write code. Do NOT edit files. You are revising the instructions, not the work.
+5. Update the card body with the revised `agent -p` block.
+6. Log: `bash scripts/kanban_intervention_inc.sh`
+7. Proceed to Step 3 (Fast sanity) → worktree setup → Step 4 (spawn with revised prompt).
+8. If coding agent fails again: retry internally (up to `escalation_max_attempts.worker` total).
+9. After all worker retries exhausted: `kanban_block` with `[escalation:worker:attempt:N]` + diagnosis.
+
 **Plan file availability (mandatory):** The full plan file must be accessible in the worktree for autonomous troubleshooting. The card body carries task-specific instructions, but when the cursor agent hits an unexpected failure, the worker needs the plan for root cause context, phase dependencies, and sad-path contingencies.
 
 1. **Identify the plan file** — extract `plan_id` from the card body (first line: `plan_id: <id>`) or `$HERMES_KANBAN_PLAN_ID`. Search for the plan:
@@ -82,24 +96,40 @@ fi
 - Disk space > 1 GB (E007 if not)
 - Working directory matches repo root (E011 if cross-mount)
 - **Agent block guard (E014):** If the card has no `agent -p` fenced block AND no `Files:` line, this is an orchestrator-only card (gate, audit, root) that was mistakenly assigned to a worker profile. Do NOT spawn an agent — complete immediately with `kanban_complete(summary="Orchestrator-only card — no agent work to do.")`. Protocol violations happen when workers spawn agents with nothing to execute.
-- **Workspace isolation check:** If `git worktree list` shows more than one agent sharing this worktree path, self-heal by creating an isolated worktree.:
+
+**Correct sequence within Step 3 (mandatory order):**
+
 ```bash
-ISOLATED=$(mktemp -d "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/wt-$(echo $HERMES_KANBAN_TASK | cut -c1-8)-XXXXXX")
-git worktree add --detach "$ISOLATED" HEAD
-cd "$ISOLATED"
+# 1. Start heartbeat thread FIRST — before worktree creation, before any I/O that can hang
+start_heartbeat_thread
+
+# 2. Call worktree_setup.sh — get the worktree path (reads working_branch/trigger_branch from config)
+WORKTREE_OUTPUT=$(bash hermes-kanban-advanced-workflow/scripts/worktree_setup.sh \
+  --task-id "$HERMES_KANBAN_TASK" \
+  --repo-root "${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel)}")
+eval "$WORKTREE_OUTPUT"
+cd "$WORKTREE_PATH"
+
+# 3. Write .kanban-scope to the worktree root (pre-commit hook reads this at commit time)
+FILES_LIST=$(hermes kanban show "$HERMES_KANBAN_TASK" 2>/dev/null \
+  | grep -E '^Files:' | sed 's/^Files: *//')
+printf '%s\n' $FILES_LIST > "$WORKTREE_PATH/.kanban-scope"
+
+echo "[worker] Worktree ready: $WORKTREE_PATH (pre-push + pre-commit hooks installed, scope written)"
 ```
-Log a heartbeat noting the isolation. The original shared worktree should be left untouched — other agents may still be using it.
 
-- **Integration freshness check (mandatory):** Before spawning the agent, verify the worktree is based on the latest staging/trunk. If the parent card completed >1hr ago, staging may have advanced with other cards' changes — the agent would work on stale code.
+> **Pre-push hook installed by `worktree_setup.sh`:** The hook prevents the coding agent from pushing to any branch other than the card's own worktree branch (`wt/<task_id>`). The protected branches (`working_branch`, `trigger_branch`) are read from `kanban-config.yaml` at install time — no branch names are hardcoded. This is infrastructure enforcement — the agent cannot bypass it regardless of what its prompt says.
+
+- **Integration freshness check (mandatory):** Before spawning the agent, verify the worktree is based on the latest `${working_branch}`. If the parent card completed >1hr ago, the integration branch may have advanced with other cards' changes — the agent would work on stale code.
 
 ```bash
-WORKTREE_BASE=$(git merge-base HEAD origin/staging 2>/dev/null || git merge-base HEAD origin/main)
-STAGING_HEAD=$(git rev-parse origin/staging 2>/dev/null || git rev-parse origin/main)
-if [ "$WORKTREE_BASE" != "$STAGING_HEAD" ]; then
-    echo "[worker] Staging has advanced — rebasing worktree before agent spawn"
-    git fetch origin staging 2>/dev/null || git fetch origin main
-    git merge origin/staging --no-edit 2>/dev/null || git merge origin/main --no-edit || {
-        echo "[worker] Merge conflict with staging — blocking for manual resolution"
+WORKTREE_BASE=$(git merge-base HEAD "origin/${working_branch}")
+INTEGRATION_HEAD=$(git rev-parse "origin/${working_branch}")
+if [ "$WORKTREE_BASE" != "$INTEGRATION_HEAD" ]; then
+    echo "[worker] ${working_branch} has advanced — rebasing worktree before agent spawn"
+    git fetch "origin/${working_branch}"
+    git merge "origin/${working_branch}" --no-edit || {
+        echo "[worker] Merge conflict with ${working_branch} — blocking for manual resolution"
         exit 1
     }
 fi
@@ -119,16 +149,7 @@ print('agent auth: OK')
 
 If this exits 0, the agent is functional regardless of log noise. Block only if `is_error: true`. The Cursor CLI ignores `CURSOR_API_KEY` — it authenticates via OAuth token in `~/.config/cursor/auth.json`. `[unauthenticated]` in worker logs is the indexing service, not the agent.
 
-- **Workspace trust pre-provisioning (mandatory for /tmp worktrees):** Cursor CLI prompts for workspace trust on first run in a new directory, hanging indefinitely in non-interactive mode. Before spawning the agent, pre-trust the worktree:
-
-```bash
-WORKSPACE_PATH="${HERMES_KANBAN_WORKSPACE:-$(pwd)}"
-TRUST_HASH=$(echo "$WORKSPACE_PATH" | sed 's|^/||; s|/|-|g')
-TRUST_DIR="$HOME/.cursor/projects/$TRUST_HASH"
-mkdir -p "$TRUST_DIR" && touch "$TRUST_DIR/.workspace-trusted"
-```
-
-Pattern: strip leading `/`, replace `/` with `-` (e.g. `/tmp/wt-matrix-v3-e1` → `tmp-wt-matrix-v3-e1`). Then verify: `agent -p "echo hello" --output-format json` from the worktree should exit cleanly.
+- **Workspace trust:** `worktree_setup.sh` pre-trusts the worktree using a cross-platform hash (Windows drive-letter paths: strip colon, replace `\` and `/` with `-`; Unix paths: strip leading `/`, replace `/` with `-`). Verify: `agent -p "echo hello" --output-format json` from the worktree should exit cleanly.
 
 ### Step 4 — Handoff to coding agent
 
@@ -170,11 +191,31 @@ modify configs, or touch files outside the Files: list.
 ### If blocked: report exact error to worker. Do NOT guess."
 fi
 AGENT_PROMPT="$(extract_agent_block_from_body)"
+
+# Step 4 preamble — inject prior context before agent -p (last 5 completed_cards)
+memory_file=".hermes/kanban/memory/${PLAN_ID}.json"
+brief=""
+if [ -f "$memory_file" ]; then
+  brief=$(python3 -c "
+import json
+with open('$memory_file') as f:
+    data = json.load(f)
+cards = data.get('completed_cards', [])[-5:]
+if cards:
+    lines = ['Prior context (do not re-read the codebase — this is the summary):']
+    for c in cards:
+        lines.append(f\"- {c.get('title','')}: {c.get('state_left','')}\")
+        for constraint in c.get('constraints', []):
+            lines.append(f'  constraint: {constraint}')
+    print('\\n'.join(lines) + '\\n')
+" 2>/dev/null)
+fi
+
 FULL_PROMPT="$GOVERNANCE
 
 ---
 
-$AGENT_PROMPT"
+${brief}${AGENT_PROMPT}"
 agent -p "$FULL_PROMPT"
 ```
 
@@ -194,7 +235,8 @@ if [ -n "$AGENT_COMMIT" ] || [ "$NEW_COMMITS" -gt 0 ]; then
   # Go to Step 6 (Verify), do NOT block
 else
   echo "[worker] No commits found — agent produced no output"
-  kanban_block "$TASK_ID" "Agent exited without producing commits"
+  # Worker tracks coding-agent retries; tag encodes attempt count at coding_agent level
+  kanban_block "$TASK_ID" "[escalation:coding_agent:attempt:1] Agent exited without producing commits"
   exit 1
 fi
 ```
@@ -268,46 +310,44 @@ kanban_complete(
 )
 ```
 
-**Append plan memory:** After successful completion, write any discoveries to `.hermes/kanban/memory/<plan_id>.json` so subsequent workers benefit from what this worker learned. Include: workspace quirks, auth fixes, workaround commands, pitfall resolutions.
+**Append plan memory (`completed_cards`):** After successful completion, append structured coding-agent output context to `.hermes/kanban/memory/<plan_id>.json` so subsequent workers can inject a brief in Step 4. Keep ≤5 bullets across `decisions` + `constraints`.
 
 ```python
-import json, os, datetime
+import json, os, datetime, subprocess
 
 plan_id = os.environ.get("HERMES_KANBAN_PLAN_ID", "")
 task_id = os.environ.get("HERMES_KANBAN_TASK", "")
 memory_file = f".hermes/kanban/memory/{plan_id}.json"
+title = os.environ.get("HERMES_KANBAN_TASK_TITLE", task_id)
+
+changed = subprocess.run(
+    ["git", "diff", "--name-only", "HEAD~1..HEAD"],
+    capture_output=True, text=True,
+).stdout.strip().splitlines()
+
+entry = {
+    "task_id": task_id,
+    "title": title,
+    "completed": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "files_changed": changed,
+    "decisions": [],  # fill from card metadata if available
+    "constraints": [],  # forward-looking notes for the next card's agent
+    "state_left": "evaluation chain passed",
+}
 
 if os.path.exists(memory_file):
     with open(memory_file) as f:
         data = json.load(f)
-    discoveries = data.get("discoveries", [])
-    # Append discoveries from this run
-    data["discoveries"] = discoveries
-    data["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    with open(memory_file, "w") as f:
-        json.dump(data, f, indent=2, default=str)
+else:
+    data = {"orientation": {}, "discoveries": [], "completed_cards": []}
+
+data.setdefault("completed_cards", []).append(entry)
+data["last_updated"] = entry["completed"]
+with open(memory_file, "w") as f:
+    json.dump(data, f, indent=2, default=str)
 ```
 
-If verification fails at any point, `kanban_block` with the specific error code. Do NOT complete a task that didn't pass the evaluation chain.
-
-**Append plan memory:** After successful completion, write any discoveries to `.hermes/kanban/memory/<plan_id>.json` so subsequent workers benefit from what this worker learned. Include: workspace quirks, auth fixes, workaround commands, pitfall resolutions. The memory follows the ordinal framework (questions 1–14) — append discoveries to the corresponding question key.
-
-```python
-import json, os, datetime
-
-plan_id = os.environ.get("HERMES_KANBAN_PLAN_ID", "")
-task_id = os.environ.get("HERMES_KANBAN_TASK", "")
-memory_file = f".hermes/kanban/memory/{plan_id}.json"
-
-if os.path.exists(memory_file):
-    with open(memory_file) as f:
-        data = json.load(f)
-    discoveries = data.get("discoveries", [])
-    data["discoveries"] = discoveries
-    data["last_updated"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    with open(memory_file, "w") as f:
-        json.dump(data, f, indent=2, default=str)
-```
+If verification fails at any point, `kanban_block` with the specific error code and escalation tag when retries are exhausted, e.g. `[escalation:worker:attempt:N] E003: tests still failing after retry`. Do NOT complete a task that didn't pass the evaluation chain.
 
 ## Commit cadence
 

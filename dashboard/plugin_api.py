@@ -132,6 +132,7 @@ async def init(request: Request):
 
     project_root = _find_project_root()
     working_branch = body.get("working_branch", "main")
+    trigger_branch = body.get("trigger_branch", "production")
     coding_agent = body.get("coding_agent_binary", "agent")
     max_turns = body.get("max_turns", 180)
 
@@ -196,14 +197,22 @@ async def init(request: Request):
     overlay_dir = project_root / ".hermes" / "kanban-overrides"
     overlay_dir.mkdir(parents=True, exist_ok=True)
     config_file = overlay_dir / "kanban-config.yaml"
+    _hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
     config_file.write_text(
         f"# kanban-advanced config overlay\n"
+        f'schema_version: "1.0.0"\n'
         f"working_branch: {working_branch}\n"
+        f"trigger_branch: {trigger_branch}\n"
+        f"orchestrator_profile: orchestrator\n"
+        f"worker_profile: worker\n"
+        f'preflight_profiles: "worker,orchestrator"\n'
         f"coding_agent_binary: {coding_agent}\n"
-        f"skills_output_path: {os.environ.get('HERMES_HOME', str(Path.home() / '.hermes'))}/skills/kanban-advanced\n"
-        f"profiles:\n"
-        f"  orchestrator: orchestrator\n"
-        f"  worker: worker\n"
+        f"skills_output_path: {_hermes_home}/skills/kanban-advanced\n"
+        f"plan_memory_path: .hermes/kanban/memory\n"
+        f"escalation_max_attempts:\n"
+        f"  coding_agent: 3\n"
+        f"  worker: 3\n"
+        f"  orchestrator: 3\n"
     )
     output.append(f"   OK {config_file}")
 
@@ -275,6 +284,7 @@ async def update(request: Request):
         return {"error": "Config file not found. Run bootstrap first."}
 
     working_branch = body.get("working_branch", config.get("working_branch", "main"))
+    trigger_branch = body.get("trigger_branch", config.get("trigger_branch", "production"))
     coding_agent = body.get("coding_agent_binary", config.get("coding_agent_binary", "agent"))
     max_turns = body.get("max_turns", 180)
 
@@ -284,14 +294,22 @@ async def update(request: Request):
     overlay_dir = project_root / ".hermes" / "kanban-overrides"
     config_file = overlay_dir / "kanban-config.yaml"
     overlay_dir.mkdir(parents=True, exist_ok=True)
+    _hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
     config_file.write_text(
         f"# kanban-advanced config overlay\n"
+        f'schema_version: "1.0.0"\n'
         f"working_branch: {working_branch}\n"
+        f"trigger_branch: {trigger_branch}\n"
+        f"orchestrator_profile: orchestrator\n"
+        f"worker_profile: worker\n"
+        f'preflight_profiles: "worker,orchestrator"\n'
         f"coding_agent_binary: {coding_agent}\n"
-        f"skills_output_path: {os.environ.get('HERMES_HOME', str(Path.home() / '.hermes'))}/skills/kanban-advanced\n"
-        f"profiles:\n"
-        f"  orchestrator: orchestrator\n"
-        f"  worker: worker\n"
+        f"skills_output_path: {_hermes_home}/skills/kanban-advanced\n"
+        f"plan_memory_path: .hermes/kanban/memory\n"
+        f"escalation_max_attempts:\n"
+        f"  coding_agent: 3\n"
+        f"  worker: 3\n"
+        f"  orchestrator: 3\n"
     )
     output.append(f"   OK Updated {config_file}")
 

@@ -416,7 +416,7 @@ git cherry-pick -x "$commit" --no-edit
 
 Without `-x`, the cherry-picked commit gets a new SHA with no link to the original. `verify_commits_reachable.sh` relies on the trailer when direct ancestry (`git merge-base --is-ancestor`) fails because the SHA differs. Cherry-pick without `-x` is a final-audit finding — the operator must manually verify traceability.
 
-**Integration freshness — same-file parent-child cards:** When a card is linked to a parent that touched the same file(s), the child's worktree base may be stale if staging advanced with other commits after the parent completed. Cards with same-file parent-child links should enforce a maximum gap: if a child is promoted more than 1 hour after its parent completed, the worker must merge `origin/staging` (not just the parent branch) before spawning the agent. See `kanban-advanced:kanban-worker` § Integration freshness check.
+**Integration freshness — same-file parent-child cards:** When a card is linked to a parent that touched the same file(s), the child's worktree base may be stale if staging advanced with other commits after the parent completed. Cards with same-file parent-child links should enforce a maximum gap: if a child is promoted more than 1 hour after its parent completed, the worker must merge `origin/${working_branch}` (not just the parent branch) before spawning the agent. See `kanban-advanced:kanban-worker` § Integration freshness check.
 
 ## Salvage pattern (iteration-limit recovery)
 

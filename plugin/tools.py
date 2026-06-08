@@ -1,6 +1,9 @@
 """Tool handlers — wrappers around `hermes kanban` CLI that return JSON.
 
 Rules:
+- Every handler takes a single ``args`` dict plus ``**kwargs`` — this matches how
+  Hermes dispatches tools: ``tools/registry.py`` calls ``handler(args, **kwargs)``
+  with the model-supplied parameters as one positional dict.
 - Every handler MUST return a JSON string (json.dumps), never a raw dict.
 - Errors MUST be returned as {"error": "message"}, never raised as exceptions.
 - All CLI calls use subprocess.run with text=True and timeout.
@@ -10,7 +13,6 @@ import json
 import logging
 import subprocess
 import os
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -46,82 +48,107 @@ def _run_kanban(args: list[str], timeout: int = DEFAULT_TIMEOUT) -> dict:
         return {"error": str(exc)}
 
 
-def kanban_create(title: str, body: Optional[str] = None, assignee: Optional[str] = None,
-                  workspace: Optional[str] = None, branch: Optional[str] = None,
-                  parents: Optional[list] = None, priority: Optional[int] = None,
-                  skill: Optional[list] = None, goal: bool = False,
-                  goal_max_turns: Optional[int] = None) -> str:
+def kanban_create(args: dict, **kwargs) -> str:
     """Create a new kanban card."""
-    args = ["create", title, "--json"]
+    title = (args.get("title") or "").strip()
+    if not title:
+        return json.dumps({"error": "kanban_create requires a 'title'"})
+
+    cli = ["create", title, "--json"]
+    body = args.get("body")
     if body:
-        args.extend(["--body", body])
+        cli.extend(["--body", body])
+    assignee = args.get("assignee")
     if assignee:
-        args.extend(["--assignee", assignee])
+        cli.extend(["--assignee", assignee])
+    workspace = args.get("workspace")
     if workspace:
-        args.extend(["--workspace", workspace])
+        cli.extend(["--workspace", workspace])
+    branch = args.get("branch")
     if branch:
-        args.extend(["--branch", branch])
-    if parents:
-        for p in parents:
-            args.extend(["--parent", str(p)])
+        cli.extend(["--branch", branch])
+    for p in args.get("parents") or []:
+        cli.extend(["--parent", str(p)])
+    priority = args.get("priority")
     if priority is not None:
-        args.extend(["--priority", str(priority)])
-    if skill:
-        for s in skill:
-            args.extend(["--skill", s])
-    if goal:
-        args.append("--goal")
+        cli.extend(["--priority", str(priority)])
+    for s in args.get("skill") or []:
+        cli.extend(["--skill", s])
+    if args.get("goal"):
+        cli.append("--goal")
+    goal_max_turns = args.get("goal_max_turns")
     if goal_max_turns is not None:
-        args.extend(["--goal-max-turns", str(goal_max_turns)])
+        cli.extend(["--goal-max-turns", str(goal_max_turns)])
 
-    return json.dumps(_run_kanban(args))
+    return json.dumps(_run_kanban(cli))
 
 
-def kanban_list(status: Optional[str] = None, assignee: Optional[str] = None,
-                json_output: bool = True) -> str:
+def kanban_list(args: dict, **kwargs) -> str:
     """List cards on the board."""
-    args = ["list"]
+    cli = ["list"]
+    status = args.get("status")
     if status:
-        args.extend(["--status", status])
+        cli.extend(["--status", status])
+    assignee = args.get("assignee")
     if assignee:
-        args.extend(["--assignee", assignee])
-    if json_output:
-        args.append("--json")
-    return json.dumps(_run_kanban(args))
+        cli.extend(["--assignee", assignee])
+    if args.get("json_output", True):
+        cli.append("--json")
+    return json.dumps(_run_kanban(cli))
 
 
-def kanban_show(task_id: str, json_output: bool = True) -> str:
+def kanban_show(args: dict, **kwargs) -> str:
     """Show details for a specific card."""
-    args = ["show", task_id]
-    if json_output:
-        args.append("--json")
-    return json.dumps(_run_kanban(args))
+    task_id = (args.get("task_id") or "").strip()
+    if not task_id:
+        return json.dumps({"error": "kanban_show requires a 'task_id'"})
+    cli = ["show", task_id]
+    if args.get("json_output", True):
+        cli.append("--json")
+    return json.dumps(_run_kanban(cli))
 
 
-def kanban_complete(task_ids: list[str], summary: str, result: Optional[str] = None) -> str:
+def kanban_complete(args: dict, **kwargs) -> str:
     """Mark cards as completed."""
-    args = ["complete"] + task_ids
-    args.extend(["--summary", summary])
+    task_ids = args.get("task_ids") or []
+    summary = args.get("summary")
+    if not task_ids or summary is None:
+        return json.dumps({"error": "kanban_complete requires 'task_ids' and 'summary'"})
+    cli = ["complete"] + [str(t) for t in task_ids]
+    cli.extend(["--summary", summary])
+    result = args.get("result")
     if result:
-        args.extend(["--result", result])
-    return json.dumps(_run_kanban(args))
+        cli.extend(["--result", result])
+    return json.dumps(_run_kanban(cli))
 
 
-def kanban_block(task_id: str, reason: str) -> str:
+def kanban_block(args: dict, **kwargs) -> str:
     """Block a card with a reason."""
-    args = ["block", task_id, reason]
-    return json.dumps(_run_kanban(args))
+    task_id = (args.get("task_id") or "").strip()
+    reason = args.get("reason")
+    if not task_id or not reason:
+        return json.dumps({"error": "kanban_block requires 'task_id' and 'reason'"})
+    cli = ["block", task_id, reason]
+    return json.dumps(_run_kanban(cli))
 
 
-def kanban_unblock(task_ids: list[str], reason: Optional[str] = None) -> str:
+def kanban_unblock(args: dict, **kwargs) -> str:
     """Unblock one or more cards."""
-    args = ["unblock"] + task_ids
+    task_ids = args.get("task_ids") or []
+    if not task_ids:
+        return json.dumps({"error": "kanban_unblock requires 'task_ids'"})
+    cli = ["unblock"] + [str(t) for t in task_ids]
+    reason = args.get("reason")
     if reason:
-        args.extend(["--reason", reason])
-    return json.dumps(_run_kanban(args))
+        cli.extend(["--reason", reason])
+    return json.dumps(_run_kanban(cli))
 
 
-def kanban_link(parent_id: str, child_id: str) -> str:
+def kanban_link(args: dict, **kwargs) -> str:
     """Link two cards as parent-child dependency."""
-    args = ["link", parent_id, child_id]
-    return json.dumps(_run_kanban(args))
+    parent_id = (args.get("parent_id") or "").strip()
+    child_id = (args.get("child_id") or "").strip()
+    if not parent_id or not child_id:
+        return json.dumps({"error": "kanban_link requires 'parent_id' and 'child_id'"})
+    cli = ["link", parent_id, child_id]
+    return json.dumps(_run_kanban(cli))

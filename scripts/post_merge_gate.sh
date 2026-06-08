@@ -4,8 +4,16 @@
 # Exit 0 = all gates pass, non-zero = blocking failures
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
+
 PLAN_ID="${1:-}"
-BASELINE="${2:-$(git rev-parse origin/staging 2>/dev/null || echo 'HEAD~10')}"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if ! _load_branch_config "$REPO_ROOT"; then
+  exit 1
+fi
+BASELINE="${2:-$(git rev-parse "origin/${WORKING_BRANCH}" 2>/dev/null || echo 'HEAD~10')}"
 if [ -z "$PLAN_ID" ]; then
   echo "[MERGE-GATE] ERROR: plan_id required" >&2
   exit 1

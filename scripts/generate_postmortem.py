@@ -697,6 +697,29 @@ def build_report(
         lines.append("")
     elif source_notes and any("scope" in n.lower() for n in source_notes):
         lines.append("_No scope violations recorded — E002 ran clean, or logging not yet active._")
+
+    # Card learnings from plan memory completed_cards
+    memory_dir = _project_root() / ".hermes" / "kanban" / "memory"
+    memory_path = memory_dir / f"{plan_id}.json"
+    if memory_path.is_file():
+        try:
+            memory_data = json.loads(memory_path.read_text(encoding="utf-8"))
+            completed_cards = memory_data.get("completed_cards") or []
+            if completed_cards:
+                lines.extend(["### Card learnings", ""])
+                for card in completed_cards:
+                    title = card.get("title", card.get("task_id", "?"))
+                    lines.append(f"- **{title}**")
+                    for decision in card.get("decisions") or []:
+                        lines.append(f"  - decision: {decision}")
+                    for constraint in card.get("constraints") or []:
+                        lines.append(f"  - constraint: {constraint}")
+                    state_left = card.get("state_left")
+                    if state_left:
+                        lines.append(f"  - state: {state_left}")
+                lines.append("")
+        except (json.JSONDecodeError, OSError):
+            pass
         lines.append("")
 
     # 3. Failure Taxonomy

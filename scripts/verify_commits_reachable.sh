@@ -10,6 +10,16 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+if ! _load_branch_config "$REPO_ROOT"; then
+    exit 1
+fi
+INTEGRATION_BRANCH="$WORKING_BRANCH"
+
 PLAN_ID="${1:-}"
 JSON_OUT=false
 [[ "${2:-}" == "--json" ]] && JSON_OUT=true
@@ -49,14 +59,14 @@ for tid in $CARD_IDS; do
         continue
     fi
     
-    # Check if commit is reachable from staging
-    if git merge-base --is-ancestor "$COMMIT" staging 2>/dev/null; then
+    # Check if commit is reachable from integration branch (working_branch from config)
+    if git merge-base --is-ancestor "$COMMIT" "$INTEGRATION_BRANCH" 2>/dev/null; then
         ((FOUND++)) || true
     # Fallback: check cherry-pick trailer (from git cherry-pick -x)
-    elif git log staging --format="%B" 2>/dev/null | grep -q "(cherry picked from commit ${COMMIT})"; then
+    elif git log "$INTEGRATION_BRANCH" --format="%B" 2>/dev/null | grep -q "(cherry picked from commit ${COMMIT})"; then
         ((FOUND++)) || true
     else
-        echo "MISSING: $tid commit $COMMIT not on staging" >&2
+        echo "MISSING: $tid commit $COMMIT not on $INTEGRATION_BRANCH" >&2
         ((MISSING++)) || true
     fi
 done
