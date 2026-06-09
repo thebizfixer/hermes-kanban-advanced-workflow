@@ -37,8 +37,8 @@ _load_branch_config() {
     WORKING_BRANCH="$(_read_config_key working_branch "$CONFIG_FILE")"
     TRIGGER_BRANCH="$(_read_config_key trigger_branch "$CONFIG_FILE")"
 
-    if [ -z "$WORKING_BRANCH" ] || [ -z "$TRIGGER_BRANCH" ]; then
-        echo "[kanban-governance] ERROR: working_branch and trigger_branch must both be set in $CONFIG_FILE" >&2
+    if [ -z "$WORKING_BRANCH" ]; then
+        echo "[kanban-governance] ERROR: working_branch must be set in $CONFIG_FILE" >&2
         return 1
     fi
     return 0

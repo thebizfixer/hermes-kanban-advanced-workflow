@@ -40,9 +40,14 @@ echo "  msg: $(echo "$OUT" | head -1)"
 OUT=$(printf 'refs/heads/wt/t_smoke_test sha1 refs/heads/wt/t_smoke_test sha1\n' | bash "$PREPUSH" origin https://example.com 2>&1) ; EC=$?
 assert_exit "push to wt/t_smoke_test passes" 0 "$EC"
 
-# Test 3: push to trigger_branch (production) should block
-OUT=$(printf 'refs/heads/production sha1 refs/heads/production sha1\n' | bash "$PREPUSH" origin https://example.com 2>&1) ; EC=$?
-assert_exit "push to production is blocked" 1 "$EC"
+# Test 3: push to optional trigger_branch should block when configured
+TB=$(grep '^TRIGGER_BRANCH=' "$PREPUSH" 2>/dev/null | sed 's/^TRIGGER_BRANCH="\(.*\)"$/\1/' || true)
+if [ -n "$TB" ]; then
+    OUT=$(printf 'refs/heads/%s sha1 refs/heads/%s sha1\n' "$TB" "$TB" | bash "$PREPUSH" origin https://example.com 2>&1) ; EC=$?
+    assert_exit "push to trigger_branch ($TB) is blocked" 1 "$EC"
+else
+    echo "SKIP: trigger_branch not configured — optional deploy-branch hook test"
+fi
 
 echo ""
 echo "=== pre-commit hook tests ==="

@@ -19,6 +19,8 @@ Returns current initialization state and config values.
   "project_root": "/path/to/your/project",
   "config_path": "/path/to/.hermes/kanban-overrides/kanban-config.yaml",
   "working_branch": "main",
+  "default_working_branch": "main",
+  "trigger_branch": "",
   "coding_agent": "agent",
   "coding_agent_binary": "agent",
   "max_turns": 180,
@@ -41,12 +43,13 @@ Use `project_root` to confirm the API resolved the correct repo (especially afte
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
 
-**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch` and `trigger_branch` are **preserved from the file** (form defaults are ignored). First-time bootstrap uses the request body, then git `HEAD`, then `main`. To change branches on an initialized project, use **Update settings**, not Bootstrap.
+**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch` and `trigger_branch` are **preserved from the file** (form defaults are ignored). First-time bootstrap uses `working_branch` from the request, else git upstream / `origin/HEAD` / local `HEAD`, then `main`. `trigger_branch` is optional — omit or send `""` to leave deploy-branch protection disabled. To change branches on an initialized project, use **Update settings**, not Bootstrap.
 
 **Request:**
 ```json
 {
   "working_branch": "main",
+  "trigger_branch": "",
   "coding_agent_binary": "agent",
   "max_turns": 180
 }

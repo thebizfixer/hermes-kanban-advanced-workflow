@@ -15,7 +15,7 @@ Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.j
 
 ## Re-init
 
-`hermes kanban-advanced init` and dashboard **Bootstrap** refresh skills and cron scripts. When `kanban-config.yaml` already exists, `working_branch` and `trigger_branch` are kept unless you pass `--working-branch` / `--trigger-branch`. Change branches on a live project via dashboard **Update settings** or by editing the overlay.
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh skills and cron scripts. When `kanban-config.yaml` already exists, branch settings are kept unless you pass explicit overrides. **Working branch** defaults from git upstream / `origin/HEAD` / local `HEAD`. **Trigger branch** is optional — when unset, E009 deploy-branch rules are disabled.
 
 ## Project root (dashboard)
 
@@ -35,7 +35,6 @@ See [wiki/troubleshooting.md](../../wiki/troubleshooting.md) if `working_branch`
 | --- | --- | --- |
 | `schema_version` | — | Overlay contract (`1.0.0`) |
 | `working_branch` | `${working_branch}` | Integration branch (e.g. `main`) |
-| `trigger_branch` | `${trigger_branch}` | CI trigger branch (operator-only merges) |
 | `orchestrator_profile` | `${orchestrator_profile}` | Root / gate / audit cards |
 | `worker_profile` | `${worker_profile}` | Implementation cards |
 | `skills_output_path` | — | Skill output directory (for advanced configuration) |
@@ -45,6 +44,7 @@ See [wiki/troubleshooting.md](../../wiki/troubleshooting.md) if `working_branch`
 
 | Key | Substituted as | Default |
 | --- | --- | --- |
+| `trigger_branch` | `${trigger_branch}` | unset — protected deploy branch; E009 when set |
 | `bundle_version` | — | Pin public release tag (documentation) |
 | `coding_agent_binary` | `${coding_agent_binary}` | `agent` (set during init; see [coding agents](coding-agents.md)) |
 | `preflight_profiles` | — | `worker,orchestrator` |

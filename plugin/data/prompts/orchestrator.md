@@ -94,7 +94,7 @@ Files: path/to/file1, path/to/file2.
 Mode: modify-only|create-only|any.
 Tests: <exact test command>.
 Commit: <commit message>.
-Do NOT push to ${trigger_branch} or ${working_branch} — commit to worktree branch only."
+Do NOT push to ${working_branch} — commit to worktree branch only."
 --model <model-name>
 ```
 

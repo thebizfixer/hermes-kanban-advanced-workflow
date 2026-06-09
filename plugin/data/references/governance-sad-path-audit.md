@@ -148,7 +148,7 @@ This is where most of our Phase 2 failures occurred. Each sad path now has a str
 | Done cards have unmerged worktree branches | High | DELAY | Salvage SOP in orchestrator | ⚠️ Manual — orchestrator must check each worktree |
 | Merge conflicts between completed cards | Medium | BLOCKING | Final audit checks merge conflicts | ⚠️ Manual — audit card must resolve |
 | Card completed but branch deleted | Low | BLOCKING | Can't merge → work lost | ❌ No prevention or detection |
-| Card pushed to wrong branch (${trigger_branch}) | Low | BLOCKING | E009 in evaluation chain + pre-push hook installed by worktree_setup.sh | ✅ Infrastructure enforced |
+| Card pushed to wrong branch (trigger_branch when set) | Low | BLOCKING | E009 when trigger_branch configured + pre-push hook from worktree_setup.sh | ✅ Infrastructure enforced |
 
 **Gap to fix:** Automated merge of completed worktrees. Board keeper could do this for done cards with unmerged branches. Branch deletion detection.
 

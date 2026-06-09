@@ -25,6 +25,7 @@ from pathlib import Path
 
 from .config_overlay import (
     build_overlay_yaml,
+    normalize_optional_branch,
     overlay_path,
     read_overlay_config,
     resolve_branch_settings,
@@ -80,7 +81,7 @@ def setup_argparse(subparser: argparse.ArgumentParser) -> None:
     init = subs.add_parser("init", help="Post-install bootstrap for a project")
     init.add_argument("--project-root", default=".", help="Project root directory")
     init.add_argument("--working-branch", default=None, help="Integration branch (default: keep existing config, else git HEAD, else main)")
-    init.add_argument("--trigger-branch", default=None, help="CI/CD trigger branch (default: keep existing config, else production)")
+    init.add_argument("--trigger-branch", default=None, help="Optional protected branch agents must not push to (default: keep existing, else unset)")
     init.add_argument("--force", action="store_true", help="Skip confirmation prompts")
 
     subparser.set_defaults(func=handle_kanban)
@@ -196,14 +197,24 @@ def _handle_init(args) -> int:
         project_root,
         working_branch=args.working_branch,
         trigger_branch=args.trigger_branch,
+        working_branch_specified=args.working_branch is not None,
+        trigger_branch_specified=args.trigger_branch is not None,
     )
+
+    if args.trigger_branch is None and not existing_config.get("trigger_branch") and not force:
+        try:
+            raw = input("   Protected branch (optional — agents must NOT push here): ").strip()
+            if raw:
+                trigger_branch = normalize_optional_branch(raw)
+        except (EOFError, KeyboardInterrupt):
+            pass
 
     print(f"kanban-advanced init -- bootstrapping {project_root}")
     print(f"  HERMES_HOME: {hermes_home}")
     print(f"  Working branch: {working_branch}")
-    print(f"  Trigger branch: {trigger_branch}")
+    print(f"  Trigger branch: {trigger_branch or '(none — optional protected branch not set)'}")
     if kept_existing and config_file.is_file():
-        print("  (preserved from existing kanban-config.yaml — pass --working-branch to override)")
+        print("  (preserved from existing kanban-config.yaml — pass --working-branch / --trigger-branch to override)")
     print()
 
     def _yn(prompt: str) -> bool:

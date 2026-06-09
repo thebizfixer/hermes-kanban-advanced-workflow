@@ -70,7 +70,8 @@
   function KanbanAdvancedPage() {
     var _useState = useState(null), status = _useState[0], setStatus = _useState[1];
     var _useState2 = useState(false), loading = _useState2[0], setLoading = _useState2[1];
-    var _useState3 = useState("main"), workingBranch = _useState3[0], setWorkingBranch = _useState3[1];
+    var _useState3 = useState(""), workingBranch = _useState3[0], setWorkingBranch = _useState3[1];
+    var _useState3b = useState(""), triggerBranch = _useState3b[0], setTriggerBranch = _useState3b[1];
     var _useState4 = useState("agent"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
     var _useState5 = useState(""), customAgent = _useState5[0], setCustomAgent = _useState5[1];
     var _useState6 = useState(180), maxTurns = _useState6[0], setMaxTurns = _useState6[1];
@@ -90,6 +91,9 @@
         setStatus(s);
         if (s.config_exists) setInitialized(true);
         if (s.working_branch) setWorkingBranch(s.working_branch);
+        else if (s.default_working_branch) setWorkingBranch(s.default_working_branch);
+        if (s.trigger_branch) setTriggerBranch(s.trigger_branch);
+        else setTriggerBranch("");
         if (s.coding_agent) {
           var found = CODING_AGENTS.some(function (a) { return a.value === s.coding_agent; });
           if (found) setCodingAgent(s.coding_agent);
@@ -103,12 +107,18 @@
 
     useEffect(function () { loadStatus(); }, []);
 
+    function formatTriggerBranch(value) {
+      var v = (value || "").trim();
+      return v ? v : "(none — optional)";
+    }
+
     function getFormData() {
       var agent = codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
       return {
-        working_branch: workingBranch.trim() || "main",
+        working_branch: workingBranch.trim() || (status && status.default_working_branch) || "main",
         coding_agent_binary: agent,
-        max_turns: parseInt(maxTurns) || 180
+        max_turns: parseInt(maxTurns) || 180,
+        trigger_branch: triggerBranch.trim()
       };
     }
 
@@ -130,7 +140,7 @@
       setBootstrapping(true);
       setConsoleLines([]);
       var data = getFormData();
-      addLines(["=== Bootstrap starting ===", "Working branch: " + data.working_branch, "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
+      addLines(["=== Bootstrap starting ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
       apiInit(data).then(function (r) {
         if (r.error) {
           addLines(["ERROR: " + r.error], "line-err");
@@ -150,7 +160,7 @@
       setBootstrapping(true);
       setConsoleLines([]);
       var data = getFormData();
-      addLines(["=== Updating settings ===", "Working branch: " + data.working_branch, "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
+      addLines(["=== Updating settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
       apiUpdate(data).then(function (r) {
         if (r.output) addLines(r.output);
         setBootstrapping(false);
@@ -251,7 +261,12 @@
               React.createElement("div", { className: "space-y-1.5" },
                 React.createElement(Label, { className: "text-xs" }, "Working branch"),
                 React.createElement(Input, { value: workingBranch, onChange: function (e) { setWorkingBranch(e.target.value); }, placeholder: "main", className: "h-9" }),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Integration branch for worktree commits.")
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Integration branch for worktree commits. Defaults to your git checkout / origin default.")
+              ),
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Trigger branch"),
+                React.createElement(Input, { value: triggerBranch, onChange: function (e) { setTriggerBranch(e.target.value); }, placeholder: "Optional", className: "h-9" }),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "The protected branch agents should NOT push to. Optional.")
               )
             )
           ),

@@ -2,15 +2,15 @@
 # install_pre_push_hook.sh — Install pre-push hook in a kanban worktree.
 #
 # Usage:
-#   bash install_pre_push_hook.sh <worktree_path> <allowed_branch_pattern> <working_branch> <trigger_branch>
+#   bash install_pre_push_hook.sh <worktree_path> <allowed_branch_pattern> <working_branch> [trigger_branch]
 #
-# All four arguments are required — no defaults.
+# trigger_branch is optional — when unset, hook still blocks non-worktree pushes; E009 deploy protection is off.
 set -euo pipefail
 
 WORKTREE_PATH="${1:?worktree_path required}"
 ALLOWED_PATTERN="${2:?allowed_branch_pattern required}"
 WORKING_BRANCH="${3:?working_branch required}"
-TRIGGER_BRANCH="${4:?trigger_branch required}"
+TRIGGER_BRANCH="${4:-}"
 
 if [ ! -d "$WORKTREE_PATH" ]; then
     echo "[kanban-governance] ERROR: worktree path does not exist: $WORKTREE_PATH" >&2
@@ -23,7 +23,6 @@ if [ -z "$GIT_DIR" ]; then
     exit 1
 fi
 
-# Worktrees use a .git file pointing at the main repo's worktrees/<name>/ directory.
 case "$GIT_DIR" in
     /*|./*|../*|[A-Za-z]:*)
         HOOKS_DIR="$GIT_DIR/hooks"
@@ -39,7 +38,6 @@ HOOK_FILE="$HOOKS_DIR/pre-push"
 cat > "$HOOK_FILE" <<EOF
 #!/usr/bin/env bash
 # Installed by kanban-advanced worktree_setup.sh — do not edit manually.
-# Branch names are read from kanban-config.yaml at install time, not hardcoded here.
 ALLOWED_PATTERN="${ALLOWED_PATTERN}"
 WORKING_BRANCH="${WORKING_BRANCH}"
 TRIGGER_BRANCH="${TRIGGER_BRANCH}"
@@ -50,7 +48,11 @@ while read -r local_ref local_sha remote_ref remote_sha; do
     if [[ "\$branch" != \$ALLOWED_PATTERN ]]; then
         echo "[kanban-governance] BLOCKED: push to '\$branch' is not allowed from this worktree."
         echo "[kanban-governance] Allowed branch:   \$ALLOWED_PATTERN"
-        echo "[kanban-governance] Protected:        \$WORKING_BRANCH, \$TRIGGER_BRANCH"
+        if [ -n "\$TRIGGER_BRANCH" ]; then
+            echo "[kanban-governance] Protected:        \$WORKING_BRANCH, \$TRIGGER_BRANCH"
+        else
+            echo "[kanban-governance] Protected:        \$WORKING_BRANCH"
+        fi
         echo "[kanban-governance] Commit to your worktree branch; the worker/orchestrator handles merge."
         exit 1
     fi

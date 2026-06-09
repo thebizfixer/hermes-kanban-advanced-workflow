@@ -7,7 +7,6 @@ import subprocess
 from pathlib import Path
 
 DEFAULT_WORKING_BRANCH = "main"
-DEFAULT_TRIGGER_BRANCH = "production"
 DEFAULT_CODING_AGENT = "agent"
 
 OVERLAY_REL = Path(".hermes") / "kanban-overrides" / "kanban-config.yaml"
@@ -44,13 +43,15 @@ def read_overlay_config(config_path: Path) -> dict[str, str]:
     return config
 
 
-def resolve_project_root(start: Path | None = None) -> Path:
-    """Find the project root that owns kanban-config.yaml.
+def normalize_optional_branch(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped if stripped else None
 
-    Prefers explicit env overrides, then a tree walk that favors directories
-    with an existing overlay config over bare .git/.env markers (avoids picking
-    the plugin bundle or wrong clone when the gateway cwd shifts after update).
-    """
+
+def resolve_project_root(start: Path | None = None) -> Path:
+    """Find the project root that owns kanban-config.yaml."""
     for env_name in ("KANBAN_PROJECT_ROOT", "HERMES_PROJECT_ROOT"):
         raw = os.environ.get(env_name, "").strip()
         if raw:
@@ -76,20 +77,43 @@ def resolve_project_root(start: Path | None = None) -> Path:
     return config_hit or git_hit or env_hit or start
 
 
-def detect_git_branch(project_root: Path) -> str | None:
+def _git_output(project_root: Path, *args: str) -> str | None:
     try:
         r = subprocess.run(
-            ["git", "-C", str(project_root), "rev-parse", "--abbrev-ref", "HEAD"],
+            ["git", "-C", str(project_root), *args],
             capture_output=True,
             text=True,
             timeout=5,
         )
         if r.returncode == 0:
-            branch = r.stdout.strip()
-            if branch and branch != "HEAD":
-                return branch
+            out = r.stdout.strip()
+            return out if out else None
     except Exception:
         pass
+    return None
+
+
+def _strip_remote_branch(ref: str) -> str:
+    if ref.startswith("refs/remotes/origin/"):
+        return ref[len("refs/remotes/origin/") :]
+    if ref.startswith("origin/"):
+        return ref[len("origin/") :]
+    return ref
+
+
+def detect_default_working_branch(project_root: Path) -> str | None:
+    """Best-effort default integration branch (IDE / origin default / local HEAD)."""
+    upstream = _git_output(project_root, "rev-parse", "--abbrev-ref", "@{upstream}")
+    if upstream:
+        return _strip_remote_branch(upstream)
+
+    origin_default = _git_output(project_root, "symbolic-ref", "refs/remotes/origin/HEAD")
+    if origin_default:
+        return _strip_remote_branch(origin_default)
+
+    head = _git_output(project_root, "rev-parse", "--abbrev-ref", "HEAD")
+    if head and head != "HEAD":
+        return head
     return None
 
 
@@ -98,14 +122,28 @@ def resolve_branch_settings(
     *,
     working_branch: str | None = None,
     trigger_branch: str | None = None,
-) -> tuple[str, str, bool]:
-    """Return (working_branch, trigger_branch, used_existing_config)."""
+    working_branch_specified: bool = False,
+    trigger_branch_specified: bool = False,
+) -> tuple[str, str | None, bool]:
+    """Return (working_branch, trigger_branch|None, preserved_from_existing)."""
     existing = read_overlay_config(overlay_path(project_root))
-    used_existing = bool(existing)
+    preserved = bool(existing) and not working_branch_specified and not trigger_branch_specified
 
-    wb = working_branch or existing.get("working_branch") or detect_git_branch(project_root) or DEFAULT_WORKING_BRANCH
-    tb = trigger_branch or existing.get("trigger_branch") or DEFAULT_TRIGGER_BRANCH
-    return wb, tb, used_existing and (working_branch is None or trigger_branch is None)
+    if working_branch_specified and normalize_optional_branch(working_branch):
+        wb = normalize_optional_branch(working_branch) or DEFAULT_WORKING_BRANCH
+    elif existing.get("working_branch"):
+        wb = existing["working_branch"]
+    else:
+        wb = detect_default_working_branch(project_root) or DEFAULT_WORKING_BRANCH
+
+    if trigger_branch_specified:
+        tb = normalize_optional_branch(trigger_branch)
+    elif existing.get("trigger_branch"):
+        tb = normalize_optional_branch(existing.get("trigger_branch"))
+    else:
+        tb = None
+
+    return wb, tb, preserved
 
 
 def resolve_coding_agent(
@@ -126,7 +164,7 @@ def resolve_coding_agent(
 def build_overlay_yaml(
     *,
     working_branch: str,
-    trigger_branch: str,
+    trigger_branch: str | None,
     coding_agent: str,
     bundle_path: Path | str,
     hermes_home: Path | str,
@@ -134,10 +172,9 @@ def build_overlay_yaml(
 ) -> str:
     """Build overlay YAML, preserving user keys not managed by init/update."""
     existing = dict(existing or {})
-    managed = {
+    managed: dict[str, str] = {
         "schema_version": "1.0.0",
         "working_branch": working_branch,
-        "trigger_branch": trigger_branch,
         "orchestrator_profile": existing.get("orchestrator_profile", "orchestrator"),
         "worker_profile": existing.get("worker_profile", "worker"),
         "preflight_profiles": existing.get("preflight_profiles", "worker,orchestrator"),
@@ -146,6 +183,8 @@ def build_overlay_yaml(
         "skills_output_path": str(Path(hermes_home) / "skills" / "kanban-advanced"),
         "plan_memory_path": existing.get("plan_memory_path", ".hermes/kanban/memory"),
     }
+    if trigger_branch:
+        managed["trigger_branch"] = trigger_branch
 
     lines = ["# kanban-advanced config overlay"]
     for key, val in managed.items():
@@ -156,7 +195,6 @@ def build_overlay_yaml(
         else:
             lines.append(f"{key}: {val}")
 
-    # Preserve optional keys the user or example config may have set.
     skip = _MANAGED_KEYS | {"escalation_max_attempts"}
     for key in sorted(existing):
         if key in skip:

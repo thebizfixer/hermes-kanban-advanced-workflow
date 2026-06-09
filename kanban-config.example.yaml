@@ -12,7 +12,7 @@ schema_version: "1.0.0"
 # Branch model
 # ---------------------------------------------------------------------------
 working_branch: main
-trigger_branch: production
+# trigger_branch: production  # optional — protected deploy branch agents must not push to
 feature_branch_prefix: "kanban/"
 
 # ---------------------------------------------------------------------------

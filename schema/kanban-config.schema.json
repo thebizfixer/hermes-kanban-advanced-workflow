@@ -18,7 +18,7 @@
     },
     "trigger_branch": {
       "type": "string",
-      "description": "CI/CD trigger branch; operator-only merges. Substituted as ${trigger_branch}."
+      "description": "Optional protected deploy branch agents must not push to. When unset, E009 trigger rules are disabled. Substituted as ${trigger_branch} when set."
     },
     "feature_branch_prefix": {
       "type": "string",

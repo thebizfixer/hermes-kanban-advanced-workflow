@@ -131,7 +131,7 @@ Before calling `kanban_complete`:
 ## Do NOT
 
 - Write code yourself. Always delegate to the external agent.
-- Push to `${trigger_branch}` or `origin/${trigger_branch}`.
+- Push only to your assigned worktree branch — never to `${working_branch}`.
 - Use `git add -A`. Use `git add <specific files>`.
 - Complete a task with missing files.
 - Block for "review-required" — the orchestrator reviews during final audit.

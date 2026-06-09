@@ -12,7 +12,6 @@ schema_version: "1.0.0"
 # Branch model
 # ---------------------------------------------------------------------------
 working_branch: main
-trigger_branch: production
 feature_branch_prefix: "kanban/"
 
 # ---------------------------------------------------------------------------

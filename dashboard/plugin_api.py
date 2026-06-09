@@ -20,6 +20,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from plugin.config_overlay import (  # noqa: E402
     build_overlay_yaml,
+    detect_default_working_branch,
+    normalize_optional_branch,
     overlay_path,
     read_overlay_config,
     resolve_branch_settings,
@@ -107,11 +109,15 @@ async def status():
 
     coding_agent = resolve_coding_agent(project_root, env=env)
 
+    detected_branch = detect_default_working_branch(project_root) or "main"
+
     return {
         "config_exists": config_exists,
         "project_root": str(project_root),
         "config_path": str(overlay_path(project_root)) if config_exists else "",
-        "working_branch": config.get("working_branch", "main"),
+        "working_branch": config.get("working_branch") or detected_branch,
+        "default_working_branch": detected_branch,
+        "trigger_branch": config.get("trigger_branch", ""),
         "coding_agent": coding_agent,
         "coding_agent_binary": coding_agent,
         "max_turns": _get_max_turns(),
@@ -146,6 +152,8 @@ async def init(request: Request):
             project_root,
             working_branch=body.get("working_branch"),
             trigger_branch=body.get("trigger_branch"),
+            working_branch_specified="working_branch" in body,
+            trigger_branch_specified="trigger_branch" in body,
         )
         coding_agent = resolve_coding_agent(
             project_root,
@@ -155,8 +163,10 @@ async def init(request: Request):
 
     output = []
     output.append(f"kanban-advanced init -- bootstrapping {project_root}")
+    output.append(f"   Working branch: {working_branch}")
+    output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
     if kept:
-        output.append("   Preserved working/trigger branch from existing kanban-config.yaml")
+        output.append("   Preserved branch settings from existing kanban-config.yaml")
 
     # Profiles
     profiles = _check_profiles()
@@ -299,13 +309,18 @@ async def update(request: Request):
         return {"error": "Config file not found. Run bootstrap first."}
 
     env = _read_env(project_root)
-    working_branch = body.get("working_branch") or config.get("working_branch", "main")
-    trigger_branch = body.get("trigger_branch") or config.get("trigger_branch", "production")
+    working_branch = body.get("working_branch") or config.get("working_branch") or detect_default_working_branch(project_root) or "main"
+    if "trigger_branch" in body:
+        trigger_branch = normalize_optional_branch(body.get("trigger_branch"))
+    else:
+        trigger_branch = normalize_optional_branch(config.get("trigger_branch"))
     coding_agent = body.get("coding_agent_binary") or config.get("coding_agent_binary") or resolve_coding_agent(project_root, env=env)
     max_turns = body.get("max_turns", 180)
 
     output = []
     output.append("=== Updating settings ===")
+    output.append(f"   Working branch: {working_branch}")
+    output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
 
     overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)

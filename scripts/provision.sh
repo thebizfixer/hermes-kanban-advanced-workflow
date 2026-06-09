@@ -80,6 +80,10 @@ substitute_vars() {
   for key in "${!CONFIG[@]}"; do
     content="${content//\$\{$key\}/${CONFIG[$key]}}"
   done
+  if [[ -z "${CONFIG[trigger_branch]:-}" ]]; then
+    # trigger_branch unset — drop lines that still reference the placeholder
+    content="$(printf '%s\n' "$content" | grep -v '\${trigger_branch}' || true)"
+  fi
   echo "$content"
 }
 

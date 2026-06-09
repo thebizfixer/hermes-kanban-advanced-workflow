@@ -29,8 +29,8 @@ import yaml
 
 # ── Registry loader ────────────────────────────────────────────────────
 
-def read_trigger_branch(repo_root: Optional[str] = None) -> str:
-    """Read trigger_branch from kanban overlay config — no hardcoded fallback."""
+def read_trigger_branch(repo_root: Optional[str] = None) -> Optional[str]:
+    """Read optional trigger_branch from kanban overlay config."""
     root = Path(repo_root or os.getcwd())
     config_path = os.environ.get("HERMES_KANBAN_CONFIG", "")
     if not config_path:
@@ -44,8 +44,9 @@ def read_trigger_branch(repo_root: Optional[str] = None) -> str:
     for line in Path(config_path).read_text(encoding="utf-8").splitlines():
         stripped = line.strip()
         if stripped.startswith("trigger_branch:"):
-            return stripped.split(":", 1)[1].strip().strip("\"'")
-    raise RuntimeError(f"trigger_branch not set in {config_path}")
+            val = stripped.split(":", 1)[1].strip().strip("\"'")
+            return val if val else None
+    return None
 
 
 def load_registry(registry_path: str) -> dict:
@@ -144,6 +145,11 @@ def recover_e007_disk_full(task_id: str, workspace: str, registry: dict):
 def recover_e009_push_to_development(task_id: str, workspace: str, registry: dict):
     """E009: Agent pushed to trigger_branch (unauthorized)."""
     trigger_branch = read_trigger_branch(workspace)
+    if not trigger_branch:
+        print(f"[recover] E009: trigger_branch not configured for {task_id} — block for manual review")
+        subprocess.run(["hermes", "kanban", "block", task_id,
+                          "E009: Unauthorized branch push — set trigger_branch in kanban-config.yaml to enable auto-recovery"])
+        return
     print(f"[recover] E009: Unauthorized push to {trigger_branch} for {task_id}")
     repo_root = workspace
     subprocess.run(["git", "push", "origin", "--delete", trigger_branch], cwd=repo_root)

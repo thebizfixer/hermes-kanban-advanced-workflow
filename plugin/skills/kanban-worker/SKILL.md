@@ -118,7 +118,7 @@ printf '%s\n' $FILES_LIST > "$WORKTREE_PATH/.kanban-scope"
 echo "[worker] Worktree ready: $WORKTREE_PATH (pre-push + pre-commit hooks installed, scope written)"
 ```
 
-> **Pre-push hook installed by `worktree_setup.sh`:** The hook prevents the coding agent from pushing to any branch other than the card's own worktree branch (`wt/<task_id>`). The protected branches (`working_branch`, `trigger_branch`) are read from `kanban-config.yaml` at install time — no branch names are hardcoded. This is infrastructure enforcement — the agent cannot bypass it regardless of what its prompt says.
+> **Pre-push hook installed by `worktree_setup.sh`:** The hook prevents the coding agent from pushing to any branch other than the card's own worktree branch (`wt/<task_id>`). `working_branch` is always protected; `trigger_branch` is protected too when set in `kanban-config.yaml`. Branch names are read at install time — not hardcoded. This is infrastructure enforcement — the agent cannot bypass it regardless of what its prompt says.
 
 - **Integration freshness check (mandatory):** Before spawning the agent, verify the worktree is based on the latest `${working_branch}`. If the parent card completed >1hr ago, the integration branch may have advanced with other cards' changes — the agent would work on stale code.
 
@@ -512,7 +512,7 @@ finally:
 - Create follow-up tasks assigned to yourself.
 - Complete a task you didn't actually finish. Block it instead.
 - Call `kanban_complete` directly — always go through the evaluation chain (Step 6).
-- Push to `${trigger_branch}` or `origin/${trigger_branch}` — commit to worktree branch only (E009).
+- Push only to your assigned worktree branch — never to `${working_branch}` (E009 applies when `trigger_branch` is set in config).
 - Use `git add -A` — use `git add <specific files>` to avoid staging unrelated changes.
 
 ## Provider/model fallback chain
@@ -545,7 +545,7 @@ Workers waste 5–8 minutes per task running identical pre-flight checks. Use th
 
 **Key procedural pitfalls (see governance ref for full context):**
 - Always heartbeat during agent execution (15-minute reclaim cycle).
-- Never push to `${trigger_branch}` — commit to worktree branch only.
+- Never push to `${working_branch}` — commit to worktree branch only.
 - `git reset --hard` destroys plan files — restore with `git checkout ${working_branch} -- .agent/plans/`.
 - Agent `-p` is for code generation only — pipeline execution uses terminal commands.
 - Never call `kanban_complete` directly — always run the evaluation chain (E001–E020).

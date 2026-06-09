@@ -142,7 +142,7 @@ Files: path/to/file1.py, path/to/file2.py.
 Mode: modify-only.
 Tests: <test command>.
 Commit: <commit message>.
-Do NOT push to ${trigger_branch} — commit to worktree branch only."
+Do NOT push to ${working_branch} — commit to worktree branch only."
 ```
 
 The worker's Step 4 extracts this block via regex, executes it, and monitors the agent. No prompt construction, no re-reading the body, no debating what model to use.
@@ -270,7 +270,7 @@ Files: path/to/file1.py, path/to/file2.py.
 Mode: modify-only.
 Tests: <test command>.
 Commit: <commit message>.
-Do NOT push to ${trigger_branch} — commit to worktree branch only."
+Do NOT push to ${working_branch} — commit to worktree branch only."
 ```
 
 The worker's Step 4 extracts this block via regex, executes it, and monitors the agent. No prompt construction, no re-reading the body, no debating what model to use.

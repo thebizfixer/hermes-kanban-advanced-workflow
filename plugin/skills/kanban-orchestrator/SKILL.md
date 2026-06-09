@@ -372,7 +372,7 @@ Files: path/to/file1.py, path/to/file2.py.
 Mode: modify-only.
 Tests: <test command>.
 Commit: <commit message>.
-Do NOT push to ${trigger_branch} — commit to worktree branch only."
+Do NOT push to ${working_branch} — commit to worktree branch only."
 ```
 
 > **Model selection belongs to the profile, not the card body.** Do NOT add `--model` or `--output-format` flags. The profile's `config.yaml` determines the model. Card body policy P005 (MODEL_OVERRIDES_PROFILE) blocks cards that attempt to override profile model config at dispatch.
@@ -398,12 +398,12 @@ The branch model controls where agent commits land and when CI builds are trigge
 | Variable | Default | Meaning |
 |---|---|---|
 | `${working_branch}` | overlay | Integration branch; orchestrator merges completed sections here |
-| `${trigger_branch}` | overlay | CI/CD trigger branch; operator merges here to start a build |
+| `trigger_branch` | overlay (optional) | Protected deploy branch; when set, agents must not push here (E009) |
 | `kanban/` | `kanban/` | Prefix for per-section feature branches |
 
-**Rule:** Workers commit and push to their feature branch (`kanban/<plan>/<section>`), never to `${trigger_branch}`. The orchestrator merges completed sections into `${working_branch}` during the final audit. Only the operator manually merges `${working_branch}` → `${trigger_branch}` to trigger a build.
+**Rule:** Workers commit and push to their feature branch (`kanban/<plan>/<section>`), never to `${working_branch}`. The orchestrator merges completed sections into `${working_branch}` during the final audit. When `trigger_branch` is set in `kanban-config.yaml`, only the operator manually merges `${working_branch}` → that branch to trigger a build.
 
-**Why separate?** Keeping `${working_branch}` ≠ `${trigger_branch}` means iterative agent commits accumulate without firing CI on every push. Builds are triggered exactly when the operator wants them.
+**Why separate?** When `trigger_branch` is set, keeping it distinct from `${working_branch}` lets agent commits integrate without firing deploy CI on every push. Omit `trigger_branch` in `kanban-config.yaml` if you do not use a separate protected deploy branch.
 
 **Commit cadence:** Merge incrementally as each card completes — do NOT wait for the final audit. After each card reaches `done`, the orchestrator must immediately fetch the commit from the worktree and merge to `${working_branch}`. The dispatcher and board keeper clean worktrees on their own schedule — if a worktree is removed before the commit is merged, the commit is lost. Recovery is sometimes possible from orphaned worktrees on disk (see Final Audit § step 2), but not guaranteed.
 

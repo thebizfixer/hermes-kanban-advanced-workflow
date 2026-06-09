@@ -11,9 +11,8 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 
 | Variable | Purpose | Example |
 |----------|---------|---------|
-| `working_branch` | Integration branch; orchestrator merges completed sections here | `<branch-name>` (e.g. `main`) |
+| `working_branch` | Integration branch; orchestrator merges completed sections here | Detected from git upstream / `origin/HEAD` at init, or set explicitly |
 | `coding_agent_binary` | Headless CLI coding agent binary on PATH (set during init) | `agent` (Cursor CLI), `claude`, `codex`, etc. |
-| `trigger_branch` | CI/CD trigger branch; only operator merges here manually | `production` |
 | `feature_branch_prefix` | Prefix for per-section worktree branches | `wt/` |
 | `required_secrets` | Comma-separated env vars checked by preflight | `MONGODB_URI,SECRET_KEY` |
 | `preflight_api_url` | Health endpoint for API reachability check | `http://127.0.0.1:8000/healthz` |
@@ -23,6 +22,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
+| `trigger_branch` | Protected branch agents must not push to (E009 when set) | unset — leave blank to disable |
 | `KANBAN_POLICY_PROFILE` | Card body policy enforcement level | `balanced` |
 | `PREFLIGHT_PROFILES` | Profiles to validate in preflight §5 | `worker,orchestrator` |
 | `PREFLIGHT_MEMORY_MIN_MB` | Blocking memory floor | `1024` |
@@ -49,7 +49,7 @@ hermes kanban-advanced init --project-root .                    # keeps existing
 hermes kanban-advanced init --project-root . --working-branch staging  # override integration branch
 ```
 
-To change branches on an initialized project, prefer dashboard **Update settings** or edit `kanban-config.yaml` directly. First-time init uses `--working-branch`, the form on Bootstrap, git `HEAD`, then `main`.
+To change branches on an initialized project, prefer dashboard **Update settings** or edit `kanban-config.yaml` directly. **Working branch** defaults to git upstream / `origin/HEAD` / local `HEAD`, then `main`. **Trigger branch** is optional — leave blank to skip deploy-branch protection.
 
 Optional keys you added manually (e.g. `feature_branch_prefix`, `gateway_timeout_seconds`) are preserved across re-init.
 
