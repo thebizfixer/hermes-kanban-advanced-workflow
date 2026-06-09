@@ -16,6 +16,7 @@ Returns current initialization state and config values.
 ```json
 {
   "config_exists": true,
+  "project_root": "/path/to/your/project",
   "config_path": "/path/to/.hermes/kanban-overrides/kanban-config.yaml",
   "working_branch": "main",
   "coding_agent": "agent",
@@ -34,9 +35,13 @@ Returns current initialization state and config values.
 
 When `config_exists` is false, the dashboard shows the bootstrap form.
 
+Use `project_root` to confirm the API resolved the correct repo (especially after `hermes update` or when multiple clones are on disk). If it points at the plugin install tree, set `KANBAN_PROJECT_ROOT` to your application repo before opening the tab.
+
 ## `POST /api/plugins/kanban-advanced/init`
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
+
+**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch` and `trigger_branch` are **preserved from the file** (form defaults are ignored). First-time bootstrap uses the request body, then git `HEAD`, then `main`. To change branches on an initialized project, use **Update settings**, not Bootstrap.
 
 **Request:**
 ```json
@@ -73,11 +78,11 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 
 ## `POST /api/plugins/kanban-advanced/update`
 
-Updates settings in an already-initialized config. Writes to `kanban-config.yaml` and `.env`.
+Updates settings in an already-initialized config. Writes to `kanban-config.yaml` and `.env`. Request body values for `working_branch`, `trigger_branch`, and `coding_agent_binary` are applied as submitted.
 
 **Request:** Same shape as init.
 
-**Response:** Same shape as init (re-runs materialization but skips profile creation).
+**Response:** Same shape as init (re-runs materialization but skips profile creation). Optional overlay keys not in the managed set (e.g. `feature_branch_prefix`) are preserved.
 
 ## Error response
 

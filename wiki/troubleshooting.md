@@ -145,6 +145,43 @@ which hermes
 hermes --version
 ```
 
+### Working branch reset to `main` after Hermes update
+
+**Symptom:** After `hermes update` or a plugin refresh, the Kanban-Advanced dashboard or `kanban-config.yaml` shows `working_branch: main` even though you previously set a different integration branch (e.g. `staging`, `develop`).
+
+**Root causes:**
+
+1. **Re-init overwrote the overlay** — Older versions of `hermes kanban-advanced init` and dashboard **Bootstrap** always rewrote `kanban-config.yaml` with defaults. Re-running init after an update (or Bootstrap while the form still showed `main`) replaced your branch.
+2. **Dashboard resolved the wrong project** — The settings API walks up from the gateway's working directory. After an update the cwd can shift, so status may read a different repo's overlay (often the plugin bundle example, which uses `main`).
+
+**Fix (restore your branch):**
+
+```bash
+# Option A — edit the overlay directly
+# .hermes/kanban-overrides/kanban-config.yaml
+working_branch: <your-branch>
+
+# Option B — dashboard → Kanban-Advanced → Update settings (not Bootstrap)
+# Set Working branch, then click Update settings
+
+# Option C — CLI init with explicit override
+hermes kanban-advanced init --project-root . --working-branch <your-branch>
+```
+
+**Prevention (current behavior):**
+
+- Re-init **preserves** `working_branch` and `trigger_branch` from the existing overlay unless you pass `--working-branch` / `--trigger-branch`.
+- Dashboard **Bootstrap** on an already-initialized project also preserves branches from file; use **Update settings** to change them.
+- Pin the project when the gateway cwd is ambiguous (multi-clone or plugin dev tree):
+
+```bash
+export KANBAN_PROJECT_ROOT=/absolute/path/to/your/project
+# or
+export HERMES_KANBAN_CONFIG=/absolute/path/to/your/project/.hermes/kanban-overrides/kanban-config.yaml
+```
+
+**Verify:** `GET /api/plugins/kanban-advanced/status` includes `project_root` and `config_path` — confirm they point at your app repo, not the plugin install directory.
+
 ## Full error code listing
 
 See `hermes-kanban-advanced-workflow/registry/error-codes.yaml` for all 24 codes with severity, recovery, and retry flags.

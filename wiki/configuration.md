@@ -38,7 +38,30 @@ The `coding_agent_binary` flows through three layers to the worker:
 2. **Worker environment** — `.env` is sourced at session start → `KANBAN_CODING_AGENT` available as env var
 3. **Worker dispatch** — `[os.environ.get("KANBAN_CODING_AGENT", "agent"), "-p", prompt, ...]`
 
-To change the coding agent: edit `.env` or re-run `hermes kanban-advanced init`. The YAML config is the source of truth for documentation; the env var is what the worker reads at runtime.
+To change the coding agent: edit `.env`, use dashboard **Update settings**, or re-run `hermes kanban-advanced init` (preserves existing `coding_agent_binary` unless you pick a new one interactively). The YAML config is the source of truth for documentation; the env var is what the worker reads at runtime.
+
+## Re-init and branch preservation
+
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh profiles, materialized skills, and cron scripts. They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
+
+```bash
+hermes kanban-advanced init --project-root .                    # keeps existing branches
+hermes kanban-advanced init --project-root . --working-branch staging  # override integration branch
+```
+
+To change branches on an initialized project, prefer dashboard **Update settings** or edit `kanban-config.yaml` directly. First-time init uses `--working-branch`, the form on Bootstrap, git `HEAD`, then `main`.
+
+Optional keys you added manually (e.g. `feature_branch_prefix`, `gateway_timeout_seconds`) are preserved across re-init.
+
+## Project root for dashboard / API
+
+The dashboard settings API resolves which repo owns `.hermes/kanban-overrides/kanban-config.yaml`. Resolution order:
+
+1. `KANBAN_PROJECT_ROOT` or `HERMES_PROJECT_ROOT` (absolute path to your app repo)
+2. `HERMES_KANBAN_CONFIG` (absolute path to the overlay file)
+3. Walk up from the gateway cwd — **prefers** directories with an existing overlay over bare `.git` / `.env` markers
+
+Set `KANBAN_PROJECT_ROOT` when you run multiple clones or when the gateway cwd might be the plugin bundle instead of your application.
 
 ## Policy profiles
 

@@ -9,9 +9,23 @@ import logging
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter, Request
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from plugin.config_overlay import (  # noqa: E402
+    build_overlay_yaml,
+    overlay_path,
+    read_overlay_config,
+    resolve_branch_settings,
+    resolve_coding_agent,
+    resolve_project_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +38,8 @@ def _run(cmd: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
 
 
-def _find_project_root() -> Path:
-    cwd = Path.cwd()
-    for parent in [cwd] + list(cwd.parents):
-        if (parent / ".git").exists() or (parent / ".env").exists():
-            return parent
-    return cwd
-
-
 def _read_config(project_root: Path) -> dict:
-    config_path = project_root / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
-    if not config_path.exists():
-        return {}
-    config = {}
-    for line in config_path.read_text().splitlines():
-        line = line.strip()
-        if ":" in line and not line.startswith("#"):
-            key, _, val = line.partition(":")
-            config[key.strip()] = val.strip().strip('"').strip("'")
-    return config
+    return read_overlay_config(overlay_path(project_root))
 
 
 def _read_env(project_root: Path) -> dict:
@@ -103,16 +100,17 @@ def _get_max_turns() -> int:
 @router.get("/status")
 async def status():
     """GET /api/plugins/kanban-advanced/status"""
-    project_root = _find_project_root()
+    project_root = resolve_project_root()
     config = _read_config(project_root)
     env = _read_env(project_root)
-    config_exists = bool(config)
+    config_exists = overlay_path(project_root).is_file()
 
-    coding_agent = env.get("KANBAN_CODING_AGENT", config.get("coding_agent_binary", "agent"))
+    coding_agent = resolve_coding_agent(project_root, env=env)
 
     return {
         "config_exists": config_exists,
-        "config_path": str(project_root / ".hermes" / "kanban-overrides" / "kanban-config.yaml") if config_exists else "",
+        "project_root": str(project_root),
+        "config_path": str(overlay_path(project_root)) if config_exists else "",
         "working_branch": config.get("working_branch", "main"),
         "coding_agent": coding_agent,
         "coding_agent_binary": coding_agent,
@@ -130,14 +128,35 @@ async def init(request: Request):
     except Exception:
         body = {}
 
-    project_root = _find_project_root()
-    working_branch = body.get("working_branch", "main")
-    trigger_branch = body.get("trigger_branch", "production")
-    coding_agent = body.get("coding_agent_binary", "agent")
+    project_root = resolve_project_root()
+    config_file = overlay_path(project_root)
+    existing_config = _read_config(project_root)
+    env = _read_env(project_root)
     max_turns = body.get("max_turns", 180)
+
+    if existing_config:
+        working_branch, trigger_branch, kept = resolve_branch_settings(project_root)
+        coding_agent = resolve_coding_agent(
+            project_root,
+            coding_agent=body.get("coding_agent_binary"),
+            env=env,
+        )
+    else:
+        working_branch, trigger_branch, kept = resolve_branch_settings(
+            project_root,
+            working_branch=body.get("working_branch"),
+            trigger_branch=body.get("trigger_branch"),
+        )
+        coding_agent = resolve_coding_agent(
+            project_root,
+            coding_agent=body.get("coding_agent_binary"),
+            env=env,
+        )
 
     output = []
     output.append(f"kanban-advanced init -- bootstrapping {project_root}")
+    if kept:
+        output.append("   Preserved working/trigger branch from existing kanban-config.yaml")
 
     # Profiles
     profiles = _check_profiles()
@@ -194,25 +213,20 @@ async def init(request: Request):
     output.append(f"   coding_agent_binary: {coding_agent}")
 
     # Config overlay
-    overlay_dir = project_root / ".hermes" / "kanban-overrides"
+    overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)
-    config_file = overlay_dir / "kanban-config.yaml"
     _hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
+    plugin_root = Path(__file__).parent.parent
     config_file.write_text(
-        f"# kanban-advanced config overlay\n"
-        f'schema_version: "1.0.0"\n'
-        f"working_branch: {working_branch}\n"
-        f"trigger_branch: {trigger_branch}\n"
-        f"orchestrator_profile: orchestrator\n"
-        f"worker_profile: worker\n"
-        f'preflight_profiles: "worker,orchestrator"\n'
-        f"coding_agent_binary: {coding_agent}\n"
-        f"skills_output_path: {_hermes_home}/skills/kanban-advanced\n"
-        f"plan_memory_path: .hermes/kanban/memory\n"
-        f"escalation_max_attempts:\n"
-        f"  coding_agent: 3\n"
-        f"  worker: 3\n"
-        f"  orchestrator: 3\n"
+        build_overlay_yaml(
+            working_branch=working_branch,
+            trigger_branch=trigger_branch,
+            coding_agent=coding_agent,
+            bundle_path=plugin_root,
+            hermes_home=_hermes_home,
+            existing=existing_config,
+        ),
+        encoding="utf-8",
     )
     output.append(f"   OK {config_file}")
 
@@ -278,38 +292,35 @@ async def update(request: Request):
     except Exception:
         body = {}
 
-    project_root = _find_project_root()
+    project_root = resolve_project_root()
     config = _read_config(project_root)
-    if not config:
+    config_file = overlay_path(project_root)
+    if not config_file.is_file():
         return {"error": "Config file not found. Run bootstrap first."}
 
-    working_branch = body.get("working_branch", config.get("working_branch", "main"))
-    trigger_branch = body.get("trigger_branch", config.get("trigger_branch", "production"))
-    coding_agent = body.get("coding_agent_binary", config.get("coding_agent_binary", "agent"))
+    env = _read_env(project_root)
+    working_branch = body.get("working_branch") or config.get("working_branch", "main")
+    trigger_branch = body.get("trigger_branch") or config.get("trigger_branch", "production")
+    coding_agent = body.get("coding_agent_binary") or config.get("coding_agent_binary") or resolve_coding_agent(project_root, env=env)
     max_turns = body.get("max_turns", 180)
 
     output = []
     output.append("=== Updating settings ===")
 
-    overlay_dir = project_root / ".hermes" / "kanban-overrides"
-    config_file = overlay_dir / "kanban-config.yaml"
+    overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)
     _hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
+    plugin_root = Path(__file__).parent.parent
     config_file.write_text(
-        f"# kanban-advanced config overlay\n"
-        f'schema_version: "1.0.0"\n'
-        f"working_branch: {working_branch}\n"
-        f"trigger_branch: {trigger_branch}\n"
-        f"orchestrator_profile: orchestrator\n"
-        f"worker_profile: worker\n"
-        f'preflight_profiles: "worker,orchestrator"\n'
-        f"coding_agent_binary: {coding_agent}\n"
-        f"skills_output_path: {_hermes_home}/skills/kanban-advanced\n"
-        f"plan_memory_path: .hermes/kanban/memory\n"
-        f"escalation_max_attempts:\n"
-        f"  coding_agent: 3\n"
-        f"  worker: 3\n"
-        f"  orchestrator: 3\n"
+        build_overlay_yaml(
+            working_branch=working_branch,
+            trigger_branch=trigger_branch,
+            coding_agent=coding_agent,
+            bundle_path=plugin_root,
+            hermes_home=_hermes_home,
+            existing=config,
+        ),
+        encoding="utf-8",
     )
     output.append(f"   OK Updated {config_file}")
 

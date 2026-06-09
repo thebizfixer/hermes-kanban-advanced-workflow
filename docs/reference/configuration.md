@@ -13,6 +13,22 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 
 Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.json) · Example: [`kanban-config.example.yaml`](../../kanban-config.example.yaml) · Dashboard API: [`dashboard/API.md`](../../dashboard/API.md)
 
+## Re-init
+
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh skills and cron scripts. When `kanban-config.yaml` already exists, `working_branch` and `trigger_branch` are kept unless you pass `--working-branch` / `--trigger-branch`. Change branches on a live project via dashboard **Update settings** or by editing the overlay.
+
+## Project root (dashboard)
+
+The settings API resolves the repo that owns the overlay. Override when the gateway cwd is ambiguous:
+
+| Variable | Purpose |
+| --- | --- |
+| `KANBAN_PROJECT_ROOT` | Absolute path to your application repo |
+| `HERMES_PROJECT_ROOT` | Same (alias) |
+| `HERMES_KANBAN_CONFIG` | Absolute path to `kanban-config.yaml` |
+
+See [wiki/troubleshooting.md](../../wiki/troubleshooting.md) if `working_branch` shows `main` after a Hermes update.
+
 ## Required
 
 | Key | Substituted as | Purpose |

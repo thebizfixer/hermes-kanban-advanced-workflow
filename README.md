@@ -144,6 +144,7 @@ You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* 
 | Skills not found | Use `kanban-advanced:` prefix: `skill_view("kanban-advanced:kanban-planning")` |
 | CLI not found | The group is `kanban-advanced`, not `kanban` |
 | Init fails on profiles | `hermes profile create orchestrator --clone` |
-| Cron scripts missing | Re-run `hermes kanban-advanced init` |
+| Cron scripts missing | Re-run `hermes kanban-advanced init` (preserves existing branches) |
+| Working branch shows `main` after update | Set `KANBAN_PROJECT_ROOT`; use **Update settings** or edit `kanban-config.yaml` — [wiki/troubleshooting.md](wiki/troubleshooting.md) |
 
 Full guide: [docs/how-to/troubleshooting.md](docs/how-to/troubleshooting.md)
