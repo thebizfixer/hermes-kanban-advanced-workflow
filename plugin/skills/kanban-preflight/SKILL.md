@@ -174,7 +174,7 @@ grep -qE '%3C|%3E' "${HERMES_HOME}/profiles/${worker_profile}/SOUL.md" \
   && echo "CORRUPT" || echo "clean"
 ```
 
-**Env knobs:** `PREFLIGHT_PROFILES` (comma-separated; overlay `preflight_profiles` or default `code-worker,orchestrator`).
+**Env knobs:** `PREFLIGHT_PROFILES` (comma-separated; overlay `preflight_profiles` or default `worker,orchestrator`).
 
 **Typical fixes:** `hermes profile create …`; `agent login`; restore SOUL.md from backup; remove stale `cursor` shim shadowing `agent` (see autonomy-gaps plan).
 

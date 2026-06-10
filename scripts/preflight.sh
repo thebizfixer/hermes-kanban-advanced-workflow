@@ -12,9 +12,9 @@ CHECK_TIMEOUT="${CHECK_TIMEOUT:-5}"
 PREFLIGHT_MEMORY_MIN_MB="${PREFLIGHT_MEMORY_MIN_MB:-1024}"
 PREFLIGHT_MEMORY_WARN_MB="${PREFLIGHT_MEMORY_WARN_MB:-2048}"
 PREFLIGHT_API_URL="${PREFLIGHT_API_URL:-http://127.0.0.1:8000/healthz}"
-PREFLIGHT_PROFILES="${PREFLIGHT_PROFILES:-code-worker,orchestrator}"
+PREFLIGHT_PROFILES="${PREFLIGHT_PROFILES:-worker,orchestrator}"
 PREFLIGHT_REQUIRED_SECRETS="${PREFLIGHT_REQUIRED_SECRETS:-}"
-WORKER_PROFILE="${WORKER_PROFILE:-code-worker}"
+WORKER_PROFILE="${WORKER_PROFILE:-worker}"
 
 find_repo_root() {
   local dir="$SCRIPT_DIR"
@@ -244,11 +244,12 @@ check_profile_availability() {
 }
 
 check_model_reachability() {
-  # For each profile in PREFLIGHT_PROFILES, extract the configured provider from
-  # `hermes -p <profile> config show` and run `hermes auth status <provider>`.
-  # OAuth tokens (Nous Portal, stepfun, etc.) can be stale while the token file
-  # still exists — this catches expired sessions before decomposition dispatches
-  # workers that will silently exit rc=0 with no output.
+  # For each profile in PREFLIGHT_PROFILES, send a minimal chat query to confirm
+  # the model is reachable. This catches typos in model names and truly expired
+  # tokens — issues that `hermes auth status` misses for proxy-routed providers
+  # (e.g. stepfun via Nous Portal reporting "logged out" when the model is live).
+  # Uses a 15-second timeout; no --yolo required since "say ok" never triggers tools.
+  local MODEL_PING_TIMEOUT="${PREFLIGHT_MODEL_PING_TIMEOUT:-15}"
   local issues=()
   local warnings=()
 
@@ -263,34 +264,28 @@ check_model_reachability() {
     _mr_profile="$(printf '%s' "$_mr_profile" | tr -d '[:space:]"'\''')"
     [[ -z "$_mr_profile" ]] && continue
 
-    local _mr_config_out=""
-    _mr_config_out="$(run_with_timeout "$CHECK_TIMEOUT" hermes -p "$_mr_profile" config show 2>/dev/null || true)"
+    local _mr_out="" _mr_rc=0
+    _mr_out="$(run_with_timeout "$MODEL_PING_TIMEOUT" \
+      hermes -p "$_mr_profile" chat -q "say ok" 2>&1)" \
+      || _mr_rc=$?
 
-    local _mr_provider=""
-    _mr_provider="$(printf '%s' "$_mr_config_out" | grep -oE "'provider': '[^']+'" | head -1 \
-      | sed "s/'provider': '//; s/'$//")"
+    local _mr_lower
+    _mr_lower="$(printf '%s' "$_mr_out" | tr '[:upper:]' '[:lower:]')"
 
-    if [[ -z "$_mr_provider" ]]; then
-      warnings+=("${_mr_profile}: could not determine provider — verify manually")
-      continue
+    if [[ $_mr_rc -eq 0 ]]; then
+      : # model responded within timeout — pass
+    elif printf '%s' "$_mr_lower" | grep -qE \
+        'model not found|no such model|unknown model|invalid model|does not exist|not available'; then
+      issues+=("${_mr_profile}: model name invalid or not found — check profile config")
+    elif printf '%s' "$_mr_lower" | grep -qE \
+        'authentication|unauthorized|401|403|token.*expired|api key'; then
+      issues+=("${_mr_profile}: authentication failed — run: hermes auth add <provider>")
+    elif [[ $_mr_rc -eq 124 ]]; then
+      # exit 124 = timeout(1) timed out
+      warnings+=("${_mr_profile}: model ping timed out after ${MODEL_PING_TIMEOUT}s — may be slow or overloaded")
+    else
+      warnings+=("${_mr_profile}: model ping failed (rc=${_mr_rc}) — verify manually")
     fi
-
-    local _mr_auth_out=""
-    local _mr_auth_rc=0
-    _mr_auth_out="$(run_with_timeout 10 hermes auth status "$_mr_provider" 2>&1)" \
-      || _mr_auth_rc=$?
-
-    local _mr_auth_lower
-    _mr_auth_lower="$(printf '%s' "$_mr_auth_out" | tr '[:upper:]' '[:lower:]')"
-
-    if printf '%s' "$_mr_auth_lower" | grep -qE 'logged out|not logged|expired|invalid|unauthenticated'; then
-      issues+=("${_mr_profile} (${_mr_provider}): auth expired — run: hermes auth add ${_mr_provider}")
-    elif printf '%s' "$_mr_auth_lower" | grep -qE 'logged in|authenticated|valid|active'; then
-      : # pass
-    elif [[ $_mr_auth_rc -ne 0 ]]; then
-      warnings+=("${_mr_profile} (${_mr_provider}): auth status check failed (rc=${_mr_auth_rc}) — verify manually")
-    fi
-    # rc=0 with no negative keywords: API-key or unknown auth — treat as pass
   done
 
   if ((${#issues[@]} > 0)); then
@@ -303,7 +298,7 @@ check_model_reachability() {
     record_check "model_reachability" "degraded" "degraded" "$_mr_joined"
   else
     record_check "model_reachability" "pass" "blocking" \
-      "Model auth verified for profiles (${PREFLIGHT_PROFILES})"
+      "Model ping passed for profiles (${PREFLIGHT_PROFILES})"
   fi
 }
 

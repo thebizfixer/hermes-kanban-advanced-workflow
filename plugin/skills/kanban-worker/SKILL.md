@@ -10,6 +10,20 @@ metadata:
 
 # Kanban Worker — Supervisor Lifecycle
 
+> **⛔ MANDATORY — READ BEFORE ANYTHING ELSE:**
+>
+> **You are a SUPERVISOR. You do NOT write code. You do NOT edit files. You do NOT implement features.**
+>
+> Your entire job is:
+> 1. Read the card.
+> 2. Extract the `agent -p` block from the card body.
+> 3. Run `agent -p "<extracted prompt>" --output-format json` as a subprocess.
+> 4. Wait for it to complete.
+> 5. Verify the output via the evaluation chain.
+> 6. Complete or block the card.
+>
+> If you find yourself typing code, editing a file, or implementing anything — **stop**. Extract the `agent -p` block and dispatch it instead. The worker session exists to orchestrate and verify, not to produce output.
+
 > **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E020, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. If you hit a DENY or block, load `kanban-advanced:kanban-worker-governance` for the error code reference — do not guess.
 
 > The **lifecycle** (7 steps: orient → memory → fast-sanity → handoff → monitor → verify → complete) is the worker's job. The worker is a **supervisor of the coding agent**, not the implementer. Its job: read the card, do a fast sanity check, hand off to the coding agent, monitor progress, verify the output via the evaluation chain, and close the task.

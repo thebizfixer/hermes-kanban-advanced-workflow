@@ -69,26 +69,29 @@ def _read_env(project_root: Path) -> dict:
     return env
 
 
-def _check_model_reachable(provider: str) -> bool | None:
-    """Check provider auth status via `hermes auth status <provider>`.
+def _check_model_reachable(profile: str) -> bool | None:
+    """Ping the model configured for *profile* via a minimal chat query.
 
-    Returns True (logged in), False (logged out / expired), or None (unknown —
-    command not available, provider doesn't use OAuth, or ambiguous output).
-    None is rendered as yellow in the dashboard (configured but unverified).
+    Returns True (model responded), False (model name invalid or auth failed),
+    or None (timed out or ambiguous — yellow in dashboard).
+    No --yolo flag is needed; "say ok" never triggers tool calls.
     """
-    if not provider:
+    if not profile:
         return None
     try:
-        r = _run([HERMES_BIN, "auth", "status", provider], timeout=8)
+        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=20)
         out = (r.stdout + r.stderr).lower()
-        if any(k in out for k in ("logged out", "not logged", "expired", "invalid", "unauthenticated")):
-            return False
-        if any(k in out for k in ("logged in", "authenticated", "valid", "active")):
-            return True
-        # Command succeeded with no negative indicators — treat as reachable.
         if r.returncode == 0:
             return True
-        return False
+        if any(k in out for k in (
+            "model not found", "no such model", "unknown model",
+            "invalid model", "does not exist", "not available",
+            "authentication", "unauthorized", "401", "403",
+            "token", "expired", "api key",
+        )):
+            return False
+        # Non-zero exit with no diagnostic keywords — treat as unknown (yellow).
+        return None
     except Exception:
         return None
 
@@ -123,7 +126,7 @@ def _check_profiles() -> dict:
                 pass
 
             if info["has_model"]:
-                info["model_reachable"] = _check_model_reachable(info["provider"])
+                info["model_reachable"] = _check_model_reachable(profile)
 
         result[profile] = info
     return result
