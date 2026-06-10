@@ -18,6 +18,7 @@ Subcommands:
 import argparse
 import logging
 import re
+import shutil
 import subprocess
 import sys
 import os
@@ -445,6 +446,55 @@ def _handle_init(args) -> int:
     else:
         print(f"   X Skills not found at {skills_src}")
         return 1
+
+    # ── 2b. Seed plugin skills into each dispatched profile ───────────
+    # Named profiles run with their OWN HERMES_HOME, so the dispatcher's
+    # `hermes -p <profile> --skills kanban-worker` resolves skills from
+    # <profile>/skills — NOT the shared home above. `profile create --clone`
+    # copies the default profile's entire skill tree in (including stale
+    # built-in devops/kanban-* skills that shadow the plugin versions).
+    # Wipe inherited skills and seed ONLY the skills relevant to that profile
+    # so each unqualified skill name resolves to the plugin copy by direct
+    # path, and neither profile is confused by the other's skills.
+    _PROFILE_SKILLS: dict[str, set[str]] = {
+        "worker": {
+            "kanban-worker",
+            "kanban-worker-governance",
+        },
+        "orchestrator": {
+            "kanban-advanced",
+            "kanban-cleanup",
+            "kanban-notify",
+            "kanban-orchestrator",
+            "kanban-orchestrator-governance",
+            "kanban-planning",
+            "kanban-postmortem",
+            "kanban-preflight",
+            "kanban-reconciliation",
+        },
+    }
+    print("2b. Seeding plugin skills into dispatched profiles...")
+    for profile, allowed_skills in _PROFILE_SKILLS.items():
+        profile_home = hermes_home / "profiles" / profile
+        if not profile_home.is_dir():
+            print(f"   !  {profile}: profile home not found at {profile_home} — skipping")
+            continue
+        profile_skills = profile_home / "skills"
+        if profile_skills.exists():
+            shutil.rmtree(profile_skills, ignore_errors=True)
+        seeded = 0
+        for child in sorted(skills_src.iterdir()):
+            if child.name not in allowed_skills:
+                continue
+            skill_md = child / "SKILL.md"
+            if child.is_dir() and skill_md.exists():
+                dst_dir = profile_skills / child.name
+                dst_dir.mkdir(parents=True, exist_ok=True)
+                (dst_dir / "SKILL.md").write_text(
+                    skill_md.read_text(encoding="utf-8"), encoding="utf-8"
+                )
+                seeded += 1
+        print(f"   OK {profile}: {seeded} skills seeded {sorted(allowed_skills)}")
 
     # ── 3. Cron scripts + token tracker ───────────────────────────────
     print("3. Provisioning cron scripts + token tracker...")
