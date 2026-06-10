@@ -17,10 +17,15 @@ Load the relevant wiki page for detailed instructions:
 | How do I set this up? | `wiki/setup.md` |
 | How do I configure it? | `wiki/configuration.md` |
 | How does governance work? | `wiki/governance.md` |
+| Why block-on-create / decomposition workflow? | `wiki/decomposition-workflow.md` |
 | Something is broken | `wiki/troubleshooting.md` |
 | How do I handle rate limits? | `wiki/provider-strategy.md` |
 | What's the DMAIC mapping? | `wiki/six-sigma-mapping.md` |
 | Where are upstream docs? | `wiki/external-references.md` |
+
+## Requirements
+
+- Hermes Agent **≥ 0.16.0** (see `wiki/setup.md`)
 
 ## Key commands
 

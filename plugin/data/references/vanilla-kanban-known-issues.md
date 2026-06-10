@@ -17,21 +17,24 @@ Each issue entry includes:
 
 ## Dependency Gating
 
-### Parents don't block child dispatch (#24489)
+### Dispatcher claims `ready` cards before parent links exist (block-on-create required)
 
-**Upstream ref:** [nousresearch/hermes-agent#24489](https://github.com/nousresearch/hermes-agent/issues/24489)
+**Upstream context:** [nousresearch/hermes-agent#16102](https://github.com/NousResearch/hermes-agent/issues/16102) (Kanban RFC) — dispatcher atomically claims `ready` tasks via compare-and-swap; promotion is `todo → ready` when all parents are `done`.
 
-**Symptom:** Cards with parent dependencies dispatch and run before their parents complete. `hermes kanban link` added after creation cannot retroactively prevent dispatch — the dispatcher claims `ready` cards in <1 second.
+**Symptom:** Dependent cards dispatch and run before parent links are established, or before parents complete. `hermes kanban link` added after creation cannot retroactively stop a card the dispatcher already claimed — typically **<1 second** after create.
 
-**Exposure:** Any plan that creates dependent cards as `ready` and links parents afterward.
+**Exposure:** Any plan that creates cards without immediate blocking and links parents afterward.
 
-**Workaround:**
-1. Create all dependent cards with `--triage` (parks them, not `ready`)
-2. Link all parent-child relationships
-3. Unblock dependent cards only after all links are established
-4. For large plans: use the **gate pattern** — create a gate card (blocked), link everything, unblock the gate last
+**Workaround (kanban-advanced standard):**
+1. `hermes kanban create` (lands `ready` in v0.15.x)
+2. **`hermes kanban block <id>` immediately** — same turn, before stagger sleep
+3. Link all parent-child relationships with `hermes kanban link`
+4. Start `auto_unblock.sh` cron (every 1m) — unblocks each card when all parents are `done`
+5. **Gate pattern:** gate card blocked on create; all impl cards link to gate; orchestrator completes gate after `validate_board.sh`; cron releases wave 1
 
-**Detection:** During preflight, check if any `ready` cards have `todo` parents. Flag as degraded.
+**Do NOT use `--triage` as the workaround** when `kanban.auto_decompose=false` (kanban-advanced default) — triage cards never promote. See triage stuck entry below.
+
+**Detection:** `validate_board.sh` check 5; preflight: any `running` card whose parents are not `done`.
 
 ```bash
 # Quick check for cards that dispatched before parents completed
@@ -39,6 +42,43 @@ hermes kanban list | awk '/▶.*ready/ {print $2}' | while read tid; do
   hermes kanban show "$tid" | grep -q 'parents:.*t_' && echo "WARN: $tid has parents but is ready"
 done
 ```
+
+**Agent FAQ:** `wiki/decomposition-workflow.md`
+
+### Running parent blocks child promotion (#24489)
+
+**Upstream ref:** [nousresearch/hermes-agent#24489](https://github.com/NousResearch/hermes-agent/issues/24489)
+
+**Symptom:** Child tasks linked to a parent stay in `todo` forever while the parent is `running`. Dispatcher only promotes `todo → ready` when **all** parents are `done` — a `running` orchestrator parent does not satisfy that check. `link_tasks()` also demotes children linked to non-`done` parents from `ready → todo`.
+
+**Exposure:** Parent-child graphs where the parent orchestrator stays `running` while coordinating children (War Room pattern). Less common in kanban-advanced because root/gate cards are **completed** immediately after decomposition, not left `running`.
+
+**Workaround:**
+1. Complete orchestrator placeholder cards (root, gate) promptly — do not leave them `running` as dependency parents
+2. Use the gate as a `done` dependency root: complete gate after validation to release wave 1
+3. Avoid linking implementation children to a long-lived `running` orchestrator task
+
+**Detection:** `hermes kanban show <child>` shows parent `status: running` while child is `todo` with no dispatch.
+
+### `--initial-status blocked` can race to `ready` (observed)
+
+**Upstream ref:** Not filed upstream as of 2026-06-10. Related reliability surface: [#35986](https://github.com/NousResearch/hermes-agent/issues/35986).
+
+**Symptom:** Card created with `--initial-status blocked` appears in `ready` or is claimed by the dispatcher before dependency links exist.
+
+**Exposure:** Any script or orchestrator using `--initial-status blocked` instead of a separate block call.
+
+**Workaround:** Create normally, then `hermes kanban block <id>` in the same turn. `kanban_decompose.py` uses `block_after=True` (separate block call). Never pass `--initial-status blocked`.
+
+### `hermes kanban block` only applies to `ready` (v0.15.0+)
+
+**Upstream ref:** [Hermes v0.15.x upgrade notes](hermes-v0.15.0-upgrade.md); [kanban docs](https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban).
+
+**Symptom:** `hermes kanban block` fails or no-ops on `todo` or `triage` cards.
+
+**Exposure:** Workflows that try to create in `todo` then block.
+
+**Workaround:** Default create lands `ready` — block immediately. Do not rely on creating in `todo` first.
 
 ### Archived parents silently promote children (#30417 Bug 3)
 
@@ -61,9 +101,35 @@ done
 
 **Exposure:** Whenever `--parents` is used during card creation.
 
-**Workaround:** Never use `--parents`. Always create the card first, then use `hermes kanban link <parent> <child>` separately. Verify with `hermes kanban show <child>` that `parents:` lists the expected IDs.
+**Workaround:** Never use `--parents`. Always create the card first, **block immediately**, then use `hermes kanban link <parent> <child>` separately. Verify with `hermes kanban show <child>` that `parents:` lists the expected IDs.
 
 **Detection:** After any `hermes kanban create --parents`, immediately run `hermes kanban show <child>` and grep for `parents:`. If empty, the flag was ignored — block the card and link manually.
+
+### `kanban.auto_decompose` duplicates manually-created cards (v0.15.0+)
+
+**Upstream ref:** v0.15.0 config default; [umbrella #35986](https://github.com/NousResearch/hermes-agent/issues/35986) Gap 3 (orphaned triage).
+
+**Symptom:** Unexpected stub child cards appear after creating a root or triage card. Manually-created implementation cards duplicate or conflict.
+
+**Exposure:** `kanban.auto_decompose: true` (Hermes default) while using kanban-advanced manual decomposition from an optimized plan.
+
+**Workaround:**
+```bash
+hermes config set kanban.auto_decompose false
+```
+kanban-advanced init sets this automatically. Never run `hermes kanban decompose <root_id>` on pre-optimized plans.
+
+**Detection:** `hermes kanban list` shows cards not present in the plan's Kanban optimization section.
+
+### `--triage` dependent cards stuck when `auto_decompose=false`
+
+**Symptom:** Cards in `triage` never promote. `hermes kanban promote` fails: "promote only applies to 'todo' or 'blocked'."
+
+**Root cause:** Triage exit requires dispatcher + `kanban_decomposer` aux path. With `auto_decompose=false`, nothing promotes triage cards.
+
+**Workaround:** Archive and recreate with block-on-create (see first entry in this section). Never use `--triage` for dependent implementation cards.
+
+**Detection:** Cards stuck in `triage` >5 minutes with `auto_decompose=false` in `hermes config show`.
 
 ---
 
@@ -139,16 +205,25 @@ done
 
 ### Root card `--triage` triggers auto-decomposition
 
-**Symptom:** Creating a root card with `--triage` assigns it to the orchestrator profile. The dispatcher treats it as a work card and spawns an agent that auto-decomposes it into stub children, duplicating manually-created cards.
+**Symptom:** Creating a root card with `--triage` assigns it to the orchestrator profile. With `auto_decompose=true`, the dispatcher spawns decomposer work and produces stub children that duplicate manually-created cards. With `auto_decompose=false`, the root stays stuck in `triage`.
 
 **Exposure:** Using `--triage` on any root/summary card for a manually-decomposed plan.
 
 **Workaround:**
-1. Create the root card without `--triage`
-2. Complete it immediately after all children are created and linked: `hermes kanban complete <root_id> --summary "Root complete — N cards dispatched manually."`
-3. If duplicates appear from auto-decomposition: archive them before they reach `running`
+1. Create the root card **without** `--triage`
+2. Set `kanban.auto_decompose false` before decomposition
+3. Complete root immediately after all children are created and linked: `hermes kanban complete <root_id> --summary "Root complete — N cards dispatched manually."`
+4. If duplicates appear: archive them before they reach `running`
 
-**Detection:** After creating all cards, check `hermes kanban list` for any cards not created by the orchestrator. Archive unexpected cards immediately.
+**Detection:** After creating all cards, check `hermes kanban list` for any cards not in the plan. Archive unexpected cards immediately.
+
+### Gate card is orchestrator-only (not human checkpoint)
+
+**Symptom (misconfiguration):** Operator waits to manually unblock gate; or gate assigned to worker profile → protocol violation loop.
+
+**Design:** Gate is a dependency root for the orchestrator. Workers never execute it. Flow: block on create → link all impl cards to gate → `validate_board.sh` → orchestrator **`complete`** gate (not human unblock) → `auto_unblock.sh` releases wave 1.
+
+**Workaround:** Assign gate to orchestrator profile, no `agent -p` block. Complete after validation. See `wiki/decomposition-workflow.md`.
 
 ---
 
@@ -170,11 +245,14 @@ The preflight script should check for exposure to these issues:
 
 During Step 0d (card body policy validation) and Step 1 (understand the goal):
 
-1. Verify all dependent cards were created `blocked`/`triage`, not `ready`
-2. Confirm all parent-child links via `hermes kanban link`, never `--parents`
-3. Check every card has a unique absolute `worktree:<path>`
-4. Set `max-retries: 2` on every card
-5. Complete the root card immediately after manual decomposition
+1. Verify `kanban.auto_decompose` is `false`
+2. Verify all dependent cards were **blocked immediately after create** (not left `ready`, not `--triage`)
+3. Confirm all parent-child links via `hermes kanban link`, never `--parents`
+4. Check every card has a unique absolute `worktree:<path>`
+5. Complete root immediately; complete gate after `validate_board.sh` (orchestrator-only)
+6. Confirm `auto_unblock` + `board_keeper` crons are running before gate completion
+
+**Agent FAQ:** `wiki/decomposition-workflow.md`
 
 ### Planning (kanban-advanced:kanban-planning)
 
@@ -183,6 +261,13 @@ During the 12-item checklist:
 - Item 9 (same-provider staggering): also verify workspace isolation
 - Item 12 (iteration budget): also verify no card exceeds the retry circuit-breaker threshold
 - New implicit check: every agent-prompt block must target a worktree-isolated card
+- Decomposition method: block-on-create + gate pattern — not `--triage`, not vanilla `hermes kanban decompose`
+
+---
+
+## Upstream umbrella
+
+[hermes-agent#35986](https://github.com/NousResearch/hermes-agent/issues/35986) maps the open Kanban orchestration reliability surface (stale detection defaults, silent blocked cards, orphaned triage, circuit-breaker gaps, subagent supervision). kanban-advanced's block-on-create + cron auto-progression design directly addresses Gaps 2–3 (mechanical unblock, no LLM polling) and complements upstream fixes where they exist.
 
 ---
 
@@ -190,15 +275,20 @@ During the 12-item checklist:
 
 | Date | Issue | Upstream status | Workaround effective? |
 |---|---|---|---|
-| 2026-05-27 | #24489 (parent gating) | Open | Yes — gate pattern |
+| 2026-05-27 | #16102 (RFC — atomic `ready` claim) | Merged / shipped | Yes — block-on-create |
+| 2026-05-27 | #24489 (running parent blocks children) | Open | Yes — complete root/gate promptly |
 | 2026-05-27 | #30417 Bug 3 (archive promotion) | Open | Yes — don't archive parents |
 | 2026-05-27 | Workspace contention | Not filed | Yes — unique worktree paths |
-| 2026-05-27 | `--parents` flag broken | Confirm in #24489 | Yes — use `kanban link` |
-| 2026-05-27 | Root auto-decomposition | May relate to decompose flow | Yes — don't use `--triage` |
+| 2026-05-27 | `--parents` flag broken | Not filed separately | Yes — use `kanban link` |
+| 2026-05-27 | Root auto-decomposition | v0.15 `auto_decompose` | Yes — `auto_decompose false` + no `--triage` |
 | 2026-05-29 | #29320 (no circuit-breaker) | **✅ Resolved (v0.15.0)** — `failure_limit` built-in | N/A (upstream fix) |
 | 2026-05-29 | #30908 (DB corruption) | **⚠️ Mitigated (v0.15.0)** — SQLite hardening | Partially |
 | 2026-05-29 | #30213 (stuck dispatch) | Open — worker visibility endpoints added in v0.15.0 help diagnosis | Yes — show diagnostics |
 | 2026-05-29 | Agent processes survive archive | **✅ Resolved (v0.15.1)** — SIGTERM fix + workspace cleanup | N/A (upstream fix) |
+| 2026-05-31 | #35986 (orchestration umbrella) | Open | Yes — crons + block-on-create |
+| 2026-06-10 | `--initial-status blocked` race | Not filed | Yes — separate `kanban block` call |
+| 2026-06-10 | `--triage` stuck when `auto_decompose=false` | By design interaction | Yes — block-on-create |
+| 2026-06-10 | `kanban block` only on `ready` (v0.15+) | Documented upstream | Yes — block immediately after create |
 
 ## Agent Process Management
 

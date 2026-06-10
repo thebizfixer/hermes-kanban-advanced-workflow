@@ -2,7 +2,7 @@
 
 **How-to guide** — Install the kanban-advanced plugin and bootstrap your project. For a complete walkthrough of the entire lifecycle, see the [tutorial](../tutorial/kanban-advanced-tutorial.md).
 
-**Prerequisites:** Hermes Agent ≥ 0.15.2, Python 3.12+, a coding agent CLI on PATH.
+**Prerequisites:** Hermes Agent ≥ 0.16.0, Python 3.12+, a coding agent CLI on PATH.
 
 ---
 

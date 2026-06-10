@@ -54,7 +54,7 @@ These events are **silent** during walk-away unless the operator opted into comp
 1. **Routine task completions** — worker `kanban_complete` and next-card promotion.
 2. **Single reclaim cycles** — first dispatcher reclaim (~15 min idle); orchestrator heartbeats and retries internally.
 3. **Expected worker heartbeats** — periodic `kanban_heartbeat` notes during agent execution.
-4. **Gate unblock / dependency promotion** — gate card unblocked after same-file links are wired.
+4. **Gate completion / dependency promotion** — orchestrator completes gate card after validate; auto_unblock releases children.
 5. **Worker progress notes** — orchestrator chat summaries while the operator is still present (walk-away cron logs only).
 6. **Final-audit ready** — audit card reaches `ready` (default off; see completion opt-in below).
 7. **Successful auto-retry** — transient block/crash/timeout resolved without operator action.

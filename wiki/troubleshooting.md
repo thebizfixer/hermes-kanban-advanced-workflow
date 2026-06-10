@@ -89,9 +89,25 @@ cd ~/projects/<repo-name>
 
 **Symptom:** Cards created with `--triage` stay in triage status even after parents complete. `hermes kanban promote` fails with "promote only applies to 'todo' or 'blocked'."
 
-**Root cause:** `--triage` status can only be promoted by the dispatcher. If the dispatcher is degraded (SQLite corruption, stuck tick), triage cards are unrecoverable.
+**Root cause:** Triage exit requires the dispatcher + `kanban_decomposer` aux path (`kanban.auto_decompose=true`). kanban-advanced sets `auto_decompose=false` to prevent LLM rewrites of optimized card bodies — so triage cards never promote. This is expected when auto-decompose is off, not only when the dispatcher is degraded. See [umbrella #35986](https://github.com/NousResearch/hermes-agent/issues/35986) Gap 3.
 
-**Fix:** Archive stuck triage cards and recreate using the blocked pattern: create as ready → immediately block → link parents → unblock when parents done. Never use `--triage` for dependent cards.
+**Fix:** Archive stuck triage cards and recreate using **block-on-create**: `hermes kanban create` (lands `ready`) → `hermes kanban block` immediately → link parents → orchestrator completes gate after `validate_board.sh` → `auto_unblock.sh` releases children when parents are `done`. Never use `--triage` for dependent cards. Full rationale: [[decomposition-workflow]].
+
+### "Cards dispatched before parents finished" / "dependency gating bypassed"
+
+**Symptom:** Child cards run while parent cards are still `todo`, `running`, or not yet linked.
+
+**Root cause:** Vanilla dispatcher atomically claims `ready` cards in under a second ([#16102](https://github.com/NousResearch/hermes-agent/issues/16102)). Parent links added after a card is already `ready` (or already claimed) cannot stop dispatch.
+
+**Fix:** Block every card immediately after create, before stagger sleep. Verify with `validate_board.sh` check 5. See [[decomposition-workflow#why-block-on-create-not-triage-not-initial-status-blocked]].
+
+### "`--initial-status blocked` didn't block" / gate auto-promoted
+
+**Symptom:** Card created with `--initial-status blocked` appears in `ready` or dispatches anyway.
+
+**Root cause:** Observed race in production — create-time blocked status can promote before the block is durable. Separate `hermes kanban block` after create is reliable on `ready` cards (v0.15.0+).
+
+**Fix:** Never use `--initial-status blocked`. Use `hermes kanban block <id>` immediately after `hermes kanban create`. See `plugin/data/references/vanilla-kanban-known-issues.md`.
 
 ### "SQLite torn-extend" (kanban.db corruption)
 

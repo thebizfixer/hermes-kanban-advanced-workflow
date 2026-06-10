@@ -74,15 +74,28 @@ Preflight checks (see `kanban-advanced:kanban-preflight`): memory budget, secret
 0. OPTIMIZE plan with operator (kanban-advanced:kanban-planning checklist)
 0b. PREFLIGHT                    bash scripts/preflight.sh — block on fail
 1. USER GATE                     wait for "proceed" / "execute"
-2. CREATE root card in triage    hermes kanban create <plan> --triage
-3. CREATE gate (blocked)         hermes kanban create gate --assignee <orchestrator>
+2. VERIFY DB integrity           PRAGMA integrity_check must return 'ok'
+3. CREATE root card              hermes kanban create "<plan>" --assignee <orchestrator>
+4. CREATE gate, then block       hermes kanban create gate --assignee <orchestrator>
                                  hermes kanban block <gate_id> "Gate — awaiting dependency links"
-4. DECOMPOSE root → children     hermes kanban decompose <root_id>
-5. LINK same-file dependencies   hermes kanban link <parent> <child>
-6. UNBLOCK gate                  hermes kanban unblock <gate_id>
-7. CREATE final-audit card       hermes kanban create "final-audit" --assignee <orchestrator> --parent <last_task>
-8. DISPATCH                      hermes kanban dispatch
+5. CREATE impl cards (staggered) Create each as ready, then immediately block before the
+                                 dispatcher claims it (<1s). Workers → <worker> profile.
+6. CREATE final-audit card       hermes kanban create "Final audit: <plan>" --assignee <orchestrator>
+                                 hermes kanban block <audit_id> "Awaiting parent completion"
+7. COMPLETE root immediately     hermes kanban complete <root_id> --summary "Root complete."
+8. LINK all dependencies         hermes kanban link <parent> <child>
+                                 (gate → impl; wave/ordinal parents; impl → audit)
+9. CREATE crons                  auto-unblock (every 1m) + board-keeper (every 3m)
+10. RUN validate_board.sh        full governance gate — block on fail
+11. COMPLETE gate                After validate passes: hermes kanban complete <gate_id>
+                                 (do NOT unblock gate first). auto_unblock cron releases waves.
 ```
+
+> **Do NOT** use `--triage` on the root card or run `hermes kanban decompose` — vanilla
+> auto-decompose rewrites already-optimized card bodies and is disabled
+> (`kanban.auto_decompose=false`). **Do NOT** use `--parent` on create (silently ignored) —
+> link separately. Cards are gated by **block-on-create + auto_unblock**, never by `--triage`
+> (dependent triage cards get stuck) or `--initial-status blocked` (auto-promotes under races).
 
 Every card body must include:
 

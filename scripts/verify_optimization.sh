@@ -217,7 +217,7 @@ else
 fi
 
 # ── 11. Goal-card annotations ─────────────────────────────────────────────
-echo "11. Goal-card annotations (Hermes ≥ 0.15.2 --goal)"
+echo "11. Goal-card annotations (Hermes ≥ 0.16.0 --goal)"
 GOAL_SCRIPT="$SCRIPT_DIR/verify_goal_cards.py"
 if [[ -f "$GOAL_SCRIPT" ]]; then
     if python3 "$GOAL_SCRIPT" --plan "$PLAN" 2>&1; then

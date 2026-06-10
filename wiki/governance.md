@@ -4,6 +4,17 @@
 
 The kanban-advanced plugin uses deterministic gates — not prompt-level instructions — to prevent governance violations. A worker CANNOT skip verification. An orchestrator CANNOT skip preflight. Cards CANNOT dispatch without required fields.
 
+## Decomposition workflow (why block-on-create)
+
+Before the four governance gates run at dispatch time, cards must be created safely on the vanilla Hermes board. See **[[decomposition-workflow]]** for the full justification agents should use when answering:
+
+- Why cards are **blocked immediately after create** (dispatcher claims `ready` in <1s; parent links cannot retroactively stop a claimed card)
+- Why **`kanban.auto_decompose=false`** (v0.15.0 default would LLM-rewrite optimized plan bodies)
+- Why the **gate card is orchestrator-only** (complete after `validate_board.sh`, not a human approval step)
+- Why we avoid `--triage`, `--parents`, and `--initial-status blocked` on dependent cards
+
+Structural summary: create → block → link → crons → validate → orchestrator completes gate → `auto_unblock.sh` releases waves as parents reach `done`.
+
 ## The four gates
 
 ### 1. Attestation (orchestrator-side)
@@ -35,7 +46,7 @@ Error codes: P001 (missing Files:), P002 (missing agent block), P003 (missing Mo
 
 ### 3. Board validation (orchestrator-side, pre-dispatch)
 
-Before unblocking the gate, the structural board validator checks 10 governance rules:
+Before the orchestrator completes the gate card, the structural board validator checks 10 governance rules:
 ```bash
 bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
 ```
@@ -102,7 +113,7 @@ Before execution, three layers verify crons will actually work:
 |-------|------|--------|
 | `pre_dispatch_gate.sh` | Before decomposition | Scripts exist AND executable (`test -x`), hermes on PATH |
 | Standard Process steps 7–9 | After card creation | Both crons created, both verified running via `cronjob(action="list")` |
-| `validate_board.sh` check 0 | Before unblocking gate | Scripts executable, hermes on PATH with common-install-location fallback, both crons found in `hermes cron list` |
+| `validate_board.sh` check 0 | Before completing gate | Scripts executable, hermes on PATH with common-install-location fallback, both crons found in `hermes cron list` |
 
 **Why hermes PATH matters:** Cron jobs run in a minimal environment. If `hermes` is at `~/.local/bin/hermes` but cron's PATH doesn't include `~/.local/bin`, `auto_unblock.sh` and `board_keeper.sh` will fail silently. The gate checks for this before any cards are dispatched.
 

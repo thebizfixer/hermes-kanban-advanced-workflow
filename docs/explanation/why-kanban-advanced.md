@@ -4,7 +4,7 @@ Vanilla `hermes kanban` gives a board; this plugin adds **governance**: prefligh
 
 ## What it adds
 
-- **Decompose** work into cards with explicit dependencies and profiles.
+- **Decompose** work into cards with explicit dependencies and profiles (block-on-create pattern — see [wiki/decomposition-workflow.md](../../wiki/decomposition-workflow.md) for why vanilla `hermes kanban` needs this).
 - **Gate** dispatch so workers cannot skip verification or files boundaries.
 - **Recover** from known failure modes via registry + scripts.
 - **Stay portable** — neutral canonical skills; project names live in overlay config only.
@@ -37,4 +37,4 @@ If you're unsure, start with `/goal` on a small task. Graduate to vanilla kanban
 | Multi-lane governed delivery | This plugin (default **one-shot** kanban cards) |
 | One stubborn outcome lane | Same board + **`--goal`** on 0–2 cards after Harden (see `kanban-advanced:kanban-planning` skill § Goal-card selection) |
 
-Requires Hermes **≥ 0.15.2** for `--goal`. Goal-mode **enhances** vanilla Hermes; the evaluation chain still gates every completion.
+Requires Hermes **≥ 0.16.0** (tested on 0.16.0). Goal-mode (`--goal`) **enhances** vanilla Hermes; the evaluation chain still gates every completion.

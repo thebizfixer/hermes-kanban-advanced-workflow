@@ -1,6 +1,6 @@
 # Goal-card selection (kanban `--goal`)
 
-When to use Hermes **goal-mode cards** (`hermes kanban create … --goal`) on a **kanban-advanced** board. Requires **Hermes Agent ≥ 0.15.2**.
+When to use Hermes **goal-mode cards** (`hermes kanban create … --goal`) on a **kanban-advanced** board. Requires **Hermes Agent ≥ 0.16.0**.
 
 **Enhance, not replace:** vanilla goal-mode adds a semantic judge loop; this bundle still requires the **evaluation chain** before every `kanban_complete`. See [docs/how-to/goal-cards.md](../docs/how-to/goal-cards.md).
 

@@ -307,10 +307,10 @@ Draft the graph out loud before creating anything:
                                       Full governance gate: cron health (scripts executable + hermes PATH +
                                       crons running), agent blocks, workspace isolation, parent links,
                                       dependency gating, test lines, budget heuristics.
-11. UNBLOCK dependent cards         Unblock cards whose parents are done.
-12. UNBLOCK gate                    Only after validate_board.sh passes.
-13. COMPLETE gate immediately       hermes kanban complete <gate_id> --summary "Gate complete.
+11. COMPLETE gate (orchestrator)    After validate passes: hermes kanban complete <gate_id> --summary "Gate complete.
                                       Auto-unblock cron: <id>, Board keeper cron: <id>."
+                                      Do NOT unblock the gate first — completion marks it done; auto_unblock.sh
+                                      releases wave-1 children on the next cron tick.
 ```
 
 **Auto-progression (mandatory):** LLM orchestrators cannot poll the board autonomously — they only act when prompted. The mechanical work of "check parents → unblock children" and "salvage iteration-limit cards" must be delegated to scripts. The auto-unblock and board keeper crons are created as a mandatory hard gate in Steps 7–9 — crons are created and verified BEFORE validate_board.sh runs (Step 10), so the full governance gate includes cron health. The gate cannot complete until both crons are verified running AND validate_board.sh passes.
@@ -335,7 +335,7 @@ This script finds all blocked cards whose parents are done and unblocks them. It
 
 > **Never use `--triage` on the root card.** This assigns it to the orchestrator profile, which the dispatcher treats as a work card — triggering auto-decomposition into stub children that duplicate your manually-created cards. The root is a summary placeholder, not a work card. Complete it immediately after all children are created and linked.
 
-### Goal-mode cards (vanilla `--goal`, Hermes ≥ 0.15.2)
+### Goal-mode cards (vanilla `--goal`, Hermes ≥ 0.16.0)
 
 Default: **one-shot** worker cards (no `--goal`). Use goal-mode only when the plan marks `goal_card: true` after Harden (see `references/goal-card-selection.md`, scenarios D1–D10). Plan-level cap: `goal_card_budget` (default **2**).
 
@@ -574,7 +574,7 @@ When the operator says **"walk away"**, **"go unattended"**, or equivalent after
 bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 ```
 
-2. **Decompose and dispatch** — Execute the standard process (root → gate → decompose → same-file links → unblock gate). Include the mandatory final-audit card. Do not execute worker tasks yourself.
+2. **Decompose and dispatch** — Execute the standard process (root → gate → block-on-create cards → link → validate → complete gate). Include the mandatory final-audit card. Do not execute worker tasks yourself.
 
 3. **Enable auto-retry** — Walk-away assumes the **Intervention notifications** pipeline is active for every `blocked`, `crashed`, `timed_out`, or `gave_up` event:
    - Pause (`kanban block`) before triage.

@@ -7,11 +7,27 @@
 The orchestrator, worker, kanban board, gateway, and profile system are all Hermes Agent features.
 
 - **Docs:** https://hermes-agent.nousresearch.com/docs
-- **GitHub:** (Hermes Agent repository)
+- **GitHub:** https://github.com/NousResearch/hermes-agent
+- **Kanban feature docs:** https://hermes-agent.nousresearch.com/docs/user-guide/features/kanban
+- **Kanban RFC (status machine, dispatcher):** [#16102](https://github.com/NousResearch/hermes-agent/issues/16102)
 - **Key topics:** profile management, gateway configuration, kanban dispatch, cron scheduling, skill bundles, model/provider setup
 - **Relevant commands:** `hermes --help`, `hermes profile --help`, `hermes kanban --help`, `hermes gateway --help`
 
 **When to refer:** Profile creation issues, gateway not dispatching, model configuration, bundle loading, cron job setup.
+
+### Hermes Kanban — upstream issues kanban-advanced works around
+
+Bundled reference: `plugin/data/references/vanilla-kanban-known-issues.md`. Agent FAQ for **why** our decomposition differs: [[decomposition-workflow]].
+
+| Issue | Topic | kanban-advanced response |
+|-------|-------|--------------------------|
+| [#16102](https://github.com/NousResearch/hermes-agent/issues/16102) | Kanban RFC — `todo→ready` when parents `done`; atomic `ready` claim | Block-on-create before linking |
+| [#24489](https://github.com/NousResearch/hermes-agent/issues/24489) | Running parent blocks child `todo→ready` promotion | Complete root/gate promptly; don't leave orchestrator cards `running` as parents |
+| [#30417](https://github.com/NousResearch/hermes-agent/issues/30417) | Archived parent treated as `done` for promotion (Bug 3) | Never archive parents until children complete |
+| [#29320](https://github.com/NousResearch/hermes-agent/issues/29320) | No circuit-breaker on spawn failures | **Resolved v0.15.0** — `kanban.failure_limit` |
+| [#30908](https://github.com/NousResearch/hermes-agent/issues/30908) | SQLite I/O latches dispatch off | **Mitigated v0.15.0** — restart gateway + integrity check |
+| [#30213](https://github.com/NousResearch/hermes-agent/issues/30213) | Stuck `ready` cards, no surfaced reason | `board_keeper.sh`, `hermes kanban show` |
+| [#35986](https://github.com/NousResearch/hermes-agent/issues/35986) | Umbrella: orchestration reliability gaps | Informs cron + block-on-create design |
 
 ## Microsoft Agent Governance Toolkit (AGT)
 

@@ -1,10 +1,10 @@
 # How to use goal-mode cards on an advanced board
 
-Goal-mode is a **vanilla Hermes** feature (≥ 0.15.2). This bundle **enhances** it with preflight, card policy, and the evaluation chain — it does not replace upstream behavior.
+Goal-mode is a **vanilla Hermes** feature (≥ 0.16.0 required by this bundle). This bundle **enhances** it with preflight, card policy, and the evaluation chain — it does not replace upstream behavior.
 
 ## Prerequisites
 
-- Hermes Agent **≥ 0.15.2**
+- Hermes Agent **≥ 0.16.0**
 - `hermes kanban create --help` lists `--goal` and `--goal-max-turns`
 - Kanban-advanced plugin installed (`hermes plugins install thebizfixer/hermes-kanban-advanced-workflow`) and plan **Hardened** with scenario tags
 

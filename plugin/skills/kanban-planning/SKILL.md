@@ -107,7 +107,7 @@ Before planning, check whether the kanban-advanced workflow is even the right to
 | Multi-lane, governed delivery | kanban-advanced (default **one-shot** cards) |
 | One stubborn outcome lane on a board | kanban-advanced + `--goal` on **0–2** cards after Harden (`references/goal-card-selection.md`) |
 
-Requires **Hermes ≥ 0.15.2** for `--goal` on `hermes kanban create`.
+Requires **Hermes ≥ 0.16.0** for `--goal` on `hermes kanban create`.
 
 ## Plan optimization (summary)
 

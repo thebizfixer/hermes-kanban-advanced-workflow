@@ -474,7 +474,7 @@ check_plan_backup() {
 check_hermes_version() {
   if ! command -v hermes >/dev/null 2>&1; then
     record_check "hermes_version" "fail" "blocking" \
-      "hermes CLI not on PATH — install Hermes Agent >= 0.15.1"
+      "hermes CLI not on PATH — install Hermes Agent >= 0.16.0"
     return
   fi
   local ver_line
@@ -483,17 +483,17 @@ check_hermes_version() {
   ver_num="$(printf '%s' "$ver_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)"
   if [[ -z "$ver_num" ]]; then
     record_check "hermes_version" "degraded" "degraded" \
-      "Could not parse hermes --version ($ver_line); confirm >= 0.15.1 manually"
+      "Could not parse hermes --version ($ver_line); confirm >= 0.16.0 manually"
   else
     if python3 -c 'import sys
 parts = [int(x) for x in sys.argv[1].split(".")]
-need = (0, 15, 1)
+need = (0, 16, 0)
 sys.exit(0 if len(parts) >= 3 and tuple(parts[:3]) >= need else 1)' "$ver_num"; then
       record_check "hermes_version" "pass" "blocking" \
-        "Hermes $ver_num >= 0.15.1 ($ver_line)"
+        "Hermes $ver_num >= 0.16.0 ($ver_line)"
     else
       record_check "hermes_version" "fail" "blocking" \
-        "Hermes $ver_num < 0.15.1 required for kanban --goal ($ver_line)"
+        "Hermes $ver_num < 0.16.0 required ($ver_line)"
     fi
   fi
   if hermes kanban create --help 2>/dev/null | grep -q -- '--goal'; then
@@ -501,7 +501,7 @@ sys.exit(0 if len(parts) >= 3 and tuple(parts[:3]) >= need else 1)' "$ver_num"; 
       "hermes kanban create supports --goal"
   else
     record_check "kanban_goal_flag" "fail" "blocking" \
-      "hermes kanban create missing --goal; upgrade to Hermes >= 0.15.1"
+      "hermes kanban create missing --goal; upgrade to Hermes >= 0.16.0"
   fi
 }
 

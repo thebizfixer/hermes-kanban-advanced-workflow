@@ -5,17 +5,27 @@ kanban_decompose.py — Governed card creation from a hardened, optimized plan.
 Reads card definitions from a plan's "Kanban optimization" section and creates
 them on the kanban board in governed order:
 
-  1. Gate card (blocked immediately via --initial-status blocked)
-  2. All implementation cards (TODO)
-  3. Link dependencies: gate → wave parent → ordinal (same-file) parent
-  4. Verify all parent links exist
-  5. Unblock gate (triggers wave-1 promotion via dispatcher)
-  6. Optionally create auto_unblock + board_keeper crons
+  1. Create gate card (ready), then block it immediately (beats the dispatcher)
+  2. Create each implementation card (ready), block it immediately
+  3. Link dependencies: gate → all impl cards; wave_parent → child; ordinal_parent → child
+  4. Link all impl cards → audit card (blocked on create); create + complete root card
+  5. Verify all parent links exist
+  6. Print gate ID and orchestrator next-steps
 
-Cards start as TODO so the dispatcher promotes them when ALL parents complete.
-Cards are only pre-blocked if they have no agent block (orchestrator cards) or
-explicitly request blocked status. Cards move to blocked on failure — never
-pre-emptively for dependency reasons.
+Vanilla hermes creates cards in 'ready' status and the dispatcher claims ready
+cards in under a second. Each card is therefore blocked immediately after
+creation. Dependency gating is driven by auto_unblock.sh (cron, every 1m), which
+unblocks a card only once all its parents are done. Since the gate is a parent of
+every implementation card, completing the gate releases wave 1; later waves
+release as their wave/ordinal parents complete.
+
+The gate card is an orchestrator control card — NOT a human checkpoint.
+The orchestrator runs validate_board.sh, then `hermes kanban complete <gate_id>`
+to release wave 1. Workers never see or interact with the gate card.
+
+Avoid --initial-status blocked (buggy: auto-promotes under race conditions) and
+--triage for dependent cards (only the dispatcher can promote triage; they get
+stuck when auto_decompose is off). Block-on-create is the supported path.
 
 Usage:
     python3 kanban_decompose.py --plan <plan.md> [--dry-run] [--no-crons]
@@ -252,15 +262,23 @@ def extract_id(output: str) -> str | None:
     return m.group(1) if m else None
 
 
-def create_card(card: dict, dry_run: bool = False) -> str | None:
-    """Create a single kanban card. Returns task ID or None."""
+def create_card(card: dict, dry_run: bool = False, block_after: bool = False) -> str | None:
+    """Create a single kanban card. Returns task ID or None.
+
+    Vanilla hermes creates cards in 'ready' status and the dispatcher claims
+    ready cards in under a second. When block_after is True, the card is blocked
+    immediately after creation (before any stagger sleep) to close that race
+    window. Dependency gating is then driven by auto_unblock.sh, which unblocks
+    a card only once all its parents are done.
+    """
     title = card["title"]
     assignee = card["assignee"]
     card_type = card["type"]
     body = card["body"]
 
     if dry_run:
-        print(f"  [DRY-RUN] Would create: {title} (assignee={assignee}, type={card_type})")
+        suffix = " then block" if block_after else ""
+        print(f"  [DRY-RUN] Would create: {title} (assignee={assignee}, type={card_type}){suffix}")
         return f"dryrun_{card['key']}"
 
     # Write body to temp file to avoid shell escaping
@@ -270,10 +288,6 @@ def create_card(card: dict, dry_run: bool = False) -> str | None:
 
     try:
         cmd = ["hermes", "kanban", "create", title, "--assignee", assignee]
-
-        # Gate card: create as blocked
-        if card_type == "gate":
-            cmd.extend(["--initial-status", "blocked"])
 
         # Code-gen cards: add workspace and branch
         if card_type == "code-gen" and card.get("workspace"):
@@ -291,13 +305,20 @@ def create_card(card: dict, dry_run: bool = False) -> str | None:
         err = result.stderr.strip()
 
         task_id = extract_id(out)
-        if task_id:
-            return task_id
-        else:
+        if not task_id:
             print(f"  WARN: Could not extract ID from: {out[:200]}", file=sys.stderr)
             if err:
                 print(f"  stderr: {err[:200]}", file=sys.stderr)
             return None
+
+        # Block immediately to beat the dispatcher (claims 'ready' cards in <1s).
+        if block_after:
+            _, b_err, b_rc = hermes("kanban", "block", task_id,
+                                    "Awaiting dependency gate (auto_unblock when parents done)")
+            if b_rc != 0:
+                print(f"  WARN: block {task_id} failed: {b_err[:200]}", file=sys.stderr)
+                print(f"  WARN: block manually: hermes kanban block {task_id}", file=sys.stderr)
+        return task_id
     finally:
         os.unlink(tmpfile)
 
@@ -430,24 +451,24 @@ def main():
     print(f"\nPlan: {len(all_cards)} cards ({len(impl_cards)} impl, {len(gate_cards)} gate, {len(root_cards)} root)")
     print(f"Mode: {'DRY-RUN' if args.dry_run else 'LIVE'}\n")
 
-    # ── Step 1: Create gate card (blocked) ──
-    print("=== Step 1: Gate card (blocked) ===")
-    gate_id = create_card(gate_card, args.dry_run)
+    # ── Step 1: Create gate card (ready → block immediately) ──
+    print("=== Step 1: Gate card (create → block) ===")
+    gate_id = create_card(gate_card, args.dry_run, block_after=True)
     if not gate_id:
         sys.exit("ERROR: Failed to create gate card")
-    print(f"  Gate: {gate_id} (blocked)")
+    print(f"  Gate: {gate_id} (blocked — orchestrator-only control card)")
     time.sleep(args.stagger_ms / 1000)
 
-    # ── Step 2: Create implementation cards (TODO) ──
-    print(f"\n=== Step 2: {len(impl_cards)} implementation cards (TODO) ===")
+    # ── Step 2: Create implementation cards (blocked on create) ──
+    print(f"\n=== Step 2: {len(impl_cards)} implementation cards (create → block) ===")
     card_ids: dict[str, str] = {"gate": gate_id}
 
     created = 1  # gate counts as 1
     for card in impl_cards:
-        cid = create_card(card, args.dry_run)
+        cid = create_card(card, args.dry_run, block_after=True)
         if cid:
             card_ids[card["key"]] = cid
-            print(f"  {card['key']}: {cid} (todo)")
+            print(f"  {card['key']}: {cid} (blocked)")
         else:
             print(f"  {card['key']}: FAILED", file=sys.stderr)
         created += 1
@@ -456,17 +477,17 @@ def main():
             print(f"  --- pausing {args.pause_ms}ms ---")
             time.sleep(args.pause_ms / 1000)
 
-    # Also create root card if present
+    # Also create root card if present (not blocked — completed below)
     for root_card in root_cards:
-        rid = create_card(root_card, args.dry_run)
+        rid = create_card(root_card, args.dry_run, block_after=False)
         if rid:
             card_ids[root_card["key"]] = rid
             print(f"  {root_card['key']}: {rid} (root)")
         time.sleep(args.stagger_ms / 1000)
 
-    # Also create audit card
+    # Also create audit card (blocked on create — gates on all impl cards)
     for audit in audit_cards:
-        aid = create_card(audit, args.dry_run)
+        aid = create_card(audit, args.dry_run, block_after=True)
         if aid:
             card_ids[audit["key"]] = aid
             print(f"  audit: {aid} (blocked)")
@@ -525,9 +546,8 @@ def main():
                     if link_cards(child_id, audit_id, args.dry_run):
                         seen_links.add(link_key)
                         links_created += 1
-        if not args.dry_run:
-            hermes("kanban", "block", audit_id, "Awaiting all implementation cards completion")
-            print(f"  audit blocked")
+        # audit was already blocked on create; auto_unblock releases it once
+        # every implementation parent is done.
 
     # Complete root card immediately
     root_id = card_ids.get("root")
@@ -544,28 +564,27 @@ def main():
         sys.exit("Dependency verification failed — fix plan and retry")
     print("  All dependencies verified")
 
-    # ── Step 5: Unblock gate ──
-    print(f"\n=== Step 5: Unblock gate ===")
-    if not args.dry_run:
-        out, err, rc = hermes("kanban", "unblock", gate_id)
-        if rc == 0:
-            print(f"  Gate {gate_id} unblocked — wave 1 promotion begins")
-        else:
-            print(f"  WARN: Gate unblock failed: {err}", file=sys.stderr)
-    else:
-        print(f"  [DRY-RUN] Would unblock: {gate_id}")
+    # ── Step 5: Orchestrator next-steps ──
+    print(f"\n=== Step 5: Orchestrator instructions ===")
+    print(f"  Gate {gate_id} is blocked. Board is ready for validation.")
+    print(f"")
+    print(f"  Next steps (orchestrator profile only):")
+    print(f"    1. Run validate_board.sh to confirm all cards and links are correct")
+    print(f"    2. hermes kanban complete {gate_id} --summary \"Board validated. Releasing wave 1.\"")
+    print(f"    3. The dispatcher promotes wave-1 todo cards to ready automatically.")
+    print(f"")
+    print(f"  Do NOT unblock the gate — complete it. Completing triggers wave promotion.")
 
     # ── Step 6: Create crons (optional) ──
     if not args.no_crons and not args.dry_run:
         print(f"\n=== Step 6: Create auto-unblock + board-keeper crons ===")
-        print("  Run: hermes cron create ... ")
         print("  (cron creation requires the cronjob tool — invoke separately)")
     elif args.dry_run:
         print(f"\n=== Step 6: [DRY-RUN] Would create crons ===")
 
     # ── Output ──
     print(f"\n=== Summary ===")
-    print(f"  Gate: {gate_id}")
+    print(f"  Gate: {gate_id} (blocked — complete to release wave 1)")
     print(f"  Cards: {len(card_ids) - 1}")
     if args.json:
         print(json.dumps({"gate": gate_id, "cards": card_ids}, indent=2))

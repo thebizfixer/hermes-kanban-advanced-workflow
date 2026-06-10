@@ -376,6 +376,14 @@ async def init(request: Request):
     )
     output.append("   OK")
 
+    # Kanban config — disable built-in auto-decomposer so triage cards are
+    # not rewritten by Hermes LLM before the orchestrator reviews them.
+    r_ad = _run([HERMES_BIN, "config", "set", "kanban.auto_decompose", "false"])
+    if r_ad.returncode == 0:
+        output.append("   OK kanban.auto_decompose = false")
+    else:
+        output.append("   !  Could not set kanban.auto_decompose — set manually: hermes config set kanban.auto_decompose false")
+
     # Gateway
     gw = _check_gateway()
     if gw["running"]:

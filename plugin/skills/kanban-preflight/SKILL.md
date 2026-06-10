@@ -133,11 +133,11 @@ curl -s -o /dev/null -w "%{http_code}\n" --max-time 5 "${PREFLIGHT_API_URL:-http
 
 ### 3b. Hermes version (`hermes_version`, `kanban_goal_flag`)
 
-**Goal:** Hermes Agent **≥ 0.15.2** with kanban per-card goal mode (`--goal` on `hermes kanban create`).
+**Goal:** Hermes Agent **≥ 0.16.0** with kanban per-card goal mode (`--goal` on `hermes kanban create`).
 
 **Automated:** `preflight.sh` parses `hermes --version` and probes `hermes kanban create --help` for `--goal`.
 
-**Typical fixes:** `hermes update` or reinstall `hermes-agent>=0.15.2`; see `references/hermes-v0.15.0-upgrade.md`.
+**Typical fixes:** `hermes update` or reinstall `hermes-agent>=0.16.0`; see `references/hermes-v0.15.0-upgrade.md`.
 
 ---
 

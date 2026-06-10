@@ -18,7 +18,7 @@ Added checks in v1.1: `test -x` (not just `test -f`) for cron scripts, and herme
 bash hermes-kanban-advanced-workflow/scripts/validate_board.sh [--strict] [--profile advisory|balanced|strict]
 ```
 
-Pre-dispatch structural gate.  Run after card creation and cron provisioning, before unblocking the gate card. 12 checks:
+Pre-dispatch structural gate.  Run after card creation and cron provisioning, before the orchestrator completes the gate card. 12 checks:
 
 | # | Check | What it catches |
 |---|-------|----------------|

@@ -3,7 +3,7 @@
 kanban_card_policy.py — Validate kanban card bodies against policy rules before dispatch.
 
 AGT PolicyEvaluator pattern applied to kanban card body validation.
-Called by orchestrator after all cards are created and linked, before unblocking the gate.
+Called by orchestrator after all cards are created and linked, before completing the gate.
 
 Usage:
     python kanban_card_policy.py <task_id> [--profile balanced]
