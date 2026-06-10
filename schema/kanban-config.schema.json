@@ -20,6 +20,12 @@
       "type": "string",
       "description": "Optional protected deploy branch agents must not push to. When unset, E009 trigger rules are disabled. Substituted as ${trigger_branch} when set."
     },
+    "policy_profile": {
+      "type": "string",
+      "enum": ["advisory", "balanced", "strict"],
+      "description": "Governance enforcement level: advisory (warn), balanced (block, default), strict (block + notify). Written to KANBAN_POLICY_PROFILE in .env.",
+      "default": "balanced"
+    },
     "feature_branch_prefix": {
       "type": "string",
       "description": "Prefix for per-section feature branches.",

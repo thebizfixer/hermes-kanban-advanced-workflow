@@ -23,7 +23,8 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `trigger_branch` | Protected branch agents must not push to (E009 when set) | unset — leave blank to disable |
-| `KANBAN_POLICY_PROFILE` | Card body policy enforcement level | `balanced` |
+| `policy_profile` | Governance enforcement in `kanban-config.yaml` (`advisory` \| `balanced` \| `strict`) | `balanced` |
+| `KANBAN_POLICY_PROFILE` | Runtime mirror of `policy_profile` (written to `.env` at init) | `balanced` |
 | `PREFLIGHT_PROFILES` | Profiles to validate in preflight §5 | `worker,orchestrator` |
 | `PREFLIGHT_MEMORY_MIN_MB` | Blocking memory floor | `1024` |
 | `PREFLIGHT_MEMORY_WARN_MB` | Degraded memory threshold | `2048` |
@@ -63,15 +64,17 @@ The dashboard settings API resolves which repo owns `.hermes/kanban-overrides/ka
 
 Set `KANBAN_PROJECT_ROOT` when you run multiple clones or when the gateway cwd might be the plugin bundle instead of your application.
 
-## Policy profiles
+## Policy profiles (single governance knob)
 
-Set via `KANBAN_POLICY_PROFILE` env var or `--profile` flag on `kanban_card_policy.py`:
+Set at **init** (CLI `hermes kanban-advanced init`, dashboard **Governance profile** dropdown) or edit `policy_profile` in `kanban-config.yaml`. Init writes `KANBAN_POLICY_PROFILE` to `.env` as a runtime mirror. **Source of truth:** `kanban-config.yaml` — resolution order is config → `.env` → `balanced`. Re-run init/update to resync `.env` after hand-editing config.
 
-| Profile | Missing Files: | Missing agent -p | Eval chain fail |
-|---------|---------------|-------------------|-----------------|
-| `advisory` | Warn | Warn | Warn |
-| `balanced` | Block | Block | Block |
-| `strict` | Block + notify | Block + notify | Block + notify |
+| Profile | Card body policy | Evaluation chain | Board / plan gates |
+|---------|------------------|------------------|-------------------|
+| `advisory` | Warn, allow dispatch | Warn, allow complete | Failures downgraded to warnings |
+| `balanced` (default) | Block | Block | Warnings pass with review |
+| `strict` | Block + log intervention | Block + log intervention | Warnings treated as blocking |
+
+Per-run override: `KANBAN_POLICY_PROFILE=strict` or `--profile strict` on `kanban_card_policy.py` / `validate_board.sh` / `verify_optimization.sh`.
 
 ## Profile config
 

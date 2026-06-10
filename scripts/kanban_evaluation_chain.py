@@ -430,7 +430,19 @@ def run_chain(task_id: str, workspace: str, card_body: str,
 
     registry = load_error_registry(registry_path)
     parsed = parse_card_body(card_body)
-    policy_profile = os.environ.get("KANBAN_POLICY_PROFILE", "balanced")
+    _lib = os.path.join(os.path.dirname(__file__), "lib")
+    if _lib not in sys.path:
+        sys.path.insert(0, _lib)
+    from governance_profile import resolve_governance_profile  # noqa: E402
+
+    policy_profile = resolve_governance_profile(repo_root=workspace)
+
+    def _finish_step(ok: bool, err: Optional[str]) -> Tuple[bool, Optional[str]]:
+        if ok:
+            return True, None
+        if policy_profile == "advisory":
+            return True, f"Advisory pass with warnings: {err}"
+        return False, err
 
     # Lattice memory: skip cold-path validation if attractor matches
     memory = {}
@@ -440,18 +452,23 @@ def run_chain(task_id: str, workspace: str, card_body: str,
         if attractor:
             print(f"[chain] Attractor match — {attractor['attractor_hash']} (skipping steps 1,3,4)")
             # Still run steps 2 (unlisted changes), 5 (exact token), 6 (zero-output), churn, 7 (agent output capture)
-            ok, err = step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id)
-            if not ok: return False, err
-            ok, err = step_5_exact_token(token_log, task_id)
-            if not ok: return False, err
-            ok, err = step_7_agent_output_capture(task_id)
-            if not ok: return False, err
-            ok, err = step_6_zero_output(parsed["files"], baseline, workspace)
-            if not ok: return False, err
-            ok, err = step_excessive_churn(parsed["estimated_lines"], baseline, workspace)
-            if not ok: return False, err
-            ok, err = step_8_no_destructive_git(workspace)
-            if not ok: return False, err
+            advisory_notes: list[str] = []
+            for step_fn in (
+                lambda: step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id),
+                lambda: step_5_exact_token(token_log, task_id),
+                lambda: step_7_agent_output_capture(task_id),
+                lambda: step_6_zero_output(parsed["files"], baseline, workspace),
+                lambda: step_excessive_churn(parsed["estimated_lines"], baseline, workspace),
+                lambda: step_8_no_destructive_git(workspace),
+            ):
+                ok, err = step_fn()
+                passed, reason = _finish_step(ok, err)
+                if not passed:
+                    return False, reason or err or "check failed"
+                if reason:
+                    advisory_notes.append(reason)
+            if advisory_notes:
+                return True, "; ".join(advisory_notes)
             return True, "All checks passed (attractor fast-path)"
 
     # Cold path: run all steps
@@ -473,9 +490,15 @@ def run_chain(task_id: str, workspace: str, card_body: str,
         if not passed:
             err_info = registry.get(error_code, {})
             desc = err_info.get("description", error_code)
-            severity = err_info.get("severity", "error")
-            print(f"DENY ({error_code}: {desc})")
-            return False, f"{error_code}: {desc}"
+            reason = f"{error_code}: {desc}"
+            if policy_profile == "advisory":
+                print(f"ADVISORY ({reason}) — would deny under balanced/strict")
+                return True, f"Advisory pass with warnings: {reason}"
+            if policy_profile == "strict":
+                print(f"DENY+NOTIFY ({reason})")
+            else:
+                print(f"DENY ({reason})")
+            return False, reason
         print("ALLOW")
 
     # Save lattice memory entry on success
@@ -539,6 +562,17 @@ if __name__ == "__main__":
     print(f"[chain] Workspace: {args.workspace}")
     print(f"[chain] Baseline: {args.baseline}")
 
+    _lib = os.path.join(os.path.dirname(__file__), "lib")
+    if _lib not in sys.path:
+        sys.path.insert(0, _lib)
+    from governance_profile import (  # noqa: E402
+        emit_strict_notification,
+        resolve_governance_profile,
+        should_notify_operator,
+    )
+
+    profile = resolve_governance_profile(repo_root=args.workspace)
+
     passed, reason = run_chain(
         args.task_id, args.workspace, card_body,
         baseline=args.baseline, token_log=token_log,
@@ -547,11 +581,16 @@ if __name__ == "__main__":
 
     if passed:
         print(f"[chain] ALLOW — {reason}")
-        # Call kanban_complete
         subprocess.run(["hermes", "kanban", "complete", args.task_id, reason])
         sys.exit(0)
     else:
         print(f"[chain] DENY — {reason}")
-        # Call kanban_block
         subprocess.run(["hermes", "kanban", "block", args.task_id, reason])
+        if should_notify_operator(profile):
+            emit_strict_notification(
+                task_id=args.task_id,
+                reason=reason,
+                failure_class="evaluation_chain",
+                repo_root=args.workspace,
+            )
         sys.exit(1)

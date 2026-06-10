@@ -195,7 +195,15 @@ The orchestrator runs `kanban_card_policy.py` with one of three profiles:
 | `balanced` (default) | Block violating cards | Normal operations |
 | `strict` | Block + notify operator via gateway | Walk-away / unattended runs |
 
-Set via `KANBAN_POLICY_PROFILE` env var or `--profile` flag.
+Set at init (CLI or dashboard) as `policy_profile` in `kanban-config.yaml` and `KANBAN_POLICY_PROFILE` in `.env`. Override per-run with `--profile` on `kanban_card_policy.py` or `KANBAN_POLICY_PROFILE` in the shell.
+
+| Gate | `advisory` | `balanced` | `strict` |
+|------|------------|------------|----------|
+| Card body policy | Warn, allow dispatch | Block card | Block + log to `interventions.jsonl` |
+| Evaluation chain | Warn, allow complete | Block task | Block + log to `interventions.jsonl` |
+| Board / plan validation | Failures → warnings | Warnings pass with review | Warnings → block |
+
+Strict profile logs governance blocks to `.hermes/kanban/logs/interventions.jsonl` and bumps the intervention counter. Gateway push still requires `kanban-advanced:kanban-notify` delivery setup.
 
 ## Filesystem coherence
 

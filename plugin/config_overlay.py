@@ -8,6 +8,8 @@ from pathlib import Path
 
 DEFAULT_WORKING_BRANCH = "main"
 DEFAULT_CODING_AGENT = "agent"
+DEFAULT_POLICY_PROFILE = "balanced"
+VALID_POLICY_PROFILES = frozenset({"advisory", "balanced", "strict"})
 
 OVERLAY_REL = Path(".hermes") / "kanban-overrides" / "kanban-config.yaml"
 
@@ -16,6 +18,7 @@ _MANAGED_KEYS = frozenset({
     "schema_version",
     "working_branch",
     "trigger_branch",
+    "policy_profile",
     "orchestrator_profile",
     "worker_profile",
     "preflight_profiles",
@@ -146,6 +149,49 @@ def resolve_branch_settings(
     return wb, tb, preserved
 
 
+def normalize_policy_profile(value: str | None) -> str:
+    if not value:
+        return DEFAULT_POLICY_PROFILE
+    v = value.strip().lower()
+    return v if v in VALID_POLICY_PROFILES else DEFAULT_POLICY_PROFILE
+
+
+def resolve_policy_profile(
+    project_root: Path,
+    *,
+    policy_profile: str | None = None,
+    env: dict[str, str] | None = None,
+) -> str:
+    """Explicit arg > kanban-config.yaml > .env > balanced."""
+    if policy_profile:
+        return normalize_policy_profile(policy_profile)
+    existing = read_overlay_config(overlay_path(project_root))
+    if existing.get("policy_profile"):
+        return normalize_policy_profile(existing["policy_profile"])
+    env = env or {}
+    if env.get("KANBAN_POLICY_PROFILE"):
+        return normalize_policy_profile(env["KANBAN_POLICY_PROFILE"])
+    return DEFAULT_POLICY_PROFILE
+
+
+def sync_project_env(project_root: Path, updates: dict[str, str]) -> None:
+    """Upsert KEY=value lines in project .env."""
+    import re
+
+    env_file = project_root / ".env"
+    content = env_file.read_text(encoding="utf-8") if env_file.is_file() else ""
+    for key, val in updates.items():
+        pattern = rf"^{re.escape(key)}=.*$"
+        line = f"{key}={val}"
+        if re.search(pattern, content, flags=re.MULTILINE):
+            content = re.sub(pattern, line, content, flags=re.MULTILINE)
+        else:
+            if content and not content.endswith("\n"):
+                content += "\n"
+            content += line + "\n"
+    env_file.write_text(content, encoding="utf-8")
+
+
 def resolve_coding_agent(
     project_root: Path,
     *,
@@ -166,6 +212,7 @@ def build_overlay_yaml(
     working_branch: str,
     trigger_branch: str | None,
     coding_agent: str,
+    policy_profile: str = DEFAULT_POLICY_PROFILE,
     bundle_path: Path | str,
     hermes_home: Path | str,
     existing: dict[str, str] | None = None,
@@ -175,6 +222,9 @@ def build_overlay_yaml(
     managed: dict[str, str] = {
         "schema_version": "1.0.0",
         "working_branch": working_branch,
+        "policy_profile": normalize_policy_profile(
+            policy_profile or existing.get("policy_profile")
+        ),
         "orchestrator_profile": existing.get("orchestrator_profile", "orchestrator"),
         "worker_profile": existing.get("worker_profile", "worker"),
         "preflight_profiles": existing.get("preflight_profiles", "worker,orchestrator"),
@@ -190,8 +240,8 @@ def build_overlay_yaml(
     for key, val in managed.items():
         if key == "preflight_profiles":
             lines.append(f'preflight_profiles: "{val}"')
-        elif key == "schema_version":
-            lines.append(f'schema_version: "{val}"')
+        elif key in ("schema_version", "policy_profile"):
+            lines.append(f'{key}: "{val}"')
         else:
             lines.append(f"{key}: {val}")
 

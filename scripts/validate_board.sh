@@ -7,13 +7,24 @@
 # Usage:
 #   bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
 #   bash hermes-kanban-advanced-workflow/scripts/validate_board.sh --strict
+#   bash hermes-kanban-advanced-workflow/scripts/validate_board.sh --profile advisory
+#
+# Profile resolution: --profile / --strict override, then KANBAN_POLICY_PROFILE,
+# then kanban-config.yaml policy_profile (default: balanced).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-MODE="${1:-balanced}"  # balanced | strict
+PROFILE_OVERRIDE=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --strict) PROFILE_OVERRIDE="strict"; shift ;;
+        --profile) PROFILE_OVERRIDE="${2:-}"; shift 2 ;;
+        *) shift ;;
+    esac
+done
 FAILURES=0
 WARNINGS=0
 WORKER_PROFILE="${WORKER_PROFILE:-code-worker}"
@@ -32,6 +43,12 @@ find_repo_root() {
 }
 
 REPO_ROOT="$(find_repo_root)"
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
+# shellcheck source=lib/governance_profile.sh
+source "$SCRIPT_DIR/lib/governance_profile.sh"
+load_governance_profile "$REPO_ROOT" "$PROFILE_OVERRIDE"
+echo "Governance profile: $GOVERNANCE_PROFILE"
 OVERLAY_CONFIG="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
 if [[ -f "$OVERLAY_CONFIG" ]]; then
   _wp="$(grep -E '^worker_profile:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^worker_profile: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
@@ -218,7 +235,7 @@ for tid in $PARENTLESS_CARDS; do
     MAX_RETRIES=$(hermes kanban show "$tid" 2>/dev/null | grep "max-retries:" | head -1 | grep -oP '\d+' || echo "0")
     if [ "$MAX_RETRIES" -gt 2 ] 2>/dev/null || [ "$MAX_RETRIES" -eq 0 ] 2>/dev/null; then
         CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
-        if [ "$MODE" == "strict" ]; then
+        if governance_warnings_block; then
             fail "Card $tid ($CARD_NAME) has max-retries=$MAX_RETRIES (must be ≤2)"
         else
             warn "Card $tid ($CARD_NAME) has max-retries=$MAX_RETRIES (should be ≤2)"
@@ -290,11 +307,14 @@ done
 echo ""
 echo "=== Results: $FAILURES failures, $WARNINGS warnings ==="
 
-if [ "$FAILURES" -gt 0 ]; then
+if [ "$FAILURES" -gt 0 ] && governance_failures_block; then
     red "BLOCKED: $FAILURES structural violation(s). Fix before unblocking gate."
     exit 1
-elif [ "$WARNINGS" -gt 0 ] && [ "$MODE" == "strict" ]; then
-    yellow "BLOCKED (strict mode): $WARNINGS warning(s) treated as blocking."
+elif [ "$FAILURES" -gt 0 ]; then
+    yellow "PASS (advisory): $FAILURES failure(s) downgraded to warnings."
+    exit 0
+elif [ "$WARNINGS" -gt 0 ] && governance_warnings_block; then
+    yellow "BLOCKED (strict profile): $WARNINGS warning(s) treated as blocking."
     exit 1
 elif [ "$WARNINGS" -gt 0 ]; then
     yellow "PASS with $WARNINGS warning(s). Review before proceeding."

@@ -25,6 +25,9 @@ from pathlib import Path
 
 from .config_overlay import (
     build_overlay_yaml,
+    normalize_policy_profile,
+    resolve_policy_profile,
+    sync_project_env,
     normalize_optional_branch,
     overlay_path,
     read_overlay_config,
@@ -82,6 +85,12 @@ def setup_argparse(subparser: argparse.ArgumentParser) -> None:
     init.add_argument("--project-root", default=".", help="Project root directory")
     init.add_argument("--working-branch", default=None, help="Integration branch (default: keep existing config, else git HEAD, else main)")
     init.add_argument("--trigger-branch", default=None, help="Optional protected branch agents must not push to (default: keep existing, else unset)")
+    init.add_argument(
+        "--policy-profile",
+        default=None,
+        choices=["advisory", "balanced", "strict"],
+        help="Governance enforcement: advisory (warn), balanced (default), strict (block+notify)",
+    )
     init.add_argument("--force", action="store_true", help="Skip confirmation prompts")
 
     subparser.set_defaults(func=handle_kanban)
@@ -366,6 +375,36 @@ def _handle_init(args) -> int:
     print(f"   coding_agent_binary: {coding_binary}")
     print("    Workers will use this binary when executing agent-prompt blocks.")
 
+    # ── 1d. Governance policy profile ───────────────────────────────
+    print()
+    print("1d. Governance enforcement level...")
+    print("    | # | Profile  | Behavior                          |")
+    print("    |---|----------|-----------------------------------|")
+    print("    | 1 | balanced | Block violations (default)        |")
+    print("    | 2 | advisory | Warn only — human-supervised      |")
+    print("    | 3 | strict   | Block + notify — walk-away runs   |")
+    print()
+
+    if args.policy_profile:
+        policy_profile = normalize_policy_profile(args.policy_profile)
+    elif existing_config.get("policy_profile") and not force:
+        policy_profile = normalize_policy_profile(existing_config["policy_profile"])
+    elif not force and not existing_config.get("policy_profile"):
+        policy_profile = resolve_policy_profile(project_root)
+        try:
+            pchoice = input(
+                "    Governance profile [1=balanced, 2=advisory, 3=strict, default=1]: "
+            ).strip()
+            policy_map = {"1": "balanced", "2": "advisory", "3": "strict", "": "balanced"}
+            policy_profile = normalize_policy_profile(
+                policy_map.get(pchoice, pchoice or "balanced")
+            )
+        except (EOFError, KeyboardInterrupt):
+            policy_profile = resolve_policy_profile(project_root)
+    else:
+        policy_profile = resolve_policy_profile(project_root)
+    print(f"   policy_profile: {policy_profile}")
+
     # ── 2. Config overlay ────────────────────────────────────────────
     print()
     print("2. Creating config overlay...")
@@ -376,6 +415,7 @@ def _handle_init(args) -> int:
             working_branch=working_branch,
             trigger_branch=trigger_branch,
             coding_agent=coding_binary,
+            policy_profile=policy_profile,
             bundle_path=PLUGIN_ROOT,
             hermes_home=hermes_home,
             existing=existing_config,
@@ -418,19 +458,15 @@ def _handle_init(args) -> int:
             return 1
 
     # ── 4. Env ───────────────────────────────────────────────────────
-    print("4. Setting HERMES_ENABLE_PROJECT_PLUGINS=true...")
-    env_file = project_root / ".env"
-    env_line = "HERMES_ENABLE_PROJECT_PLUGINS=true\n"
-    agent_env_line = f"KANBAN_CODING_AGENT={coding_binary}\n"
-    if env_file.exists():
-        content = env_file.read_text()
-        if "HERMES_ENABLE_PROJECT_PLUGINS" not in content:
-            content += env_line
-        if "KANBAN_CODING_AGENT" not in content:
-            content += agent_env_line
-        env_file.write_text(content)
-    else:
-        env_file.write_text(env_line + agent_env_line + "\n")
+    print("4. Setting project .env (plugins, coding agent, governance profile)...")
+    sync_project_env(
+        project_root,
+        {
+            "HERMES_ENABLE_PROJECT_PLUGINS": "true",
+            "KANBAN_CODING_AGENT": coding_binary,
+            "KANBAN_POLICY_PROFILE": policy_profile,
+        },
+    )
     print("   OK")
 
     # ── 6. Gateway ───────────────────────────────────────────────────
@@ -476,6 +512,7 @@ def _handle_init(args) -> int:
     print(f"  Cron scripts: {cron_dir}")
     print(f"  Profiles: worker, orchestrator")
     print(f"  Coding agent: {coding_binary}")
+    print(f"  Governance profile: {policy_profile}")
     if not gateway_ok:
         print()
         print("  Before your first plan:")

@@ -23,6 +23,7 @@ Returns current initialization state and config values.
   "trigger_branch": "",
   "coding_agent": "agent",
   "coding_agent_binary": "agent",
+  "policy_profile": "balanced",
   "max_turns": 180,
   "profiles": {
     "orchestrator": { "exists": true, "has_model": true, "model": "deepseek-v4-pro" },
@@ -43,7 +44,7 @@ Use `project_root` to confirm the API resolved the correct repo (especially afte
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
 
-**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch` and `trigger_branch` are **preserved from the file** (form defaults are ignored). First-time bootstrap uses `working_branch` from the request, else git upstream / `origin/HEAD` / local `HEAD`, then `main`. `trigger_branch` is optional — omit or send `""` to leave deploy-branch protection disabled. To change branches on an initialized project, use **Update settings**, not Bootstrap.
+**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch`, `trigger_branch`, and `policy_profile` are **preserved from the file** unless the request body includes overrides. First-time bootstrap uses form values. To change settings on an initialized project, prefer **Update settings**; Bootstrap re-runs profile creation and materialization.
 
 **Request:**
 ```json
@@ -51,9 +52,12 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
   "working_branch": "main",
   "trigger_branch": "",
   "coding_agent_binary": "agent",
+  "policy_profile": "balanced",
   "max_turns": 180
 }
 ```
+
+`policy_profile`: `advisory` | `balanced` | `strict` — governance enforcement level (default `balanced`).
 
 **Response:**
 ```json

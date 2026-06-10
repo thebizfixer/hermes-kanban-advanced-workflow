@@ -21,13 +21,15 @@ set -euo pipefail
 
 PLAN=""
 STRICT=false
+PROFILE_OVERRIDE=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANCHOR_SCRIPT="$SCRIPT_DIR/verify_anchors.sh"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --plan) PLAN="$2"; shift 2 ;;
-        --strict) STRICT=true; shift ;;
+        --strict) STRICT=true; PROFILE_OVERRIDE="strict"; shift ;;
+        --profile) PROFILE_OVERRIDE="$2"; shift 2 ;;
         *) echo "Unknown flag: $1"; exit 2 ;;
     esac
 done
@@ -42,6 +44,15 @@ if [[ ! -f "$PLAN" ]]; then
 fi
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
+# shellcheck source=lib/governance_profile.sh
+source "$SCRIPT_DIR/lib/governance_profile.sh"
+load_governance_profile "$REPO_ROOT" "$PROFILE_OVERRIDE"
+if [ "$GOVERNANCE_PROFILE" = "strict" ]; then
+    STRICT=true
+fi
+echo "Governance profile: $GOVERNANCE_PROFILE"
 FAILURES=0
 WARNINGS=0
 PASSES=0
@@ -53,7 +64,16 @@ green()  { echo -e "\033[32m$*\033[0m"; }
 
 check_pass() { green "  ✓ $*"; ((PASSES++)); ((CHECKS_RUN++)); }
 check_warn() { yellow "  ⚠ WARN: $*"; ((WARNINGS++)); ((CHECKS_RUN++)); }
-check_fail() { red "  ✗ FAIL: $*"; ((FAILURES++)); ((CHECKS_RUN++)); }
+check_fail() {
+    if governance_failures_block; then
+        red "  ✗ FAIL: $*"
+        ((FAILURES++))
+    else
+        yellow "  ⚠ ADVISORY: $*"
+        ((WARNINGS++))
+    fi
+    ((CHECKS_RUN++))
+}
 
 echo "=== Plan Optimization Gate: $PLAN ==="
 echo ""
@@ -295,6 +315,8 @@ EXIT_CODE=0
 if [[ $FAILURES -gt 0 ]]; then
     red "BLOCKED: $FAILURES check(s) failed. Fix before declaring 'plan optimized.'"
     EXIT_CODE=1
+elif [[ $FAILURES -eq 0 ]] && ! governance_failures_block && [[ $WARNINGS -gt 0 ]]; then
+    yellow "PASS (advisory): $WARNINGS advisory check(s). Review before decomposition."
 fi
 
 if [[ $WARNINGS -gt 0 ]]; then

@@ -58,6 +58,8 @@ def _validate(data: dict[str, str], schema: dict) -> list[str]:
                 errors.append(f"{key}: expected integer, got {val!r}")
         if "pattern" in spec and not re.fullmatch(spec["pattern"], val):
             errors.append(f"{key}: does not match pattern {spec['pattern']}")
+        if "enum" in spec and val not in spec["enum"]:
+            errors.append(f"{key}: must be one of {spec['enum']}, got {val!r}")
 
     sv = data.get("schema_version")
     if sv and sv not in SUPPORTED_SCHEMA_VERSIONS:

@@ -48,6 +48,12 @@
   function apiInit(data) { return apiFetch("/api/plugins/kanban-advanced/init", { method: "POST", body: JSON.stringify(data) }); }
   function apiUpdate(data) { return apiFetch("/api/plugins/kanban-advanced/update", { method: "POST", body: JSON.stringify(data) }); }
 
+  var POLICY_PROFILES = [
+    { value: "balanced", label: "balanced — block violations (default)" },
+    { value: "advisory", label: "advisory — warn only, human-supervised" },
+    { value: "strict", label: "strict — block + notify, walk-away runs" }
+  ];
+
   var CODING_AGENTS = [
     { value: "agent", label: "agent (Cursor CLI)" },
     { value: "claude", label: "claude (Claude Code)" },
@@ -75,6 +81,7 @@
     var _useState4 = useState("agent"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
     var _useState5 = useState(""), customAgent = _useState5[0], setCustomAgent = _useState5[1];
     var _useState6 = useState(180), maxTurns = _useState6[0], setMaxTurns = _useState6[1];
+    var _useState6b = useState("balanced"), policyProfile = _useState6b[0], setPolicyProfile = _useState6b[1];
     var _useState7 = useState([]), consoleLines = _useState7[0], setConsoleLines = _useState7[1];
     var _useState8 = useState(false), bootstrapping = _useState8[0], setBootstrapping = _useState8[1];
     var _useState9 = useState(false), initialized = _useState9[0], setInitialized = _useState9[1];
@@ -100,6 +107,7 @@
           else { setCodingAgent("__custom__"); setCustomAgent(s.coding_agent); }
         }
         if (s.max_turns) setMaxTurns(s.max_turns);
+        if (s.policy_profile) setPolicyProfile(s.policy_profile);
       }).catch(function (e) {
         setStatus({ error: e.message || "API unreachable" });
       });
@@ -118,7 +126,8 @@
         working_branch: workingBranch.trim() || (status && status.default_working_branch) || "main",
         coding_agent_binary: agent,
         max_turns: parseInt(maxTurns) || 180,
-        trigger_branch: triggerBranch.trim()
+        trigger_branch: triggerBranch.trim(),
+        policy_profile: policyProfile
       };
     }
 
@@ -140,7 +149,7 @@
       setBootstrapping(true);
       setConsoleLines([]);
       var data = getFormData();
-      addLines(["=== Bootstrap starting ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
+      addLines(["=== Bootstrap starting ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
       apiInit(data).then(function (r) {
         if (r.error) {
           addLines(["ERROR: " + r.error], "line-err");
@@ -160,7 +169,7 @@
       setBootstrapping(true);
       setConsoleLines([]);
       var data = getFormData();
-      addLines(["=== Updating settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
+      addLines(["=== Updating settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
       apiUpdate(data).then(function (r) {
         if (r.output) addLines(r.output);
         setBootstrapping(false);
@@ -386,12 +395,25 @@
             )
           ),
 
-          // Orchestrator tuning
+          // Governance + orchestrator tuning
           React.createElement(Card, null,
             React.createElement(CardHeader, null,
-              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Orchestrator Tuning")
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Governance & Tuning")
             ),
             React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Governance profile"),
+                React.createElement("select", {
+                  value: policyProfile,
+                  onChange: function (e) { setPolicyProfile(e.target.value); },
+                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                },
+                  POLICY_PROFILES.map(function (p) {
+                    return React.createElement("option", { key: p.value, value: p.value }, p.label);
+                  })
+                ),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Controls card policy, evaluation chain, and validation gates. Use strict for walk-away execution.")
+              ),
               React.createElement("div", { className: "space-y-1.5" },
                 React.createElement(Label, { className: "text-xs" }, "Max turns"),
                 React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),

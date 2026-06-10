@@ -18,10 +18,13 @@ set -euo pipefail
 
 PLAN=""
 STRICT=false
+PROFILE_OVERRIDE=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --plan) PLAN="$2"; shift 2 ;;
-        --strict) STRICT=true; shift ;;
+        --strict) STRICT=true; PROFILE_OVERRIDE="strict"; shift ;;
+        --profile) PROFILE_OVERRIDE="$2"; shift 2 ;;
         *) echo "Unknown flag: $1"; exit 2 ;;
     esac
 done
@@ -34,6 +37,17 @@ if [[ ! -f "$PLAN" ]]; then
     echo "ERROR: Plan file not found: $PLAN" >&2
     exit 2
 fi
+
+REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
+# shellcheck source=lib/governance_profile.sh
+source "$SCRIPT_DIR/lib/governance_profile.sh"
+load_governance_profile "$REPO_ROOT" "$PROFILE_OVERRIDE"
+if [ "$GOVERNANCE_PROFILE" = "strict" ]; then
+    STRICT=true
+fi
+echo "Governance profile: $GOVERNANCE_PROFILE"
 
 FAILURES=0
 WARNINGS=0
@@ -156,13 +170,17 @@ echo "=== Results: $ANCHORS_FOUND anchors found, $ANCHORS_CHECKED verified, $FAI
 
 EXIT_CODE=0
 if [[ $FAILURES -gt 0 ]]; then
-    red "BLOCKED: $FAILURES anchor(s) could not be verified against HEAD."
-    EXIT_CODE=1
+    if governance_failures_block; then
+        red "BLOCKED: $FAILURES anchor(s) could not be verified against HEAD."
+        EXIT_CODE=1
+    else
+        yellow "PASS (advisory): $FAILURES anchor failure(s) downgraded — review before hardening."
+    fi
 fi
 
 if [[ $WARNINGS -gt 0 ]]; then
-    if [[ "$STRICT" == "true" ]]; then
-        yellow "BLOCKED (strict mode): $WARNINGS warning(s) treated as failures."
+    if governance_warnings_block; then
+        yellow "BLOCKED (strict profile): $WARNINGS warning(s) treated as failures."
         EXIT_CODE=1
     else
         yellow "PASS with $WARNINGS stale anchor warning(s). Re-verify line numbers before hardening."

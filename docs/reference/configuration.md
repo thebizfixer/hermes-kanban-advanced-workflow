@@ -58,7 +58,7 @@ See [wiki/troubleshooting.md](../../wiki/troubleshooting.md) if `working_branch`
 
 ## Policy profiles
 
-`KANBAN_POLICY_PROFILE`: `advisory` | `balanced` | `strict` — see `kanban_card_policy.py`.
+`policy_profile` in `kanban-config.yaml` and `KANBAN_POLICY_PROFILE` in `.env`: `advisory` | `balanced` | `strict`. Set at init (CLI or dashboard). Governs card policy, evaluation chain, and validation scripts. See [wiki/configuration.md](../../wiki/configuration.md) § Policy profiles.
 
 ## Profiles
 

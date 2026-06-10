@@ -112,8 +112,8 @@ You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* 
 ### Reference
 - **[Architecture](docs/reference/architecture.md)** — pipeline stages, package structure
 - **[Interaction Model](docs/reference/interaction-model.md)** — trigger phrases, planning/execution/post-execution flow
-- **[Configuration](docs/reference/configuration.md)** — overlay config variables, dashboard settings UI
-- **[Dashboard](dashboard/API.md)** — settings tab API reference (coding agent, branch, profiles, max turns)
+- **[Configuration](docs/reference/configuration.md)** — overlay config variables, governance profile (`policy_profile`), dashboard settings UI
+- **[Dashboard](dashboard/API.md)** — settings tab API reference (branches, governance profile, coding agent, profiles, max turns)
 - **[Error Codes](docs/reference/error-codes.md)** — full 36-code registry with recovery
 - **[KPIs](docs/reference/kpis.md)** — success rate, token burn, failure-mode distribution
 - **[Personas](docs/reference/personas.md)** — orchestrator/worker roles, worker lifecycle

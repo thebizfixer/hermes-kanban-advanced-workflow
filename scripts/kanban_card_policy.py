@@ -18,7 +18,17 @@ import subprocess
 import sys
 import os
 import yaml
+from pathlib import Path
 from typing import List, Tuple, Optional
+
+_LIB = Path(__file__).resolve().parent / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from governance_profile import (  # noqa: E402
+    emit_strict_notification,
+    resolve_governance_profile,
+    should_notify_operator,
+)
 
 
 # ── Policy loader ──────────────────────────────────────────────────────
@@ -148,8 +158,12 @@ def apply_policy(task_id: str, violations: List[dict], profile: str) -> Tuple[bo
         print(f"BLOCK+NOTIFY: {task_id} — {len(violations)} policy violation(s): {', '.join(violation_codes)}")
         print(f"  {reasons}")
         subprocess.run(["hermes", "kanban", "block", task_id, reasons])
-        # kanban-advanced:kanban-notify integration point: trigger gateway notification
-        # (handled by kanban-advanced:kanban-notify skill when it sees the block event)
+        if should_notify_operator(profile):
+            emit_strict_notification(
+                task_id=task_id,
+                reason=reasons,
+                failure_class="card_body_policy",
+            )
         return False, reasons
 
     return True, None
@@ -167,7 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--policy-path", default="", help="Path to card-body-policy.yaml")
     args = parser.parse_args()
 
-    profile = args.profile or os.environ.get("KANBAN_POLICY_PROFILE", "balanced")
+    profile = resolve_governance_profile(cli_override=args.profile or None)
     policy_path = args.policy_path or os.path.join(
         os.getcwd(), "kanban-workflow", "policies", "card-body-policy.yaml"
     )

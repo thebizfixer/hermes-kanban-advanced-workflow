@@ -52,6 +52,8 @@ REQUIRED_SCRIPTS=(
     verify_goal_cards.py
     verify_optimization.sh
     worktree_audit.sh
+    lib/governance_profile.py
+    lib/governance_profile.sh
 )
 
 for script in "${REQUIRED_SCRIPTS[@]}"; do

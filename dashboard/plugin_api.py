@@ -22,11 +22,14 @@ from plugin.config_overlay import (  # noqa: E402
     build_overlay_yaml,
     detect_default_working_branch,
     normalize_optional_branch,
+    normalize_policy_profile,
     overlay_path,
     read_overlay_config,
     resolve_branch_settings,
     resolve_coding_agent,
+    resolve_policy_profile,
     resolve_project_root,
+    sync_project_env,
 )
 
 logger = logging.getLogger(__name__)
@@ -120,6 +123,7 @@ async def status():
         "trigger_branch": config.get("trigger_branch", ""),
         "coding_agent": coding_agent,
         "coding_agent_binary": coding_agent,
+        "policy_profile": resolve_policy_profile(project_root, env=env),
         "max_turns": _get_max_turns(),
         "profiles": _check_profiles(),
         "gateway": _check_gateway(),
@@ -165,6 +169,15 @@ async def init(request: Request):
     output.append(f"kanban-advanced init -- bootstrapping {project_root}")
     output.append(f"   Working branch: {working_branch}")
     output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
+    if "policy_profile" in body:
+        policy_profile = normalize_policy_profile(body.get("policy_profile"))
+    elif existing_config.get("policy_profile"):
+        policy_profile = normalize_policy_profile(existing_config["policy_profile"])
+        if existing_config:
+            output.append("   Preserved governance profile from existing kanban-config.yaml")
+    else:
+        policy_profile = resolve_policy_profile(project_root, env=env)
+    output.append(f"   Governance profile: {policy_profile}")
     if kept:
         output.append("   Preserved branch settings from existing kanban-config.yaml")
 
@@ -232,6 +245,7 @@ async def init(request: Request):
             working_branch=working_branch,
             trigger_branch=trigger_branch,
             coding_agent=coding_agent,
+            policy_profile=policy_profile,
             bundle_path=plugin_root,
             hermes_home=_hermes_home,
             existing=existing_config,
@@ -268,16 +282,14 @@ async def init(request: Request):
             dst.chmod(0o755)
             output.append(f"   OK {script_name} -> {dst}")
 
-    # Env
-    env_file = project_root / ".env"
-    env_content = ""
-    if env_file.exists():
-        env_content = env_file.read_text()
-    if "HERMES_ENABLE_PROJECT_PLUGINS" not in env_content:
-        env_content += "HERMES_ENABLE_PROJECT_PLUGINS=true\n"
-    if "KANBAN_CODING_AGENT" not in env_content:
-        env_content += f"KANBAN_CODING_AGENT={coding_agent}\n"
-    env_file.write_text(env_content)
+    sync_project_env(
+        project_root,
+        {
+            "HERMES_ENABLE_PROJECT_PLUGINS": "true",
+            "KANBAN_CODING_AGENT": coding_agent,
+            "KANBAN_POLICY_PROFILE": policy_profile,
+        },
+    )
     output.append("   OK")
 
     # Gateway
@@ -315,12 +327,17 @@ async def update(request: Request):
     else:
         trigger_branch = normalize_optional_branch(config.get("trigger_branch"))
     coding_agent = body.get("coding_agent_binary") or config.get("coding_agent_binary") or resolve_coding_agent(project_root, env=env)
+    if "policy_profile" in body:
+        policy_profile = normalize_policy_profile(body.get("policy_profile"))
+    else:
+        policy_profile = resolve_policy_profile(project_root, env=env)
     max_turns = body.get("max_turns", 180)
 
     output = []
     output.append("=== Updating settings ===")
     output.append(f"   Working branch: {working_branch}")
     output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
+    output.append(f"   Governance profile: {policy_profile}")
 
     overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)
@@ -331,6 +348,7 @@ async def update(request: Request):
             working_branch=working_branch,
             trigger_branch=trigger_branch,
             coding_agent=coding_agent,
+            policy_profile=policy_profile,
             bundle_path=plugin_root,
             hermes_home=_hermes_home,
             existing=config,
@@ -339,15 +357,15 @@ async def update(request: Request):
     )
     output.append(f"   OK Updated {config_file}")
 
-    env_file = project_root / ".env"
-    env_content = env_file.read_text() if env_file.exists() else ""
-    for key, val in [("HERMES_ENABLE_PROJECT_PLUGINS", "true"), ("KANBAN_CODING_AGENT", coding_agent)]:
-        if key in env_content:
-            env_content = re.sub(rf"^{key}=.*$", f"{key}={val}", env_content, flags=re.MULTILINE)
-        else:
-            env_content += f"\n{key}={val}\n"
-    env_file.write_text(env_content)
-    output.append(f"   OK Updated .env")
+    sync_project_env(
+        project_root,
+        {
+            "HERMES_ENABLE_PROJECT_PLUGINS": "true",
+            "KANBAN_CODING_AGENT": coding_agent,
+            "KANBAN_POLICY_PROFILE": policy_profile,
+        },
+    )
+    output.append("   OK Updated .env")
 
     current_turns = _get_max_turns()
     if current_turns < max_turns:

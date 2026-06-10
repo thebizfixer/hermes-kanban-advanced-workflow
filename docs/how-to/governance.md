@@ -23,19 +23,24 @@ Deterministic gates — not prompt instructions — block unsafe dispatch. Two c
 4. **Pre-dispatch** — `pre_dispatch_gate.sh` (plan on `${working_branch}`, preflight, memory, DB).
 5. **Worker verification** — inline checks in worker Step 6 (see `kanban-advanced:kanban-worker` skill).
 
-## Policy Profiles
+## Policy profiles (single governance knob)
 
-| Profile              | Missing `Files:`        | Missing `agent -p`      | Evaluation chain fail   |
-| -------------------- | ----------------------- | ----------------------- | ----------------------- |
-| `advisory`           | Warn, continue          | Warn, continue          | Warn, complete anyway   |
-| `balanced` (default) | Block card (P001)       | Block card (P002)       | Block task              |
-| `strict`             | Block + notify operator | Block + notify operator | Block + notify operator |
+One profile controls card body policy, the evaluation chain, and structural/plan validation gates.
 
-Set via `KANBAN_POLICY_PROFILE` env var:
+| Profile | Card body policy | Evaluation chain | Board / plan gates |
+| ------- | ---------------- | ---------------- | ------------------ |
+| `advisory` | Warn, allow dispatch | Warn, allow complete | Failures → warnings |
+| `balanced` (default) | Block (P001–P009) | Block task | Warnings pass with review |
+| `strict` | Block + log intervention | Block + log intervention | Warnings → block |
+
+**Set at init** — CLI (`hermes kanban-advanced init --policy-profile strict`) or dashboard **Governance profile** dropdown. Stored as `policy_profile` in `kanban-config.yaml` and `KANBAN_POLICY_PROFILE` in `.env`.
+
+Per-run override:
 
 ```bash
 export KANBAN_POLICY_PROFILE=strict
-python hermes-kanban-advanced-workflow/scripts/kanban_card_policy.py --all --profile strict
+python hermes-kanban-advanced-workflow/scripts/kanban_card_policy.py --all
+bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
 ```
 
-Full detail: [wiki/governance.md](../../wiki/governance.md).
+Full detail: [wiki/governance.md](../../wiki/governance.md) and [wiki/configuration.md](../../wiki/configuration.md).

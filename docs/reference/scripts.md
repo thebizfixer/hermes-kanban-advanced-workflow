@@ -15,7 +15,7 @@ Added checks in v1.1: `test -x` (not just `test -f`) for cron scripts, and herme
 ## Board validation (`validate_board.sh`)
 
 ```bash
-bash hermes-kanban-advanced-workflow/scripts/validate_board.sh [--strict]
+bash hermes-kanban-advanced-workflow/scripts/validate_board.sh [--strict] [--profile advisory|balanced|strict]
 ```
 
 Pre-dispatch structural gate.  Run after card creation and cron provisioning, before unblocking the gate card. 12 checks:
@@ -149,7 +149,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_card_policy.py --all --pro
 python hermes-kanban-advanced-workflow/scripts/kanban_card_policy.py <task_id>                      # validate one card
 ```
 
-Validates card bodies against `policies/card-body-policy.yaml`. Error codes: P001 (missing Files:), P002 (missing agent block), P003 (missing Mode:), P004 (too many files), P005 (model override in card body). Supports `advisory`/`balanced`/`strict` profiles via `--profile` or `KANBAN_POLICY_PROFILE`.
+Validates card bodies against `policies/card-body-policy.yaml`. Error codes: P001 (missing Files:), P002 (missing agent block), P003 (missing Mode:), P004 (too many files), P005 (model override in card body). Resolves governance profile from `--profile`, `KANBAN_POLICY_PROFILE`, or `kanban-config.yaml` `policy_profile` (default `balanced`).
 
 ## Recovery (`kanban_recover.py`)
 
@@ -191,7 +191,7 @@ Generates 8-section markdown postmortem: execution summary, agent performance, f
 bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh <plan>.md
 ```
 
-Checks plan optimization readiness before decomposition: agent-prompt block count, Files:/Mode: lines, iteration budget estimates, dependency graph presence, line budget computed.
+Checks plan optimization readiness before decomposition: agent-prompt block count, Files:/Mode: lines, iteration budget estimates, dependency graph presence, line budget computed, sequential Card N labeling. Resolves governance profile from config/env; `--strict` or `strict` profile treats warnings as blocking.
 
 ## Commit reachability (`verify_commits_reachable.sh`)
 

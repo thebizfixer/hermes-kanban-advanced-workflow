@@ -143,13 +143,21 @@ Recovery order for cascades: environment → agent → governance infra → veri
 
 ## Changing policy level
 
-```bash
-# Per-run:
-KANBAN_POLICY_PROFILE=strict python hermes-kanban-advanced-workflow/scripts/kanban_card_policy.py --all
+**Persistent (recommended):** set at init or in the dashboard **Governance profile** dropdown. Writes `policy_profile` to `kanban-config.yaml` and `KANBAN_POLICY_PROFILE` to the project `.env`.
 
-# Persistent:
-echo 'export KANBAN_POLICY_PROFILE=strict' >> $HERMES_HOME/.env
+```bash
+hermes kanban-advanced init --policy-profile strict
+# or edit kanban-config.yaml: policy_profile: "strict"
 ```
+
+**Per-run override:**
+
+```bash
+KANBAN_POLICY_PROFILE=strict python hermes-kanban-advanced-workflow/scripts/kanban_card_policy.py --all
+bash hermes-kanban-advanced-workflow/scripts/validate_board.sh --profile strict
+```
+
+The same profile applies to card body policy, the evaluation chain, and board/plan validation gates.
 
 ## Design sources
 
