@@ -58,17 +58,18 @@ Run this during the Optimize stage, after the plan content is hardened. These it
 4. **Files:/Mode: lines present** — Every workstream header declares `Files:` (which files the card touches) and `Mode:` (modify-only, create-only, or any). The evaluation chain verifies these at steps E001 and E002.
 5. **Commit granularity aligned** — One atomic commit per kanban card. Commit messages pre-written in each section's agent block (`Commit:` line).
 6. **Dependency graph drawn** — ASCII-art dependency graph with parent-child link table, parallel dispatch waves, and same-provider serialization noted. The orchestrator uses this to run `hermes kanban link`. A prose "implementation order" sentence is not sufficient — draw the graph.
-7. **Same-provider staggering planned** — Cards on the same provider serialized via parent-child links (or documented as auto-serialized by the dispatcher). See the provider-strategy wiki page for multi-provider fan-out and fallback configuration.
-8. **Line budget computed** — Total net line changes estimated across all cards. No single card exceeds 200 net lines. The `line_budget` field in the frontmatter summarizes the plan total.
-9. **Card granularity verified** — No card bundles more than 2 distinct file-level changes. Cards with 3+ files are split regardless of line count. Same-file cards that touch the same file are serialized via parent-child links.
-10. **Same-file merge verification** — When a card touches a file that a prior card also modified, the card body MUST include instructions to rebase on the prior card's branch before working. Card 10 removed `_merge_fetch_scope_exhausted` that Card 2 added because Card 10 was created from staging (which didn't have Card 2's commits yet). The dependency graph specified Card 2 → Card 10 parent-child ordering, but the child must still merge the parent's changes. Add to card body: `**Before modifying <file>, rebase on <parent-card-branch>: git fetch origin <parent-branch> && git merge <parent-branch>.**`
-11. **Cross-section contradictions checked** — No two sections modify the same file in conflicting ways. If section A creates function X and section B deletes function X, flag as contradiction. If section A modifies lines 100–200 and section B modifies lines 150–250, flag as overlapping.
-12. **Optimization attestation** — All checklist items recorded in the plan frontmatter under `optimization_checklist` with `status: pass`. The orchestrator's Step 0c reads this for attestation.
-13. **Plan committed and pushed to `${working_branch}`** — The hardened, optimized plan is committed to `${working_branch}` and pushed to `origin/${working_branch}`. Workers branch their worktrees from `${working_branch}` and need the full plan file for autonomous troubleshooting. Verify: `git log --oneline -1 -- .agent/plans/<plan>.md` shows a recent commit on `${working_branch}` AND `git fetch origin ${working_branch} --dry-run` confirms the push.
-14. **Card body self-containment verified** — Every agent-prompt block includes inline code for function bodies, types, and constants the worker can't derive from file paths alone. Section references (`§3b`) are acceptable for narrative context but NOT for implementation details. If a card says "implement curiousPresentationComplete per plan §3b", the function body MUST be included in the agent-prompt block. Workers without plan file access will block on "plan detail missing."
-15. **Diff cap present** — Every agent-prompt block over 50 lines includes an explicit scope guard: `"If your diff exceeds 150 lines net, STOP and report what's remaining."` This prevents scope explosion (observed: 1654-line diff on a 91-line card). Smaller cards don't need this.
-16. **Goal-card acceptance encoded** — For each `goal_card: true` workstream: add an **`Acceptance:`** subsection (judge-facing; use template in `references/goal-card-selection.md`); optional `goal_max_turns` in frontmatter (default **20**, must not exceed `goals.max_turns`). Run `python3 hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md` before attestation.
-17. **Executive summary documentation-ready** — For plans that serve double-duty as implementation plans AND documentation artifacts (linked from `docs/` or referenced by other plans), the executive summary must be self-contained: a reader who never opens the evidence matrix must understand the problem, root causes, what's already fixed, what each phase delivers, and target metrics. Anti-pattern: a flat severity table. Required structure: (a) one-sentence opening, (b) root causes table with fix-complexity column, (c) already-shipped items, (d) remediation-at-a-glance phase table, (e) key performance targets in before/after format, (f) closing line with blast radius.
+7. **Card order finalized, then labeled** — **Arrange first, label second.** Use the dependency graph to lock dispatch order (gate → holistic fixes → parallel waves → tests → audit). Only after order is final, write the `## Kanban optimization` section with sequential ordinals `#### Card 1`, `#### Card 2`, … `#### Card N`. Do not label while still reordering. Forbidden in the optimization section: letter labels (A, B, C), draft workstream names (`Workstream 2a`, `WS3`), or non-contiguous numbers (Card 3, Card 6, Card 2). Draft-phase `###` sections may keep descriptive names; **Kanban optimization** is the canonical dispatch sequence. See §Kanban optimization section.
+8. **Same-provider staggering planned** — Cards on the same provider serialized via parent-child links (or documented as auto-serialized by the dispatcher). See the provider-strategy wiki page for multi-provider fan-out and fallback configuration.
+9. **Line budget computed** — Total net line changes estimated across all cards. No single card exceeds 200 net lines. The `line_budget` field in the frontmatter summarizes the plan total.
+10. **Card granularity verified** — No card bundles more than 2 distinct file-level changes. Cards with 3+ files are split regardless of line count. Same-file cards that touch the same file are serialized via parent-child links.
+11. **Same-file merge verification** — When a card touches a file that a prior card also modified, the card body MUST include instructions to rebase on the prior card's branch before working. Card 10 removed `_merge_fetch_scope_exhausted` that Card 2 added because Card 10 was created from staging (which didn't have Card 2's commits yet). The dependency graph specified Card 2 → Card 10 parent-child ordering, but the child must still merge the parent's changes. Add to card body: `**Before modifying <file>, rebase on <parent-card-branch>: git fetch origin <parent-branch> && git merge <parent-branch>.**`
+12. **Cross-section contradictions checked** — No two sections modify the same file in conflicting ways. If section A creates function X and section B deletes function X, flag as contradiction. If section A modifies lines 100–200 and section B modifies lines 150–250, flag as overlapping.
+13. **Optimization attestation** — All checklist items recorded in the plan frontmatter under `optimization_checklist` with `status: pass`. The orchestrator's Step 0c reads this for attestation.
+14. **Plan committed and pushed to `${working_branch}`** — The hardened, optimized plan is committed to `${working_branch}` and pushed to `origin/${working_branch}`. Workers branch their worktrees from `${working_branch}` and need the full plan file for autonomous troubleshooting. Verify: `git log --oneline -1 -- .agent/plans/<plan>.md` shows a recent commit on `${working_branch}` AND `git fetch origin ${working_branch} --dry-run` confirms the push.
+15. **Card body self-containment verified** — Every agent-prompt block includes inline code for function bodies, types, and constants the worker can't derive from file paths alone. Section references (`§3b`) are acceptable for narrative context but NOT for implementation details. If a card says "implement curiousPresentationComplete per plan §3b", the function body MUST be included in the agent-prompt block. Workers without plan file access will block on "plan detail missing."
+16. **Diff cap present** — Every agent-prompt block over 50 lines includes an explicit scope guard: `"If your diff exceeds 150 lines net, STOP and report what's remaining."` This prevents scope explosion (observed: 1654-line diff on a 91-line card). Smaller cards don't need this.
+17. **Goal-card acceptance encoded** — For each `goal_card: true` workstream: add an **`Acceptance:`** subsection (judge-facing; use template in `references/goal-card-selection.md`); optional `goal_max_turns` in frontmatter (default **20**, must not exceed `goals.max_turns`). Run `python3 hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md` before attestation.
+18. **Executive summary documentation-ready** — For plans that serve double-duty as implementation plans AND documentation artifacts (linked from `docs/` or referenced by other plans), the executive summary must be self-contained: a reader who never opens the evidence matrix must understand the problem, root causes, what's already fixed, what each phase delivers, and target metrics. Anti-pattern: a flat severity table. Required structure: (a) one-sentence opening, (b) root causes table with fix-complexity column, (c) already-shipped items, (d) remediation-at-a-glance phase table, (e) key performance targets in before/after format, (f) closing line with blast radius.
 
 ### System-agnostic path convention
 
@@ -278,6 +279,46 @@ The worker's Step 4 extracts this block via regex, executes it, and monitors the
 > **Model selection belongs to the profile, not the card body.** Do NOT add `--model` or `--output-format` flags. The profile's `config.yaml` determines the model. Card body policy P005 blocks cards that attempt to override profile model config.
 ```
 
+## Kanban optimization section (mandatory output)
+
+After the Optimize checklist passes, append (or rewrite) a **`## Kanban optimization`** section. `kanban_decompose.py` reads **only** this section — draft `###` headings elsewhere are not dispatch ordinals.
+
+**Workflow: arrange first, label second**
+
+1. **Arrange** — Order cards by the dependency graph (gate → holistic fixes → parallel waves → tests → audit). Resolve merges and splits before naming.
+2. **Label** — Renumber in that order as `#### Card 1 — <title>`, `#### Card 2 — <title>`, … through `#### Card N`. Integers only, contiguous from 1, no gaps, no out-of-order appearance in the file.
+3. **Cross-reference** — Agent blocks and `wave_parent` / `ordinal_parent` fields use `Card N`, not draft names (`Workstream 2a`, `WS3`, letter labels).
+
+**Forbidden in `## Kanban optimization`:** `#### Card A`, `#### Workstream 3`, `#### WS2b`, or numeric labels that skip or scramble order (e.g. Card 3, Card 6, Card 2, or file order G, C, A).
+
+**Minimal shape:**
+
+```markdown
+## Kanban optimization
+
+### Dependency graph
+…ASCII graph + parent-child table (dispatch order)…
+
+#### Card 1 — Gate (manual)
+plan_id: …
+wave: 1
+…
+
+#### Card 2 — <first implementation card>
+plan_id: …
+files:
+  - path/to/file.py
+mode: modify-only
+wave: 2
+wave_parent: card1
+(agent-prompt fenced block here)
+
+#### Card 3 — <next card in dispatch order>
+…
+```
+
+Run `bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh --plan <plan>.md` — check **15** enforces sequential `Card N` labeling.
+
 ## Decomposition rules the orchestrator will apply
 
 - One section = one card (unless bundled changes touch the same single file)
@@ -302,6 +343,7 @@ The worker's Step 4 extracts this block via regex, executes it, and monitors the
 - **`hermes kanban create --parents` flag is broken.** The `--parents` flag on `kanban create` does not work. Create cards without it, then wire dependencies with `hermes kanban link <parent> <child>` after all cards exist. Verify links with `hermes kanban show <child>`.
 - **Code relocation is not free.** Moving functions between files still consumes agent iterations — reading, copying, verifying imports, removing, re-exporting, testing, committing. Estimate iterations per operation (see Line Budget Analysis) and split accordingly. A 19-function extraction is easily 3+ cards.
 - **Plan lacks holistic vs surgical classification.** When a plan lists all fixes at equal priority without classifying them as holistic (global, few files) vs surgical (complex, cross-cutting), the decomposition can't optimize ordering — holistic fixes should dispatch first because they unblock surgical work and reduce blast radius. Add a classification column to the signal map before optimizing for Kanban.
+- **Labels before order.** Assigning `Card A` / `Workstream 2a` / `WS3` while still reordering produces scrambled dispatch (`G, C, A` or `3, 6, 2`). Finalize execution order in the dependency graph first, then write `## Kanban optimization` with `#### Card 1` … `#### Card N` in that order.
 - **Grep calibration produces false negatives for test discovery.** A single `find . -name 'test_*.py'` won't match `*_test.py`, `tests/`, `spec/`, or non-Python test runners. Before concluding tests are missing, try at least three patterns: `find . \( -name 'test_*' -o -name '*_test.*' -o -name '*_spec.*' \)`, `grep -rl 'def test_'`, and `pytest --collect-only --quiet 2>/dev/null`. A false-negative test report wastes time and erodes trust in the hardening pass.
 
 ## References

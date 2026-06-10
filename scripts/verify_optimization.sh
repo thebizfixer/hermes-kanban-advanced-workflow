@@ -4,8 +4,9 @@
 # Verifies structural checklist items from the planning skill before the
 # orchestrator can declare "plan optimized." Runs as a blocking structural gate.
 #
-# Current scope: 14 checks covering Harden items 1,5,7,9,11,12 and
-# Optimize items 1,2,3,6,7,8,11,15 plus goal-card annotations.
+# Current scope: 15 checks covering Harden items 1,5,7,9,11,12 and
+# Optimize items 1,2,3,6,7,8,11,15,18 plus goal-card annotations and
+# sequential Card N labeling in ## Kanban optimization.
 #
 # Usage:
 #   bash verify_optimization.sh --plan <plan.md>
@@ -248,9 +249,42 @@ DOC_SCORE=0
 if [[ "$DOC_SCORE" -ge 4 ]]; then
     check_pass "Executive summary documentation-ready ($DOC_SCORE/5 patterns)"
 elif [[ "$DOC_SCORE" -ge 2 ]]; then
-    check_warn "Executive summary partially documentation-ready ($DOC_SCORE/5 patterns) — see kanban-planning Optimize item 15"
+    check_warn "Executive summary partially documentation-ready ($DOC_SCORE/5 patterns) — see kanban-planning Optimize item 18"
 else
-    check_warn "Executive summary not documentation-ready ($DOC_SCORE/5 patterns) — flat severity table anti-pattern likely. See kanban-planning Optimize item 15."
+    check_warn "Executive summary not documentation-ready ($DOC_SCORE/5 patterns) — flat severity table anti-pattern likely. See kanban-planning Optimize item 18."
+fi
+
+# ── 15. Kanban optimization — sequential Card N labeling ─────────────────
+echo "15. Kanban optimization — sequential Card N labeling"
+OPT_SECTION=$(awk '/^## Kanban optimization/{p=1; next} p && /^## /{exit} p' "$PLAN")
+if [[ -z "$OPT_SECTION" ]]; then
+    check_fail "No '## Kanban optimization' section — add ordered #### Card 1..N blocks (arrange first, label second)"
+else
+    BAD_LABELS=$(echo "$OPT_SECTION" | grep -cE '^#### (Workstream|WS[0-9 ]|Card [A-Za-z])' || true)
+    if [[ "${BAD_LABELS:-0}" -gt 0 ]]; then
+        check_fail "Kanban optimization uses non-standard headings ($BAD_LABELS) — use #### Card 1, Card 2, … integers only"
+    else
+        mapfile -t APPEAR_ORDER < <(echo "$OPT_SECTION" | grep -oP '^#### Card \K\d+' || true)
+        if [[ ${#APPEAR_ORDER[@]} -eq 0 ]]; then
+            check_fail "Kanban optimization has no '#### Card N' headings"
+        else
+            ORDINAL_FAIL=""
+            expected=1
+            for n in "${APPEAR_ORDER[@]}"; do
+                if [[ "$n" -ne "$expected" ]]; then
+                    ORDINAL_FAIL="expected Card $expected next, found Card $n (arrange cards first, then renumber 1..N in file order)"
+                    break
+                fi
+                ((expected++))
+            done
+            if [[ -n "$ORDINAL_FAIL" ]]; then
+                check_fail "Card ordinals out of sequence: $ORDINAL_FAIL"
+            else
+                last="${APPEAR_ORDER[-1]}"
+                check_pass "Kanban optimization: Card 1..$last sequential (${#APPEAR_ORDER[@]} cards, dispatch order)"
+            fi
+        fi
+    fi
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────
