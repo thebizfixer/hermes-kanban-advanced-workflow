@@ -235,7 +235,11 @@ def _handle_init(args) -> int:
             return False
 
     def _run(cmd: list[str], timeout: int = 15) -> subprocess.CompletedProcess:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return subprocess.run(
+            cmd, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            timeout=timeout,
+        )
 
     # ── 1. Profiles ──────────────────────────────────────────────────
     print("1. Checking profiles...")
@@ -469,6 +473,18 @@ def _handle_init(args) -> int:
     )
     print("   OK")
 
+    # ── 5. Dispatcher config ─────────────────────────────────────────
+    # Disable the built-in auto-decomposer so triage cards are not rewritten
+    # by Hermes' LLM before the orchestrator reviews them, and so a dispatched
+    # orchestrator-handoff card runs the governed decomposition SOP instead of
+    # being LLM-decomposed into stub children.
+    print("5. Configuring dispatcher (kanban.auto_decompose=false)...")
+    r_ad = _run([HERMES_BIN, "config", "set", "kanban.auto_decompose", "false"])
+    if r_ad.returncode == 0:
+        print("   OK kanban.auto_decompose = false")
+    else:
+        print("   !  Could not set kanban.auto_decompose — set manually: hermes config set kanban.auto_decompose false")
+
     # ── 6. Gateway ───────────────────────────────────────────────────
     print("6. Checking gateway...")
     gateway_ok = False
@@ -492,7 +508,9 @@ def _handle_init(args) -> int:
                 print("   Starting gateway (this may take a moment)...")
                 r2 = subprocess.run(
                     [HERMES_BIN, "gateway", "run"],
-                    capture_output=True, text=True, timeout=5
+                    capture_output=True, text=True,
+                    encoding="utf-8", errors="replace",
+                    timeout=5
                 )
                 if r2.returncode == 0:
                     print("   OK Gateway started")

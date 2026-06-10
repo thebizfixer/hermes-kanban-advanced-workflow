@@ -27,7 +27,11 @@ import yaml
 
 
 def run_cmd(cmd: list, timeout: int = 10) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(
+        cmd, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        timeout=timeout,
+    )
 
 
 def profile_has_config(profile_name: str) -> bool:
@@ -42,7 +46,7 @@ def profile_has_config(profile_name: str) -> bool:
                 config_path = os.path.join(profile_dir, "config.yaml")
                 if not os.path.exists(config_path):
                     return False
-                with open(config_path) as f:
+                with open(config_path, encoding="utf-8", errors="replace") as f:
                     content = f.read()
                 if "default:" not in content:
                     return False
@@ -55,7 +59,7 @@ def profile_has_config(profile_name: str) -> bool:
 def count_agent_blocks(plan_path: str) -> int:
     """Count ```agent fenced blocks in a plan file."""
     try:
-        with open(plan_path) as f:
+        with open(plan_path, encoding="utf-8", errors="replace") as f:
             content = f.read()
         return content.count("```agent")
     except Exception:
@@ -153,7 +157,7 @@ def verify_attestation(attestation_dir: str) -> tuple:
         return False, "A001_ATTESTATION_MISSING: No attestation file found. Run kanban_attestation.py first."
 
     try:
-        with open(attestation_path) as f:
+        with open(attestation_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except Exception:
         return False, "A001_ATTESTATION_MISSING: Attestation file corrupted."
@@ -208,7 +212,7 @@ if __name__ == "__main__":
     # Load preflight result
     preflight = {}
     if args.preflight_result and os.path.exists(args.preflight_result):
-        with open(args.preflight_result) as f:
+        with open(args.preflight_result, encoding="utf-8") as f:
             preflight = json.load(f)
 
     # Count agent blocks and goal-card summary
@@ -232,7 +236,7 @@ if __name__ == "__main__":
 
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, "attestation.yaml")
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         yaml.dump(attestation, f, default_flow_style=False, sort_keys=False)
 
     print(f"[attestation] Status: {attestation['status']}")

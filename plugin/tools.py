@@ -29,6 +29,8 @@ def _run_kanban(args: list[str], timeout: int = DEFAULT_TIMEOUT) -> dict:
             cmd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout,
         )
         if result.returncode != 0:

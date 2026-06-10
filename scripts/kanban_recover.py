@@ -51,7 +51,7 @@ def read_trigger_branch(repo_root: Optional[str] = None) -> Optional[str]:
 
 def load_registry(registry_path: str) -> dict:
     try:
-        with open(registry_path) as f:
+        with open(registry_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
             return {c["code"]: c for c in (data.get("codes") or {}).values()}
     except Exception:
@@ -67,7 +67,7 @@ def recovery_state_path(recovery_dir: str) -> str:
 
 def load_recovery_state(recovery_dir: str) -> dict:
     try:
-        with open(recovery_state_path(recovery_dir)) as f:
+        with open(recovery_state_path(recovery_dir), encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {"actions": [], "cascade_events": []}
@@ -75,7 +75,7 @@ def load_recovery_state(recovery_dir: str) -> dict:
 
 def save_recovery_state(recovery_dir: str, state: dict):
     os.makedirs(recovery_dir, exist_ok=True)
-    with open(recovery_state_path(recovery_dir), "w") as f:
+    with open(recovery_state_path(recovery_dir), "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2, default=str)
 
 
@@ -132,7 +132,10 @@ def recover_e006_zero_output(task_id: str, workspace: str, registry: dict):
 def recover_e007_disk_full(task_id: str, workspace: str, registry: dict):
     """E007: Disk full. Block all cards."""
     print("[recover] E007: DISK FULL — blocking all cards on board.")
-    result = subprocess.run(["hermes", "kanban", "list"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["hermes", "kanban", "list"], capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
     for line in result.stdout.split("\n"):
         parts = line.split()
         if parts and parts[0].startswith("t_"):
@@ -162,7 +165,11 @@ def recover_e011_cross_mount(task_id: str, workspace: str, registry: dict):
     print("[recover] E011: Cross-mount filesystem detected.")
     print("[recover] Action: Clone repo to native filesystem and re-run from there.")
     print(f"[recover] Current path: {workspace}")
-    result = subprocess.run(["df", "-P", "."], capture_output=True, text=True, cwd=workspace)
+    result = subprocess.run(
+        ["df", "-P", "."], capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace,
+    )
     print(f"[recover] Filesystem: {result.stdout}")
 
 
@@ -193,7 +200,10 @@ def triage_cascade(recovery_dir: str, registry: dict):
     state = load_recovery_state(recovery_dir)
 
     # 1. Pause all downstream cards
-    result = subprocess.run(["hermes", "kanban", "list"], capture_output=True, text=True)
+    result = subprocess.run(
+        ["hermes", "kanban", "list"], capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+    )
     downstream = []
     for line in result.stdout.split("\n"):
         parts = line.split()

@@ -36,7 +36,7 @@ from governance_profile import (  # noqa: E402
 def load_policy(policy_path: str) -> dict:
     """Load card body policy from YAML. Falls back to built-in minimal policy."""
     try:
-        with open(policy_path) as f:
+        with open(policy_path, encoding="utf-8") as f:
             return yaml.safe_load(f)
     except Exception:
         pass
@@ -58,7 +58,9 @@ def get_card_body(task_id: str) -> str:
     """Retrieve card body via hermes kanban show."""
     result = subprocess.run(
         ["hermes", "kanban", "show", task_id],
-        capture_output=True, text=True, timeout=10
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        timeout=10,
     )
     if result.returncode != 0:
         print(f"ERROR: Cannot retrieve card body for {task_id}: {result.stderr}")
@@ -70,7 +72,9 @@ def get_all_card_ids() -> List[str]:
     """Get all task IDs from the board."""
     result = subprocess.run(
         ["hermes", "kanban", "list"],
-        capture_output=True, text=True, timeout=10
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        timeout=10,
     )
     ids = []
     for line in result.stdout.split("\n"):
@@ -84,6 +88,14 @@ def get_all_card_ids() -> List[str]:
 
 def validate_card(task_id: str, body: str, policy: dict) -> List[dict]:
     """Run all policy rules against a card body. Returns list of violations."""
+    # Governance carve-out: a board-mediated orchestrator-handoff card is an
+    # orchestrator control card (SOP-only, no Files:/Mode:/agent block by design).
+    # It is structurally identified by the `Type: orchestrator-handoff` marker and
+    # is exempt from the worker code-gen body rules (P001/P002/P003), exactly like
+    # gate/root/audit control cards. Do not loosen the general rule — whitelist only
+    # this marker.
+    if "Type: orchestrator-handoff" in body:
+        return []
     violations = []
     for rule in policy.get("rules", []):
         condition = rule.get("condition", "")

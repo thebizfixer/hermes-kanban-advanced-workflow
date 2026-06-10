@@ -75,7 +75,7 @@ def parse_args():
 def parse_yaml_cards(yaml_path: str) -> dict:
     """Parse card definitions from a structured YAML file (preferred format)."""
     import yaml
-    with open(yaml_path) as f:
+    with open(yaml_path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
     if not data or "cards" not in data:
@@ -109,7 +109,7 @@ def parse_yaml_cards(yaml_path: str) -> dict:
 
 def parse_plan(plan_path: str) -> dict:
     """Parse card definitions from a plan's Kanban optimization section."""
-    with open(plan_path) as f:
+    with open(plan_path, encoding="utf-8", errors="replace") as f:
         content = f.read()
 
     # Find the Kanban optimization section (case-insensitive heading match)
@@ -252,7 +252,11 @@ def _extract_field(text: str, pattern: str) -> str | None:
 def hermes(*args, timeout: int = 30) -> tuple[str, str, int]:
     """Run a hermes CLI command."""
     cmd = ["hermes"] + list(args)
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        timeout=timeout,
+    )
     return result.stdout.strip(), result.stderr.strip(), result.returncode
 
 
@@ -282,7 +286,7 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
         return f"dryrun_{card['key']}"
 
     # Write body to temp file to avoid shell escaping
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False, encoding="utf-8") as f:
         f.write(body)
         tmpfile = f.name
 
@@ -296,7 +300,7 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
             cmd.extend(["--branch", card["branch"]])
 
         # Read body from temp file, pass inline (--body-file not supported in all Hermes versions)
-        with open(tmpfile, 'r') as bf:
+        with open(tmpfile, 'r', encoding="utf-8") as bf:
             body_content = bf.read()
         cmd.extend(["--body", body_content])
 

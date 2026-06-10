@@ -34,7 +34,7 @@ from typing import Tuple, Optional, List
 def load_error_registry(registry_path: str) -> dict:
     """Load canonical error codes from registry YAML. Falls back to built-in defaults."""
     try:
-        with open(registry_path) as f:
+        with open(registry_path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
             return {c["code"]: c for c in (data.get("codes") or {}).values()}
     except Exception:
@@ -110,7 +110,7 @@ def _log_scope_violations(task_id: str, files_reverted: list[str], workspace: st
         "count": len(files_reverted),
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
-    with open(log_path, "a") as f:
+    with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, default=str) + "\n")
 
 
@@ -118,7 +118,7 @@ def _log_scope_violations(task_id: str, files_reverted: list[str], workspace: st
 
 def load_lattice_memory(path: str) -> dict:
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {"entries": []}
@@ -126,7 +126,7 @@ def load_lattice_memory(path: str) -> dict:
 
 def save_lattice_memory(path: str, memory: dict) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(memory, f, indent=2, default=str)
 
 
@@ -160,7 +160,9 @@ def step_1_file_compliance(files: List[str], baseline: str, workspace: str) -> T
     """Every file in card Files: must have >0 changes in git diff."""
     result = subprocess.run(
         ["git", "diff", "--stat", f"{baseline}..HEAD"],
-        capture_output=True, text=True, cwd=workspace
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace,
     )
     for f in files:
         if f not in result.stdout:
@@ -172,7 +174,9 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
     """Any modified file not in Files: gets reverted."""
     result = subprocess.run(
         ["git", "diff", "--name-only", f"{baseline}..HEAD"],
-        capture_output=True, text=True, cwd=workspace
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace,
     )
     unlisted = []
     for f in result.stdout.strip().split("\n"):
@@ -183,7 +187,10 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
         revert_failures = []
         for f in unlisted:
             result = subprocess.run(
-                ["git", "checkout", "--", f], capture_output=True, text=True, cwd=workspace
+                ["git", "checkout", "--", f],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                cwd=workspace,
             )
             if result.returncode != 0:
                 revert_failures.append(f)
@@ -196,7 +203,9 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
         # Double-check: verify no unlisted changes remain
         result2 = subprocess.run(
             ["git", "diff", "--name-only", f"{baseline}..HEAD"],
-            capture_output=True, text=True, cwd=workspace
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            cwd=workspace,
         )
         still_unlisted = [
             f.strip() for f in result2.stdout.strip().split("\n")
@@ -221,7 +230,10 @@ def step_3_tests_pass(tests_cmd: str, workspace: str) -> Tuple[bool, Optional[st
     if not tests_cmd:
         return True, None  # No tests specified — allowed for non-code cards
     result = subprocess.run(
-        tests_cmd, shell=True, capture_output=True, text=True, cwd=workspace, timeout=300
+        tests_cmd, shell=True,
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace, timeout=300,
     )
     combined = (result.stdout + result.stderr).lower()
 
@@ -257,7 +269,9 @@ def step_4_commit_match(commit_line: str, workspace: str) -> Tuple[bool, Optiona
         return True, None  # No commit line specified
     result = subprocess.run(
         ["git", "log", "-1", "--format=%s"],
-        capture_output=True, text=True, cwd=workspace
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace
     )
     if commit_line not in result.stdout:
         print(f"[E004] Commit '{result.stdout.strip()}' != expected '{commit_line}'")
@@ -278,7 +292,7 @@ def step_5_exact_token(token_log_path: str, task_id: str) -> Tuple[bool, Optiona
         return False, "E018_TOKEN_NOT_EXACT"
 
     try:
-        with open(token_log_path) as f:
+        with open(token_log_path, encoding="utf-8") as f:
             lines = f.readlines()
     except Exception:
         return False, "E018_TOKEN_NOT_EXACT"
@@ -324,7 +338,7 @@ def step_7_agent_output_capture(task_id: str) -> Tuple[bool, Optional[str]]:
         return False, "E020_AGENT_OUTPUT_UNPARSEABLE"
 
     try:
-        data = json.loads(agent_output_file.read_text())
+        data = json.loads(agent_output_file.read_text(encoding="utf-8"))
         if "usage" not in data:
             print("[E020] agent output missing 'usage' block — agent may have crashed")
             return False, "E020_AGENT_OUTPUT_UNPARSEABLE"
@@ -343,7 +357,9 @@ def step_8_no_destructive_git(workspace: str) -> Tuple[bool, Optional[str]]:
     """
     result = subprocess.run(
         ["git", "reflog", "--format=%gs", "-20"],
-        capture_output=True, text=True, cwd=workspace
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace,
     )
     reflog = result.stdout
 
@@ -377,7 +393,9 @@ def step_6_zero_output(files: List[str], baseline: str, workspace: str) -> Tuple
     """At least one Files: file must have >0 diff."""
     result = subprocess.run(
         ["git", "diff", "--stat", f"{baseline}..HEAD"],
-        capture_output=True, text=True, cwd=workspace
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace,
     )
     any_change = any(f in result.stdout for f in files)
     if not any_change:
@@ -395,7 +413,9 @@ def step_excessive_churn(
     """
     result = subprocess.run(
         ["git", "diff", "--shortstat", f"{baseline}..HEAD"],
-        capture_output=True, text=True, cwd=workspace
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace,
     )
     # Parse "X files changed, Y insertions(+), Z deletions(-)"
     m = re.search(
@@ -548,7 +568,9 @@ if __name__ == "__main__":
         try:
             result = subprocess.run(
                 ["hermes", "kanban", "show", args.task_id],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                timeout=10,
             )
             if result.returncode == 0:
                 card_body = result.stdout

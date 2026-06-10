@@ -78,7 +78,7 @@ def log_token_run(
 
     path = _token_log_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a") as f:
+    with open(path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, sort_keys=True) + "\n")
 
 

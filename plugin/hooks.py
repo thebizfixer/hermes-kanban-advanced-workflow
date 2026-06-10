@@ -63,8 +63,10 @@ def on_session_start(**kwargs: Any) -> None:
                 "[kanban-advanced] Plugin skills available. "
                 "For plan work load kanban-advanced:kanban-planning. "
                 "For full workflow load kanban-advanced:kanban-advanced. "
-                "Execute/decompose needs orchestrator: no in-chat switch — "
-                "user starts `hermes -p orchestrator chat` (see profile-switching.md). "
+                "Execute/decompose needs orchestrator: prefer the board-mediated "
+                "handoff — `python3 scripts/kanban_handoff.py --plan <plan.md>` "
+                "(dispatcher runs the orchestrator). Manual `hermes -p orchestrator "
+                "chat` is the no-gateway fallback (see profile-switching.md). "
                 "Trigger phrases: 'plan this out', 'harden the plan', "
                 "'optimize for kanban', 'execute the plan', "
                 "'do a sanity check'."
@@ -111,7 +113,7 @@ def post_tool_call(tool_name: str = "", args: Any = None, result: str = "",
             "result_snippet": str(result)[:500] if result else None,
         }
 
-        with open(EVENT_LOG, "a") as f:
+        with open(EVENT_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
 
     except Exception as exc:

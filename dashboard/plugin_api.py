@@ -45,7 +45,11 @@ HERMES_BIN = os.environ.get("HERMES_BIN", "hermes")
 
 
 def _run(cmd: list[str], timeout: int = 30, cwd: str | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    return subprocess.run(
+        cmd, capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        timeout=timeout, cwd=cwd,
+    )
 
 
 def _read_config(project_root: Path) -> dict:
@@ -57,7 +61,7 @@ def _read_env(project_root: Path) -> dict:
     if not env_file.exists():
         return {}
     env = {}
-    for line in env_file.read_text().splitlines():
+    for line in env_file.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if "=" in line and not line.startswith("#"):
             key, _, val = line.partition("=")
@@ -479,7 +483,7 @@ async def init(request: Request):
             if child.is_dir() and skill_md.exists():
                 dst_dir = skills_dst / child.name
                 dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(skill_md.read_text())
+                (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
 
@@ -603,7 +607,7 @@ async def save(request: Request):
             if child.is_dir() and skill_md.exists():
                 dst_dir = skills_dst / child.name
                 dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(skill_md.read_text())
+                (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
 
