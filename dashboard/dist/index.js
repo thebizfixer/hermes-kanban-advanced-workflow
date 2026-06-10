@@ -252,31 +252,27 @@
     // ── Render helpers ──
     function profileBadge(info) {
       var inConfig = info && info.exists && info.has_model;
-      var dotStatus, labelText, labelColor;
+      var dotColor, labelText, labelColor;
       if (!inConfig) {
-        // Red: not in hermes config (profile missing or no model set)
-        dotStatus = "err";
+        dotColor = "#ef4444";
         labelText = info && info.exists ? "no model" : "not found";
-        labelColor = "text-red-400";
+        labelColor = "#f87171";
       } else if (info.model_reachable === true) {
-        // Green: auth verified reachable
-        dotStatus = "ok";
+        dotColor = "#22c55e";
         labelText = "reachable (" + (info.model || "?") + ")";
-        labelColor = "text-green-500";
+        labelColor = "#22c55e";
       } else if (info.model_reachable === false) {
-        // Yellow: in config but auth stale / expired
-        dotStatus = "warn";
+        dotColor = "#eab308";
         labelText = "auth stale (" + (info.model || "?") + ")";
-        labelColor = "text-yellow-500";
+        labelColor = "#eab308";
       } else {
-        // Yellow: configured but reachability unknown (API-key provider, no OAuth)
-        dotStatus = "warn";
+        dotColor = "#eab308";
         labelText = "configured (" + (info.model || "?") + ")";
-        labelColor = "text-yellow-500";
+        labelColor = "#eab308";
       }
-      return React.createElement("div", { className: "flex items-center gap-1.5" },
-        React.createElement(StatusDot, { status: dotStatus }),
-        React.createElement("span", { className: "text-xs " + labelColor }, labelText)
+      return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "6px" } },
+        React.createElement("span", { style: { display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: dotColor, flexShrink: 0 } }),
+        React.createElement("span", { style: { fontSize: "12px", color: labelColor } }, labelText)
       );
     }
 
