@@ -198,6 +198,40 @@ export HERMES_KANBAN_CONFIG=/absolute/path/to/your/project/.hermes/kanban-overri
 
 **Verify:** `GET /api/plugins/kanban-advanced/status` includes `project_root` and `config_path` — confirm they point at your app repo, not the plugin install directory.
 
+### Plugin update: "local changes would be overwritten by merge"
+
+The Hermes plugin **install** checkout (`plugin_install_path` from status — typically `$HERMES_HOME/plugins/kanban-advanced`) must stay a clean mirror of upstream. Local edits belong in your **application repo**, not the install tree.
+
+**Dashboard:** **Update Plugin** resets the install dir before pull (all platforms). Check `plugin_local_changes` on status — a non-zero count means drift will be discarded on update.
+
+**Manual recovery** (same commands on Linux, macOS, WSL, and Git Bash on Windows):
+
+```bash
+INSTALL="${HERMES_HOME:-$HOME/.hermes}/plugins/kanban-advanced"
+cd "$INSTALL"
+git status --short
+git reset --hard HEAD
+git clean -fd
+git pull --ff-only || { git fetch origin && git reset --hard origin/main; }
+```
+
+On native Windows CMD/PowerShell, use the same `git` commands with your resolved install path (status API field `plugin_install_path`). WSL and native Windows use **separate** `$HERMES_HOME` trees — run the fix in the environment where your gateway runs.
+
+After pull, restart the gateway so materialized skills/scripts refresh.
+
+### Agent asked to switch to orchestrator but user doesn't know how
+
+Hermes **cannot switch profiles inside an active chat**. `/profile` only shows the current profile ([Slash Commands Reference](https://hermes-agent.nousresearch.com/docs/reference/slash-commands)). Profile switching is a **new session** ([Profiles guide](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)).
+
+```bash
+hermes profile list          # * marks active; discover real names
+hermes -p orchestrator chat  # new orchestrator session (all platforms)
+# or: orchestrator chat      # if profile alias exists
+# or: hermes profile use orchestrator && hermes chat
+```
+
+Then repeat **execute the plan**. Plugin reference: `plugin/data/references/profile-switching.md`.
+
 ## Full error code listing
 
 See `hermes-kanban-advanced-workflow/registry/error-codes.yaml` for all 24 codes with severity, recovery, and retry flags.

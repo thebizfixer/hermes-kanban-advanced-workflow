@@ -180,7 +180,12 @@ Show the user the draft and ask: *"Here's the plan — three scanners that feed 
 
 ## Step 6: Harden the plan
 
-Switch to the orchestrator profile.
+Switch to the orchestrator profile (new session — Hermes has no in-chat profile switch; `/profile` is show-only):
+
+```bash
+hermes profile list
+hermes -p orchestrator chat
+```
 
 **You say:**
 
@@ -192,7 +197,7 @@ When the orchestrator prompts for review, you can accept or iterate. Say "Revise
 
 **Agent says:**
 
-> "Switch to your orchestrator profile and say: 'Harden the plan at `.agent/plans/kanban-health.plan.md`'. The orchestrator will verify everything against your codebase and add any missing test coverage. When it prompts for review, you can accept or ask for changes — say 'Revise the test plan to include integration tests' if something's missing. This loop can run as many times as you want. When you're happy, we'll move to Optimize."
+> "Start an orchestrator session (`hermes -p orchestrator chat`), then say: 'Harden the plan at `.agent/plans/kanban-health.plan.md`'. The orchestrator will verify everything against your codebase and add any missing test coverage. When it prompts for review, you can accept or ask for changes — say 'Revise the test plan to include integration tests' if something's missing. This loop can run as many times as you want. When you're happy, we'll move to Optimize."
 
 ---
 

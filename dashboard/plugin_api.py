@@ -126,6 +126,8 @@ def _resolve_git_executable() -> str | None:
                 (
                     os.path.join(local, "Programs", "Git", "cmd", "git.exe"),
                     os.path.join(local, "Programs", "Git", "bin", "git.exe"),
+                    os.path.join(local, "hermes", "git", "cmd", "git.exe"),
+                    os.path.join(local, "hermes", "git", "bin", "git.exe"),
                 )
             )
     else:
@@ -136,25 +138,118 @@ def _resolve_git_executable() -> str | None:
     return None
 
 
-def _git_behind_count(install_dir: Path, git_exe: str) -> int | None:
-    """Commits the checkout is behind its upstream (after best-effort fetch)."""
+def _git_fetch_origin(install_dir: Path, git_exe: str) -> None:
     try:
         _run([git_exe, "fetch", "origin", "--quiet"], timeout=15, cwd=str(install_dir))
     except Exception:
         pass
 
+
+def _git_resolve_upstream(install_dir: Path, git_exe: str) -> str | None:
+    """First resolvable upstream ref for pull/reset."""
     for upstream in ("@{u}", "origin/main", "origin/master"):
         try:
             r = _run(
-                [git_exe, "rev-list", "--count", f"HEAD..{upstream}"],
+                [git_exe, "rev-parse", "--verify", upstream],
                 timeout=10,
                 cwd=str(install_dir),
             )
-            if r.returncode == 0 and r.stdout.strip().isdigit():
-                return int(r.stdout.strip())
+            if r.returncode == 0 and r.stdout.strip():
+                return upstream
         except Exception:
             continue
     return None
+
+
+def _git_behind_count(install_dir: Path, git_exe: str) -> int | None:
+    """Commits the checkout is behind its upstream (after best-effort fetch)."""
+    _git_fetch_origin(install_dir, git_exe)
+    upstream = _git_resolve_upstream(install_dir, git_exe)
+    if not upstream:
+        return None
+    try:
+        r = _run(
+            [git_exe, "rev-list", "--count", f"HEAD..{upstream}"],
+            timeout=10,
+            cwd=str(install_dir),
+        )
+        if r.returncode == 0 and r.stdout.strip().isdigit():
+            return int(r.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
+def _git_local_change_count(install_dir: Path, git_exe: str) -> int | None:
+    """Count porcelain dirty entries (tracked edits + untracked paths)."""
+    try:
+        r = _run([git_exe, "status", "--porcelain"], timeout=15, cwd=str(install_dir))
+        if r.returncode != 0:
+            return None
+        lines = [ln for ln in (r.stdout or "").splitlines() if ln.strip()]
+        return len(lines)
+    except Exception:
+        return None
+
+
+def _git_discard_local_changes(
+    install_dir: Path, git_exe: str, output: list[str]
+) -> tuple[bool, str | None]:
+    """Reset plugin install to HEAD — read-only upstream mirror on every platform."""
+    r = _run([git_exe, "status", "--porcelain"], timeout=15, cwd=str(install_dir))
+    dirty = (r.stdout or "").strip()
+    if not dirty:
+        return True, None
+
+    lines = dirty.splitlines()
+    output.append(
+        f"   !  Discarding {len(lines)} local change(s) in plugin install "
+        f"(edit your project repo, not {install_dir})"
+    )
+    for line in lines[:5]:
+        output.append(f"      {line}")
+    if len(lines) > 5:
+        output.append(f"      ... and {len(lines) - 5} more")
+
+    reset = _run([git_exe, "reset", "--hard", "HEAD"], timeout=30, cwd=str(install_dir))
+    if reset.returncode != 0:
+        err = (reset.stderr or reset.stdout or "git reset --hard failed").strip()
+        return False, err
+
+    # Untracked files can also block merge on some git versions.
+    _run([git_exe, "clean", "-fd"], timeout=30, cwd=str(install_dir))
+    return True, None
+
+
+def _git_sync_to_upstream(
+    install_dir: Path, git_exe: str, output: list[str]
+) -> tuple[bool, str | None]:
+    """Pull --ff-only, falling back to reset --hard <upstream> if needed."""
+    _git_fetch_origin(install_dir, git_exe)
+    upstream = _git_resolve_upstream(install_dir, git_exe)
+    if not upstream:
+        return False, "Could not resolve upstream (origin/main or tracking branch)"
+
+    ok, err = _git_discard_local_changes(install_dir, git_exe, output)
+    if not ok:
+        return False, err
+
+    r = _run([git_exe, "pull", "--ff-only"], timeout=120, cwd=str(install_dir))
+    if r.stdout.strip():
+        output.append(r.stdout.strip())
+    if r.stderr.strip():
+        output.append(r.stderr.strip())
+    if r.returncode == 0:
+        return True, None
+
+    output.append(f"   !  pull --ff-only failed; resetting to {upstream}")
+    hard = _run([git_exe, "reset", "--hard", upstream], timeout=30, cwd=str(install_dir))
+    if hard.returncode != 0:
+        err = (hard.stderr or hard.stdout or r.stderr or "git reset --hard failed").strip()
+        return False, err
+    if hard.stdout.strip():
+        output.append(hard.stdout.strip())
+    return True, None
 
 
 def _materialize_plugin_assets(plugin_root: Path, hermes_home: Path) -> list[str]:
@@ -199,6 +294,7 @@ def _check_plugin_git_status() -> dict:
         "plugin_up_to_date": None,
         "plugin_behind": None,
         "plugin_update_available": None,
+        "plugin_local_changes": None,
     }
     if not (install_dir / ".git").is_dir():
         return base
@@ -207,6 +303,8 @@ def _check_plugin_git_status() -> dict:
     git_exe = _resolve_git_executable()
     if not git_exe:
         return base
+
+    base["plugin_local_changes"] = _git_local_change_count(install_dir, git_exe)
 
     behind = _git_behind_count(install_dir, git_exe)
     if behind is None:
@@ -543,19 +641,13 @@ async def update_plugin():
         return {"success": True, "unchanged": True, "output": output}
 
     try:
-        r = _run([git_exe, "pull", "--ff-only"], timeout=120, cwd=str(install_dir))
+        ok, err = _git_sync_to_upstream(install_dir, git_exe, output)
     except Exception as exc:
-        logger.exception("plugin update: git pull failed")
+        logger.exception("plugin update: git sync failed")
         return {"success": False, "error": str(exc), "output": output}
 
-    if r.stdout.strip():
-        output.append(r.stdout.strip())
-    if r.stderr.strip():
-        output.append(r.stderr.strip())
-
-    if r.returncode != 0:
-        err = (r.stderr or r.stdout or "git pull failed").strip()
-        return {"success": False, "error": err, "output": output}
+    if not ok:
+        return {"success": False, "error": err or "git sync failed", "output": output}
 
     hermes_home = resolve_hermes_home()
     output.extend(_materialize_plugin_assets(install_dir, hermes_home))

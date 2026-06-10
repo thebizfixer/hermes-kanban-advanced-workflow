@@ -26,10 +26,10 @@ metadata:
 This skill is for the **orchestrator profile only**. If you are NOT running as the orchestrator profile:
 
 - **Planning stage triggers** ("plan this out", "sanity check", "harden", "optimize") — you MAY execute these as any profile. Load `kanban-advanced:kanban-planning`.
-- **Execution stage triggers** ("execute the plan", "proceed", "decompose") — you MUST refuse. Say: *"Execution requires the orchestrator profile. Please switch to the orchestrator profile and say 'execute the plan' again. Current profiles: `hermes profile list`."*
-- **Do not attempt decomposition from a non-orchestrator profile.** Card creation, linking, cron setup, and gate management are orchestrator-only operations. Doing them from another profile bypasses governance (no gate/root/audit cards, no staggering, no crons, wrong assignee discipline).
+- **Execution stage triggers** ("execute the plan", "proceed", "decompose") — you MUST refuse on non-orchestrator profiles. Run `hermes profile list`, show output (`*` = active per [Hermes profile commands](https://hermes-agent.nousresearch.com/docs/reference/profile-commands)), and direct the user to **start a new orchestrator session** — Hermes has **no in-chat profile switch** (`/profile` is show-only). Use: `hermes -p orchestrator chat`, or `orchestrator chat` if aliased, or `hermes profile use orchestrator` then `hermes chat`. Full script: `references/profile-switching.md`.
+- **Do not attempt decomposition from a non-orchestrator profile** (chat session). Card creation, linking, cron setup, and gate management are orchestrator-only operations. Doing them from another profile bypasses governance (no gate/root/audit cards, no staggering, no crons, wrong assignee discipline). Exception: one-shot `hermes -p orchestrator kanban …` via terminal_tool is allowed for individual CLI ops — not for full decomposition SOP.
 
-To detect your profile: check your system prompt for the active profile name, or run `hermes profile list` and note which is marked ◆ (active).
+To detect your profile: check your system prompt for the active profile name, or run `hermes profile list` and note which is marked `*` (active).
 
 ## Role: Orchestrator
 

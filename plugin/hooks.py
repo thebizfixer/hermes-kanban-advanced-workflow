@@ -62,9 +62,9 @@ def on_session_start(**kwargs: Any) -> None:
             skill_hint = (
                 "[kanban-advanced] Plugin skills available. "
                 "For plan work load kanban-advanced:kanban-planning. "
-                "For full workflow load kanban-advanced:kanban-advanced "
-                "(the bridge skill tells you when to switch to the "
-                "orchestrator profile). "
+                "For full workflow load kanban-advanced:kanban-advanced. "
+                "Execute/decompose needs orchestrator: no in-chat switch — "
+                "user starts `hermes -p orchestrator chat` (see profile-switching.md). "
                 "Trigger phrases: 'plan this out', 'harden the plan', "
                 "'optimize for kanban', 'execute the plan', "
                 "'do a sanity check'."

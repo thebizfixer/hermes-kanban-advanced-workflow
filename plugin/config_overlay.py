@@ -100,21 +100,21 @@ def resolve_hermes_home() -> Path:
         if raw:
             return Path(raw).expanduser().resolve()
 
+    # Mirror scripts/lib/hermes_home.sh — data dir only (not %LOCALAPPDATA%/hermes install tree).
     home = Path.home()
-    candidates: list[Path] = []
+    home_hermes = home / ".hermes"
+    userprofile_hermes: Path | None = None
     if os.name == "nt":
-        localappdata = os.environ.get("LOCALAPPDATA", "").strip()
         userprofile = os.environ.get("USERPROFILE", "").strip()
-        if localappdata:
-            candidates.append(Path(localappdata) / "hermes")
         if userprofile:
-            candidates.append(Path(userprofile) / ".hermes")
-    candidates.append(home / ".hermes")
+            userprofile_hermes = Path(userprofile) / ".hermes"
 
-    for candidate in candidates:
-        if candidate.is_dir():
+    for candidate in (home_hermes, userprofile_hermes):
+        if candidate and candidate.is_dir():
             return candidate.resolve()
-    return candidates[0].resolve() if candidates else (home / ".hermes").resolve()
+    if userprofile_hermes is not None:
+        return userprofile_hermes.resolve()
+    return home_hermes.resolve()
 
 
 def resolve_plugin_install_dir(plugin_name: str = DEFAULT_PLUGIN_NAME) -> Path:

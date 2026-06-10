@@ -55,8 +55,17 @@ Only these operations require the orchestrator profile (because the dispatcher m
 - `hermes kanban complete` — card completion
 - `hermes kanban block/unblock/link` — board management
 
-When the user says "execute the plan" and you're not on orchestrator, tell them:
-"I need the orchestrator profile to dispatch cards. Run `hermes -p orchestrator` and I'll pick up from there — the orchestrator hook will auto-load the full SOP."
+When the user says "execute the plan" and you're not on orchestrator:
+
+1. Run `hermes profile list` and show the output (active profile is marked `*`).
+2. Explain: Hermes has **no in-chat profile switch** — `/profile` only **shows** the active profile ([upstream slash commands](https://hermes-agent.nousresearch.com/docs/reference/slash-commands)).
+3. Give the user **one** of these (same on Linux, macOS, Windows, WSL) — they must **start a new session**, then repeat the trigger:
+   - `hermes -p orchestrator chat`
+   - `orchestrator chat` (only if that alias exists on their machine)
+   - `hermes profile use orchestrator` then `hermes chat`
+4. Full reference: `plugin/data/references/profile-switching.md`.
+
+Do **not** say `hermes -p orchestrator` without `chat` — that does not open a session. For one-off CLI only (not full decomposition), the agent may use `hermes -p orchestrator kanban …` via terminal_tool.
 
 ## Quick reference
 

@@ -52,6 +52,7 @@ Returns current initialization state and config values.
 | `plugin_up_to_date` | `true` when behind count is 0; `null` when not checkable |
 | `plugin_behind` | Commits behind upstream; `null` when not checkable |
 | `plugin_update_available` | `true` when `plugin_behind > 0` |
+| `plugin_local_changes` | Porcelain dirty count in `plugin_install_path`; `null` when not checkable |
 
 When `config_exists` is false, the dashboard shows the bootstrap form.
 
@@ -131,6 +132,8 @@ Git-pull the plugin install checkout and refresh materialized skills/scripts und
 ```
 
 When already up to date, `unchanged` is `true` and pull is skipped.
+
+**Local changes in the install dir:** `plugin_install_path` is a read-only mirror of upstream on every platform (Linux, macOS, Windows native, WSL). If `git status` shows local modifications (line-ending drift, editor saves, or edits in the install tree), the update endpoint discards them with `git reset --hard` and `git clean -fd` before pull, then falls back to `git reset --hard <upstream>` if `pull --ff-only` still fails. Edit your **project** repo or fork — not the Hermes plugin install directory.
 
 **Errors:**
 - `"Plugin install is not a git checkout"` — no `.git` in install path
