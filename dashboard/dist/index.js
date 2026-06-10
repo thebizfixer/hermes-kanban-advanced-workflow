@@ -40,14 +40,20 @@
       opts.headers["X-Hermes-Session-Token"] = token;
     }
     return fetch(path, opts).then(function (r) {
-      if (!r.ok) throw new Error("HTTP " + r.status);
-      return r.json();
+      return r.json().catch(function () { return {}; }).then(function (body) {
+        if (!r.ok) {
+          var msg = body.error || body.detail || ("HTTP " + r.status);
+          if (typeof msg !== "string") msg = JSON.stringify(msg);
+          throw new Error(msg);
+        }
+        return body;
+      });
     });
   }
   function apiStatus() { return apiFetch("/api/plugins/kanban-advanced/status"); }
   function apiInit(data) { return apiFetch("/api/plugins/kanban-advanced/init", { method: "POST", body: JSON.stringify(data) }); }
   function apiSave(data) { return apiFetch("/api/plugins/kanban-advanced/save", { method: "POST", body: JSON.stringify(data) }); }
-  function apiPluginUpdate() { return apiFetch("/api/dashboard/agent-plugins/kanban-advanced/update", { method: "POST" }); }
+  function apiPluginUpdate() { return apiFetch("/api/plugins/kanban-advanced/update", { method: "POST" }); }
 
   var POLICY_PROFILES = [
     { value: "balanced", label: "balanced — block violations (default)" },
@@ -187,8 +193,16 @@
       setConsoleLines([]);
       addLines(["=== Updating plugin (git pull) ===", ""]);
       apiPluginUpdate().then(function (r) {
-        if (r.output) addLines(String(r.output).split("\n"));
-        addLines([r.unchanged ? "OK Plugin already up to date" : "OK Plugin updated"], "line-ok");
+        if (r.error) {
+          addLines(["ERROR: " + r.error], "line-err");
+          if (r.output) addLines(r.output);
+        } else {
+          if (r.output) {
+            var outLines = Array.isArray(r.output) ? r.output : String(r.output).split("\n");
+            addLines(outLines);
+          }
+          addLines([r.unchanged ? "OK Plugin already up to date" : "OK Plugin updated"], "line-ok");
+        }
         setPluginUpdating(false);
         loadStatus();
       }).catch(function (e) {

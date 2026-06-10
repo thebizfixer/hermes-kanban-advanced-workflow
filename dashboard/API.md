@@ -55,7 +55,7 @@ Returns current initialization state and config values.
 
 When `config_exists` is false, the dashboard shows the bootstrap form.
 
-The status banner shows **Initialized (Up-to-date)** or **Initialized (Update Plugin)** when `plugin_can_update` is true. **Update Plugin** calls `POST /api/dashboard/agent-plugins/kanban-advanced/update` (same as the Plugins page Git pull button) and is disabled when up to date.
+The status banner shows **Initialized (Up-to-date)** or **Initialized (Update Plugin)** when `plugin_can_update` is true. **Update Plugin** calls `POST /api/plugins/kanban-advanced/update` (git pull in `plugin_install_path`, then re-materialize skills and cron scripts). Disabled when up to date.
 
 Use `project_root` to confirm the API resolved the correct repo (especially after `hermes update` or when multiple clones are on disk). If it points at the plugin install tree, set `KANBAN_PROJECT_ROOT` to your application repo before opening the tab.
 
@@ -109,6 +109,34 @@ Saves settings in an already-initialized config (dashboard button: **Save**). Wr
 **Request:** Same shape as init.
 
 **Response:** Same shape as init (re-runs materialization but skips profile creation). Optional overlay keys not in the managed set (e.g. `feature_branch_prefix`) are preserved.
+
+## `POST /api/plugins/kanban-advanced/update`
+
+Git-pull the plugin install checkout and refresh materialized skills/scripts under `$HERMES_HOME`.
+
+**Request:** Empty body.
+
+**Response:**
+```json
+{
+  "success": true,
+  "unchanged": false,
+  "output": [
+    "=== Updating plugin at /path/to/.hermes/plugins/kanban-advanced ===",
+    "Already up to date.",
+    "   OK 11 skills -> ...",
+    "OK Plugin updated"
+  ]
+}
+```
+
+When already up to date, `unchanged` is `true` and pull is skipped.
+
+**Errors:**
+- `"Plugin install is not a git checkout"` — no `.git` in install path
+- `"git not found on PATH"`
+- `"Could not determine upstream"` — no tracking branch / fetch failed
+- git pull stderr on merge conflicts or non-ff updates
 
 ## Error response
 

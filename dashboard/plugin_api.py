@@ -157,6 +157,37 @@ def _git_behind_count(install_dir: Path, git_exe: str) -> int | None:
     return None
 
 
+def _materialize_plugin_assets(plugin_root: Path, hermes_home: Path) -> list[str]:
+    """Copy bundled skills and cron scripts from plugin checkout into HERMES_HOME."""
+    lines: list[str] = []
+    skills_src = plugin_root / "plugin" / "skills"
+    skills_dst = hermes_home / "skills" / "kanban-advanced"
+    count = 0
+    if skills_src.is_dir():
+        for child in sorted(skills_src.iterdir()):
+            skill_md = child / "SKILL.md"
+            if child.is_dir() and skill_md.exists():
+                dst_dir = skills_dst / child.name
+                dst_dir.mkdir(parents=True, exist_ok=True)
+                (dst_dir / "SKILL.md").write_text(
+                    skill_md.read_text(encoding="utf-8"), encoding="utf-8"
+                )
+                count += 1
+        lines.append(f"   OK {count} skills -> {skills_dst}")
+
+    scripts_src = plugin_root / "scripts"
+    scripts_dst = hermes_home / "scripts"
+    scripts_dst.mkdir(parents=True, exist_ok=True)
+    for script_name in ["auto_unblock.sh", "board_keeper.sh", "token_tracker.py"]:
+        src = scripts_src / script_name
+        dst = scripts_dst / script_name
+        if src.exists():
+            dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            dst.chmod(0o755)
+            lines.append(f"   OK {script_name} -> {dst}")
+    return lines
+
+
 def _check_plugin_git_status() -> dict:
     """Whether the installed plugin git checkout has upstream commits to pull."""
     hermes_home = resolve_hermes_home()
@@ -480,3 +511,53 @@ async def save(request: Request):
 
     output.append("OK Settings saved")
     return {"success": True, "output": output}
+
+
+@router.post("/update")
+async def update_plugin():
+    """POST /api/plugins/kanban-advanced/update — git pull plugin install + refresh materialized assets."""
+    install_dir = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
+    output = [f"=== Updating plugin at {install_dir} ==="]
+
+    if not (install_dir / ".git").is_dir():
+        return {
+            "success": False,
+            "error": "Plugin install is not a git checkout — cannot pull.",
+            "output": output,
+        }
+
+    git_exe = _resolve_git_executable()
+    if not git_exe:
+        return {"success": False, "error": "git not found on PATH", "output": output}
+
+    behind_before = _git_behind_count(install_dir, git_exe)
+    if behind_before is None:
+        return {
+            "success": False,
+            "error": "Could not determine upstream — check git remote and tracking branch.",
+            "output": output,
+        }
+
+    if behind_before == 0:
+        output.append("   OK Already up to date")
+        return {"success": True, "unchanged": True, "output": output}
+
+    try:
+        r = _run([git_exe, "pull", "--ff-only"], timeout=120, cwd=str(install_dir))
+    except Exception as exc:
+        logger.exception("plugin update: git pull failed")
+        return {"success": False, "error": str(exc), "output": output}
+
+    if r.stdout.strip():
+        output.append(r.stdout.strip())
+    if r.stderr.strip():
+        output.append(r.stderr.strip())
+
+    if r.returncode != 0:
+        err = (r.stderr or r.stdout or "git pull failed").strip()
+        return {"success": False, "error": err, "output": output}
+
+    hermes_home = resolve_hermes_home()
+    output.extend(_materialize_plugin_assets(install_dir, hermes_home))
+    output.append("OK Plugin updated")
+    return {"success": True, "unchanged": False, "output": output}
