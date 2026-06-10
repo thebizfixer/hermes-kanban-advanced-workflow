@@ -18,6 +18,26 @@ Hermes **cannot** change the active profile inside an ongoing chat session.
 
 To work as **orchestrator**, the user must **start a new session** under that profile (CLI, TUI, or messaging gateway bound to that profile's process).
 
+## Preferred: board-mediated handoff (no session switch)
+
+A manual session switch is the **fallback**. The primary path for "execute the plan"
+on a non-orchestrator profile is the **board-mediated handoff** — let the dispatcher
+run the orchestrator for you:
+
+```bash
+python3 scripts/kanban_handoff.py --plan <plan.md>
+```
+
+This creates one hardened, idempotent handoff card (`Decompose: <plan_id>`, marker
+`Type: orchestrator-handoff`, no `agent -p` block) assigned to the orchestrator profile.
+The gateway dispatcher claims it and spawns an orchestrator-profile agent that runs the
+decomposition SOP. The builder checks its own preconditions and exits non-zero with a
+`fix` hint when the orchestrator profile is missing (2), the gateway is down (3), or the
+dispatcher/`auto_decompose` config is wrong (4).
+
+Use the **manual session switch below only** when the gateway/dispatcher is unavailable
+and cannot be started.
+
 ## List profiles (show the user a menu)
 
 ```bash

@@ -55,17 +55,30 @@ Only these operations require the orchestrator profile (because the dispatcher m
 - `hermes kanban complete` — card completion
 - `hermes kanban block/unblock/link` — board management
 
-When the user says "execute the plan" and you're not on orchestrator:
+When the user says "execute the plan" and you're not on orchestrator, prefer the
+**board-mediated handoff** — no human session switch required:
 
-1. Run `hermes profile list` and show the output (active profile is marked `*`).
-2. Explain: Hermes has **no in-chat profile switch** — `/profile` only **shows** the active profile ([upstream slash commands](https://hermes-agent.nousresearch.com/docs/reference/slash-commands)).
-3. Give the user **one** of these (same on Linux, macOS, Windows, WSL) — they must **start a new session**, then repeat the trigger:
-   - `hermes -p orchestrator chat`
-   - `orchestrator chat` (only if that alias exists on their machine)
-   - `hermes profile use orchestrator` then `hermes chat`
-4. Full reference: `plugin/data/references/profile-switching.md`.
+1. Create one hardened handoff card assigned to the orchestrator profile:
 
-Do **not** say `hermes -p orchestrator` without `chat` — that does not open a session. For one-off CLI only (not full decomposition), the agent may use `hermes -p orchestrator kanban …` via terminal_tool.
+```bash
+python3 scripts/kanban_handoff.py --plan <plan.md>
+```
+
+   The gateway dispatcher claims the `ready` card and spawns an orchestrator-profile
+   agent that runs the decomposition SOP autonomously. The builder is idempotent
+   (one open handoff card per plan_id) and checks its own preconditions.
+2. If the builder exits non-zero, relay its `fix` message and act on it:
+   - exit 2 — orchestrator profile missing → `hermes kanban-advanced init`
+   - exit 3 — gateway not running → ask the user, then `hermes gateway run`
+   - exit 4 — dispatcher disabled / `auto_decompose` true → run the printed
+     `hermes config set …` fix, then retry
+3. **Fallback only** (no gateway / dispatcher unavailable): the user must start a new
+   orchestrator session manually — Hermes has **no in-chat profile switch**
+   ([upstream slash commands](https://hermes-agent.nousresearch.com/docs/reference/slash-commands)).
+   Give them **one** of these (same on Linux, macOS, Windows, WSL), then ask them to
+   repeat the trigger: `hermes -p orchestrator chat`, `orchestrator chat` (if that
+   alias exists), or `hermes profile use orchestrator` then `hermes chat`. Full
+   reference: `plugin/data/references/profile-switching.md`.
 
 ## Quick reference
 

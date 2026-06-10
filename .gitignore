@@ -1,4 +1,9 @@
+# Harnesses
 .cursor/
+.hermes/
+
+# Secrets
+.env
 
 # Python bytecode (regenerated on import)
 __pycache__/

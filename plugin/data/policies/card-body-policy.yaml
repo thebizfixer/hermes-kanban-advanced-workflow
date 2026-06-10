@@ -8,6 +8,13 @@ name: card-body-policy
 description: "Validates kanban card bodies before dispatch. Cards failing policy are blocked with canonical error codes from the error registry."
 default_action: deny
 
+# Carve-out: cards carrying the `Type: orchestrator-handoff` marker are
+# orchestrator control cards (SOP-only, no Files:/Mode:/agent block by design,
+# created by scripts/kanban_handoff.py). They are exempt from the worker
+# code-gen rules below — see validate_card() in scripts/kanban_card_policy.py.
+# This is the single structurally-identified exception; the general rules are
+# unchanged.
+
 rules:
   - name: require-files-line
     condition: "body does not contain 'Files:'"

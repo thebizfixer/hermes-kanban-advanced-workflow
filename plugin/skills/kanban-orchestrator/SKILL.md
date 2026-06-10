@@ -31,6 +31,23 @@ This skill is for the **orchestrator profile only**. If you are NOT running as t
 
 To detect your profile: check your system prompt for the active profile name, or run `hermes profile list` and note which is marked `*` (active).
 
+## Dispatched-decompose entry point (board-mediated handoff)
+
+You may be started by the **dispatcher** (not a human) because a non-orchestrator
+profile created a handoff card via `scripts/kanban_handoff.py`. You recognize this
+card by its title `Decompose: <plan_id>` and the body marker `Type: orchestrator-handoff`.
+Such a card is **SOP-only** — there is intentionally **no `agent -p` block**. Do NOT
+treat it as a coding task and do NOT look for an agent block (no E014 no-op). Instead:
+
+1. Read the plan path, repo root, and `working_branch` from the card body.
+2. Run the **Standard process** below (preflight → attestation → `kanban_decompose.py`
+   → crons → `validate_board.sh` → complete gate → ongoing duties).
+3. **Self-referential exception:** if the plan modifies the kanban-advanced governance
+   infrastructure itself, do NOT auto-decompose — block the handoff card and notify the
+   operator to run decomposition manually.
+4. When the board is decomposed and validated, complete the handoff card with a summary
+   listing the gate id and the number of cards dispatched.
+
 ## Role: Orchestrator
 
 1. **Executive oversight** — ensure the kanban executes cleanly. Workers supervise agents; you supervise workers.

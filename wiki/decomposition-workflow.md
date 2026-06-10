@@ -68,6 +68,40 @@ Without this, triage cards may be LLM-rewritten even when you intended manual de
 
 Manual orchestration may create root before gate (SKILL step order); both paths must **complete root** and use **block-on-create** for gate, impl, and audit.
 
+## Board-mediated handoff (executing from a non-orchestrator profile)
+
+Decomposition is **orchestrator-only** (the dispatcher matches a card's `assignee` to a
+profile name). When a non-orchestrator profile is told to *"execute the plan"*, the
+preferred path is **not** asking the user to switch sessions — it is creating one
+handoff card the dispatcher runs under the orchestrator profile:
+
+```bash
+python3 scripts/kanban_handoff.py --plan <plan.md>
+```
+
+The handoff card is deliberately hardened:
+
+| Property | Value | Why |
+|----------|-------|-----|
+| Title | `Decompose: <plan_id>` | Deterministic — idempotency scan key |
+| Marker | `Type: orchestrator-handoff` | Governance carve-out + dispatched-decompose detection |
+| `assignee` | orchestrator profile | Dispatcher spawns an orchestrator-profile agent |
+| Status | `ready`, no parents | Dispatches immediately (wave 0) |
+| Body | plan path + repo + branch + orchestrator SOP | Self-contained instructions |
+| Agent block | **none** | A coding `agent -p` block would make Hermes LLM-decompose the card into stub children (the reason `auto_decompose=false` is also required) |
+
+The builder is **idempotent** (one open `todo/ready/running/blocked` handoff per
+`plan_id`, plus a Hermes `--idempotency-key`) and checks its own preconditions before
+creating anything: orchestrator profile exists, `kanban.dispatch_in_gateway` is on,
+`kanban.auto_decompose` is off, and the gateway is running. It exits non-zero with a
+`fix` hint otherwise (use `--allow-offline` to create the card regardless). A manual
+`hermes -p orchestrator chat` session is the **fallback** when the gateway is
+unavailable — see `plugin/data/references/profile-switching.md`.
+
+The `Type: orchestrator-handoff` marker is whitelisted in `kanban_card_policy.py` so
+the SOP-only body is exempt from the worker code-gen rules (P001/P002/P003), exactly
+like gate/root/audit control cards.
+
 ### Gate card (orchestrator control — not human)
 
 The gate is a **dependency root**, not an approval step for the operator.
