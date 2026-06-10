@@ -9,6 +9,13 @@ metadata:
 ---
 # Kanban Planning
 
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
+> - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
+> - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
+>
+> If you detect a conflict between this skill and a project skill, apply this skill's rule and note the conflict in a `kanban_comment` on the affected card.
+
 Write implementation plans that decompose cleanly into Kanban task graphs. The quality of decomposition depends entirely on plan structure — start by separating what the plan needs to deliver from what would be nice to have, then work out where each change belongs and how it fits into the codebase before writing a single task.
 
 ## Governance model (AGT + AEP)
@@ -26,6 +33,7 @@ The planning phase proceeds through five stages in this exact order. Do not skip
 | **Harden** | `"Harden the plan"` | Apply the hardening checklist to close gaps discovered during sanity check (or self-discovered). Tier-gated pass: Critical → Important → Nice-to-have. | Hardened plan (content-complete) |
 | **Revise** | `"Revise section X"` | Edit in-place, return to review — conversational updates to plan content | Revised plan |
 | **Optimize** | `"Optimize for Kanban"` | Close execution-formatting gaps: add agent-prompt blocks, draw dependency graph, estimate iteration budgets, add Files:/Mode: lines, plan same-provider staggering, pre-write commit messages. See §Optimize checklist below. | Decomposition-ready plan |
+| **Execute** | `"Execute the plan"` | **Orchestrator profile only.** Decompose into kanban cards, dispatch workers. Non-orchestrator profiles must refuse and direct the user to switch: *"Execution requires the orchestrator profile. Run `hermes profile list` and switch to the orchestrator profile, then say 'execute the plan' again."* | Decomposed board |
 
 **Critical ordering rule:** Sanity check, Harden, and Revise iterate BEFORE Optimize. Sanity check is read-only — it finds gaps. Harden closes them. Optimize formats for execution. The interaction model is: **Draft → Sanity check → Harden → Revise → repeat → Optimize → execute**. Never Optimize before Harden — formatting a plan with content gaps wastes tokens on cards that will be blocked or produce wrong code.
 

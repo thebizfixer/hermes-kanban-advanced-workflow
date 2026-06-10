@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # auto_unblock.sh — poll the kanban board and unblock cards whose parents are all done.
-# Run via cron every 30s during execution. Handles the mechanical wave progression
+# Run via cron every 1m during execution (minimum supported cron interval). Handles the mechanical wave progression
 # so the orchestrator doesn't need to manually unblock each wave.
 #
 # Usage:

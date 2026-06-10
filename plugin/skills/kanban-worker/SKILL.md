@@ -14,6 +14,13 @@ metadata:
 
 > The **lifecycle** (7 steps: orient → memory → fast-sanity → handoff → monitor → verify → complete) is the worker's job. The worker is a **supervisor of the coding agent**, not the implementer. Its job: read the card, do a fast sanity check, hand off to the coding agent, monitor progress, verify the output via the evaluation chain, and close the task.
 
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
+> - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
+> - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
+>
+> If you detect a conflict between this skill and a project skill, apply this skill's rule and note the conflict in a `kanban_comment` on the affected card.
+
 Produce exactly what the card requests — nothing more. When in doubt, implement the simplest solution that fulfills the requirements, then ask whether anything should be expanded. If something goes wrong, take a step back and think through what happened before trying again. After any edit, the commit message should describe what changed and why.
 
 ## Governance model (AGT + AEP)

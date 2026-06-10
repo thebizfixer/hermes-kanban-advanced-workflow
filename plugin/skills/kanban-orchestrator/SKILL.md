@@ -14,6 +14,23 @@ metadata:
 
 > The core worker lifecycle (including the `kanban_create` fan-out pattern and the "decompose, don't execute" rule) is auto-injected into every kanban process via the `KANBAN_GUIDANCE` system-prompt block. This skill is the deeper playbook when you're an orchestrator profile whose whole job is routing.
 
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
+> - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
+> - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
+>
+> If you detect a conflict between this skill and a project skill, apply this skill's rule and note the conflict in a `kanban_comment` on the affected card.
+
+## Profile gate (mandatory — enforced at every turn)
+
+This skill is for the **orchestrator profile only**. If you are NOT running as the orchestrator profile:
+
+- **Planning stage triggers** ("plan this out", "sanity check", "harden", "optimize") — you MAY execute these as any profile. Load `kanban-advanced:kanban-planning`.
+- **Execution stage triggers** ("execute the plan", "proceed", "decompose") — you MUST refuse. Say: *"Execution requires the orchestrator profile. Please switch to the orchestrator profile and say 'execute the plan' again. Current profiles: `hermes profile list`."*
+- **Do not attempt decomposition from a non-orchestrator profile.** Card creation, linking, cron setup, and gate management are orchestrator-only operations. Doing them from another profile bypasses governance (no gate/root/audit cards, no staggering, no crons, wrong assignee discipline).
+
+To detect your profile: check your system prompt for the active profile name, or run `hermes profile list` and note which is marked ◆ (active).
+
 ## Role: Orchestrator
 
 1. **Executive oversight** — ensure the kanban executes cleanly. Workers supervise agents; you supervise workers.
@@ -301,8 +318,8 @@ Draft the graph out loud before creating anything:
 **Cron removal during cleanup:** Both crons must be removed during `kanban-advanced:kanban-cleanup`:
 
 ```bash
-# Start auto-unblock — runs every 30s during execution
-cronjob(action="create", name="kanban-auto-unblock-30s", schedule="every 30s",
+# Start auto-unblock — runs every 1m during execution (minimum supported interval)
+cronjob(action="create", name="kanban-auto-unblock-1m", schedule="every 1m",
   deliver="null", no_agent=true,
   script="scripts/auto_unblock.sh")
 ```

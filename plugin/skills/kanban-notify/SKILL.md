@@ -10,6 +10,13 @@ metadata:
 
 # Kanban Notify — Intervention Gateway Push
 
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
+> - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
+> - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
+>
+> If you detect a conflict between this skill and a project skill, apply this skill's rule and note the conflict in a `kanban_comment` on the affected card.
+
 Walk-away mode runs the board unattended. **Notify the operator only when human judgment is required** — not for routine progress, heartbeats, or recoverable transient failures.
 
 The orchestrator loads this skill during walk-away setup, confirms delivery prerequisites, and uses the trigger table below when triaging `blocked`, `gave_up`, `crashed`, or `timed_out` events.

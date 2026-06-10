@@ -10,6 +10,13 @@ metadata:
 
 # Kanban Postmortem — Plan Retrospective
 
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
+> - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
+> - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
+>
+> If you detect a conflict between this skill and a project skill, apply this skill's rule and note the conflict in a `kanban_comment` on the affected card.
+
 The postmortem is the **final learning artifact** of a kanban plan run. It is written for the **operator's Hermes agent** (not the orchestrator mid-run): read sections 5–8 before drafting the next plan, and feed section 6 into skill updates when a pitfall repeats across runs.
 
 **Generator:** `hermes-kanban-advanced-workflow/scripts/generate_postmortem.py` — SSOT for section headings, metrics, and failure classification.

@@ -102,11 +102,11 @@ def parse_plan(plan_path: str) -> dict:
     with open(plan_path) as f:
         content = f.read()
 
-    # Find the Kanban optimization section
+    # Find the Kanban optimization section (case-insensitive heading match)
     opt_match = re.search(r'## Kanban optimization.*?(?=^## \w|\Z)', content,
-                          re.MULTILINE | re.DOTALL)
+                          re.MULTILINE | re.DOTALL | re.IGNORECASE)
     if not opt_match:
-        sys.exit("ERROR: No '## Kanban optimization' section found in plan")
+        sys.exit("ERROR: No '## Kanban optimization' section found in plan (case-insensitive)")
 
     section = opt_match.group(0)
 
@@ -281,8 +281,10 @@ def create_card(card: dict, dry_run: bool = False) -> str | None:
         if card_type == "code-gen" and card.get("branch"):
             cmd.extend(["--branch", card["branch"]])
 
-        # Body via temp file
-        cmd.extend(["--body-file", tmpfile])
+        # Read body from temp file, pass inline (--body-file not supported in all Hermes versions)
+        with open(tmpfile, 'r') as bf:
+            body_content = bf.read()
+        cmd.extend(["--body", body_content])
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         out = result.stdout.strip()
