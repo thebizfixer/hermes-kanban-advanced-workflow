@@ -73,7 +73,7 @@ Group task failures by type:
 - Crashed runs (OOM, segfault)
 - Rate-limit stampedes (429 on same provider)
 
-Classify each blocked task with its canonical error code from `hermes-kanban-advanced-workflow/registry/error-codes.yaml`. If any category exceeds 30% of tasks, apply mid-run reconciliation.
+Classify each blocked task with its canonical error code from `plugin/data/registry/error-codes.yaml`. If any category exceeds 30% of tasks, apply mid-run reconciliation.
 
 ### 4. Non-kanban overhead
 Count time spent on:

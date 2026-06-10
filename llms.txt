@@ -80,6 +80,6 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 - Plugin entry: `__init__.py` → `plugin/__init__.py` → `register(ctx)`
 - Skills: `plugin/skills/<name>/SKILL.md` (11 skills)
 - Data: `plugin/data/` (references, registry, policies, prompts)
-- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh)
+- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py)
 - Dashboard: `dashboard/` (settings tab — `manifest.json`, `plugin_api.py`, `index.html`)
 - README: `README.md`

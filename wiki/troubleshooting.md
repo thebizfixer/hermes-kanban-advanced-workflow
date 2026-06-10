@@ -234,7 +234,7 @@ Then repeat **execute the plan**. Plugin reference: `plugin/data/references/prof
 
 ## Full error code listing
 
-See `hermes-kanban-advanced-workflow/registry/error-codes.yaml` for all 24 codes with severity, recovery, and retry flags.
+See `plugin/data/registry/error-codes.yaml` for all 36 codes with severity, recovery, and retry flags.
 
 ## Still stuck?
 

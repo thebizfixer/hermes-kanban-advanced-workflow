@@ -27,7 +27,7 @@ Produce exactly what the card requests — nothing more. When in doubt, implemen
 
 The worker lifecycle is gated by a deterministic evaluation chain — not by instructions. Calling `kanban_complete` without passing the chain is structurally prevented. The chain follows AEP's Deterministic Adjudication Lattice (DAL) pattern: 6 steps, each returning ALLOW/DENY with a canonical error code. The chain stops at the first DENY.
 
-**Error codes** are defined in `hermes-kanban-advanced-workflow/registry/error-codes.yaml`. **Recovery actions** are scripted in `hermes-kanban-advanced-workflow/scripts/kanban_recover.py`.
+**Error codes** are defined in `plugin/data/registry/error-codes.yaml`. **Recovery actions** are scripted in `hermes-kanban-advanced-workflow/scripts/kanban_recover.py`.
 
 ## Worker lifecycle (7 steps)
 

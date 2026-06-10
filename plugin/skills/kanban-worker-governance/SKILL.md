@@ -21,7 +21,7 @@ metadata:
 
 ## Error Code Reference (E001–E020)
 
-Canonical source: `hermes-kanban-advanced-workflow/registry/error-codes.yaml`
+Canonical source: `plugin/data/registry/error-codes.yaml`
 
 | Code | Severity | What it catches | Recovery |
 |------|----------|----------------|----------|

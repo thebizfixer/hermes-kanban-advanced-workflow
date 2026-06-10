@@ -118,7 +118,7 @@ Governed card creation from a plan file.  Reads the plan, extracts workstreams, 
 python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace> --baseline HEAD~1
 ```
 
-8-step Deterministic Adjudication Lattice (AEP DAL pattern). Each step returns ALLOW/DENY with canonical error code:
+9-step Deterministic Adjudication Lattice (AEP DAL pattern). Each step returns ALLOW/DENY with canonical error code:
 
 | Step | Code | What it checks |
 |------|------|---------------|
@@ -128,8 +128,9 @@ python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_
 | 4 | E004 | Commit message matches `Commit:` line |
 | 5 | E018 | Token log entry exists with matching `task_id`, source=`agent`, non-zero tokens |
 | 6 | E006 | Zero-output — at least one file has >0 diff |
-| 7 | E020 | Agent JSON output saved and parseable |
-| 8 | E017 | Excessive churn — net line changes < 3× estimate |
+| 7 | E017 | Excessive churn — net line changes < 3× estimate |
+| 8 | E020 | Agent JSON output saved and parseable |
+| 9 | E019 | No destructive git ops (`reset --hard`, `checkout --theirs/--ours`) in reflog |
 
 Lattice memory: successful completions cached as attractors. Subsequent workers with matching file+test hash skip cold-path validation for steps 1, 3, 4.
 
@@ -150,6 +151,26 @@ python hermes-kanban-advanced-workflow/scripts/kanban_card_policy.py <task_id>  
 ```
 
 Validates card bodies against `policies/card-body-policy.yaml`. Error codes: P001 (missing Files:), P002 (missing agent block), P003 (missing Mode:), P004 (too many files), P005 (model override in card body). Resolves governance profile from `--profile`, `KANBAN_POLICY_PROFILE`, or `kanban-config.yaml` `policy_profile` (default `balanced`).
+
+## Board-mediated handoff (`kanban_handoff.py`)
+
+```bash
+python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md>
+python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md> --plan-id <id> --allow-offline
+```
+
+Creates one hardened, idempotent orchestrator-handoff card when a non-orchestrator profile needs to trigger decomposition without a manual session switch.  The card title is `Decompose: <plan_id>` and carries `Type: orchestrator-handoff` — a governance carve-out that exempts it from the worker code-gen rules (P001/P002/P003).  The body is SOP-only: **no `agent -p` block** (to prevent auto-decompose into stub children).
+
+Exit codes:
+
+| Code | Meaning | Fix |
+|------|---------|-----|
+| 0 | Card created or already open | — |
+| 2 | Orchestrator profile missing | `hermes kanban-advanced init` |
+| 3 | Gateway not running | `hermes gateway run` |
+| 4 | Dispatcher off or `auto_decompose=true` | Run the printed `hermes config set …` fix |
+
+`--allow-offline` bypasses exit 3/4 to create the card anyway (for deferred dispatch). Idempotency: if an open handoff card for the same `plan_id` already exists, the script exits 0 without creating a duplicate.
 
 ## Recovery (`kanban_recover.py`)
 
