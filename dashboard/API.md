@@ -32,11 +32,30 @@ Returns current initialization state and config values.
   "gateway": {
     "running": true,
     "outdated": false
-  }
+  },
+  "hermes_home": "/home/user/.hermes-state/sentimentary",
+  "plugin_install_path": "/home/user/.hermes-state/sentimentary/plugins/kanban-advanced",
+  "plugin_can_update": true,
+  "plugin_up_to_date": true,
+  "plugin_behind": 0,
+  "plugin_update_available": false
 }
 ```
 
+**Path resolution:** `hermes_home` follows `$HERMES_HOME` (or `$HERMES_STATE_DIR`, then platform defaults — same as `scripts/lib/hermes_home.sh` and Hermes `get_hermes_home()`). `plugin_install_path` is `$HERMES_HOME/plugins/kanban-advanced` when that directory exists; otherwise the running plugin checkout.
+
+**Plugin update fields** (checked on every tab load via `git fetch` + `rev-list` against upstream):
+
+| Field | Meaning |
+|-------|---------|
+| `plugin_can_update` | Installed copy is a git checkout (`.git` present) |
+| `plugin_up_to_date` | `true` when behind count is 0; `null` when not checkable |
+| `plugin_behind` | Commits behind upstream; `null` when not checkable |
+| `plugin_update_available` | `true` when `plugin_behind > 0` |
+
 When `config_exists` is false, the dashboard shows the bootstrap form.
+
+The status banner shows **Initialized (Up-to-date)** or **Initialized (Update Plugin)** when `plugin_can_update` is true. **Update Plugin** calls `POST /api/dashboard/agent-plugins/kanban-advanced/update` (same as the Plugins page Git pull button) and is disabled when up to date.
 
 Use `project_root` to confirm the API resolved the correct repo (especially after `hermes update` or when multiple clones are on disk). If it points at the plugin install tree, set `KANBAN_PROJECT_ROOT` to your application repo before opening the tab.
 
@@ -44,7 +63,7 @@ Use `project_root` to confirm the API resolved the correct repo (especially afte
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
 
-**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch`, `trigger_branch`, and `policy_profile` are **preserved from the file** unless the request body includes overrides. First-time bootstrap uses form values. To change settings on an initialized project, prefer **Update settings**; Bootstrap re-runs profile creation and materialization.
+**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch`, `trigger_branch`, and `policy_profile` are **preserved from the file** unless the request body includes overrides. First-time bootstrap uses form values. To change settings on an initialized project, edit fields and click **Save** (not Bootstrap — Bootstrap re-runs profile creation and materialization). **Save** persists form values to `kanban-config.yaml` and `.env`. To update the plugin package itself, use **Pull** from the Hermes plugin view.
 
 **Request:**
 ```json
@@ -83,9 +102,9 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 }
 ```
 
-## `POST /api/plugins/kanban-advanced/update`
+## `POST /api/plugins/kanban-advanced/save`
 
-Updates settings in an already-initialized config. Writes to `kanban-config.yaml` and `.env`. Request body values for `working_branch`, `trigger_branch`, and `coding_agent_binary` are applied as submitted.
+Saves settings in an already-initialized config (dashboard button: **Save**). Writes to `kanban-config.yaml` and `.env`. Request body values for `working_branch`, `trigger_branch`, and `coding_agent_binary` are applied as submitted. This endpoint does not pull or upgrade the plugin — use Hermes plugin **Pull** for that.
 
 **Request:** Same shape as init.
 
@@ -101,5 +120,5 @@ Updates settings in an already-initialized config. Writes to `kanban-config.yaml
 
 Common errors:
 - `"API unreachable"` — gateway not running
-- `"Config file not found"` — attempting update before init
+- `"Config file not found"` — attempting save before init
 - `"hermes CLI not found on PATH"` — can't run init

@@ -12,8 +12,10 @@ DEFAULT_POLICY_PROFILE = "balanced"
 VALID_POLICY_PROFILES = frozenset({"advisory", "balanced", "strict"})
 
 OVERLAY_REL = Path(".hermes") / "kanban-overrides" / "kanban-config.yaml"
+PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_PLUGIN_NAME = "kanban-advanced"
 
-# Keys init/update always refresh; everything else is preserved on re-init.
+# Keys init/save always refresh; everything else is preserved on re-init.
 _MANAGED_KEYS = frozenset({
     "schema_version",
     "working_branch",
@@ -78,6 +80,49 @@ def resolve_project_root(start: Path | None = None) -> Path:
             env_hit = parent
 
     return config_hit or git_hit or env_hit or start
+
+
+def resolve_hermes_home() -> Path:
+    """Resolve Hermes state directory ($HERMES_HOME / $HERMES_STATE_DIR / defaults).
+
+    When running inside Hermes Agent, delegates to ``hermes_constants.get_hermes_home``.
+    Otherwise mirrors ``scripts/lib/hermes_home.sh`` resolution order.
+    """
+    try:
+        from hermes_constants import get_hermes_home
+
+        return get_hermes_home().expanduser().resolve()
+    except ImportError:
+        pass
+
+    for env_name in ("HERMES_HOME", "HERMES_STATE_DIR"):
+        raw = os.environ.get(env_name, "").strip()
+        if raw:
+            return Path(raw).expanduser().resolve()
+
+    home = Path.home()
+    candidates: list[Path] = []
+    if os.name == "nt":
+        localappdata = os.environ.get("LOCALAPPDATA", "").strip()
+        userprofile = os.environ.get("USERPROFILE", "").strip()
+        if localappdata:
+            candidates.append(Path(localappdata) / "hermes")
+        if userprofile:
+            candidates.append(Path(userprofile) / ".hermes")
+    candidates.append(home / ".hermes")
+
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate.resolve()
+    return candidates[0].resolve() if candidates else (home / ".hermes").resolve()
+
+
+def resolve_plugin_install_dir(plugin_name: str = DEFAULT_PLUGIN_NAME) -> Path:
+    """Git checkout path for the plugin (``$HERMES_HOME/plugins/<name>`` when installed)."""
+    installed = resolve_hermes_home() / "plugins" / plugin_name
+    if installed.is_dir():
+        return installed.resolve()
+    return PLUGIN_ROOT.resolve()
 
 
 def _git_output(project_root: Path, *args: str) -> str | None:
@@ -217,7 +262,7 @@ def build_overlay_yaml(
     hermes_home: Path | str,
     existing: dict[str, str] | None = None,
 ) -> str:
-    """Build overlay YAML, preserving user keys not managed by init/update."""
+    """Build overlay YAML, preserving user keys not managed by init/save."""
     existing = dict(existing or {})
     managed: dict[str, str] = {
         "schema_version": "1.0.0",

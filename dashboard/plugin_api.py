@@ -1,13 +1,14 @@
 """Kanban-Advanced dashboard plugin — backend API routes.
 
 Mounted at /api/plugins/kanban-advanced/ by the dashboard plugin system.
-Provides status, init, and update endpoints for the settings UI.
+Provides status, init, and save endpoints for the settings UI.
 """
 
 import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -19,6 +20,8 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from plugin.config_overlay import (  # noqa: E402
+    DEFAULT_PLUGIN_NAME,
+    PLUGIN_ROOT,
     build_overlay_yaml,
     detect_default_working_branch,
     normalize_optional_branch,
@@ -27,6 +30,8 @@ from plugin.config_overlay import (  # noqa: E402
     read_overlay_config,
     resolve_branch_settings,
     resolve_coding_agent,
+    resolve_hermes_home,
+    resolve_plugin_install_dir,
     resolve_policy_profile,
     resolve_project_root,
     sync_project_env,
@@ -39,8 +44,8 @@ router = APIRouter()
 HERMES_BIN = os.environ.get("HERMES_BIN", "hermes")
 
 
-def _run(cmd: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+def _run(cmd: list[str], timeout: int = 30, cwd: str | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
 
 
 def _read_config(project_root: Path) -> dict:
@@ -102,6 +107,86 @@ def _get_max_turns() -> int:
         return 90
 
 
+def _resolve_git_executable() -> str | None:
+    found = shutil.which("git")
+    if found:
+        return found
+    if os.name == "nt":
+        prog = os.environ.get("ProgramFiles", r"C:\Program Files")
+        prog_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+        local = os.environ.get("LOCALAPPDATA", "")
+        candidates = [
+            os.path.join(prog, "Git", "cmd", "git.exe"),
+            os.path.join(prog, "Git", "bin", "git.exe"),
+            os.path.join(prog_x86, "Git", "cmd", "git.exe"),
+            os.path.join(prog_x86, "Git", "bin", "git.exe"),
+        ]
+        if local:
+            candidates.extend(
+                (
+                    os.path.join(local, "Programs", "Git", "cmd", "git.exe"),
+                    os.path.join(local, "Programs", "Git", "bin", "git.exe"),
+                )
+            )
+    else:
+        candidates = ["/usr/bin/git", "/usr/local/bin/git", "/bin/git"]
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return candidate
+    return None
+
+
+def _git_behind_count(install_dir: Path, git_exe: str) -> int | None:
+    """Commits the checkout is behind its upstream (after best-effort fetch)."""
+    try:
+        _run([git_exe, "fetch", "origin", "--quiet"], timeout=15, cwd=str(install_dir))
+    except Exception:
+        pass
+
+    for upstream in ("@{u}", "origin/main", "origin/master"):
+        try:
+            r = _run(
+                [git_exe, "rev-list", "--count", f"HEAD..{upstream}"],
+                timeout=10,
+                cwd=str(install_dir),
+            )
+            if r.returncode == 0 and r.stdout.strip().isdigit():
+                return int(r.stdout.strip())
+        except Exception:
+            continue
+    return None
+
+
+def _check_plugin_git_status() -> dict:
+    """Whether the installed plugin git checkout has upstream commits to pull."""
+    hermes_home = resolve_hermes_home()
+    install_dir = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
+    base = {
+        "hermes_home": str(hermes_home),
+        "plugin_install_path": str(install_dir),
+        "plugin_can_update": False,
+        "plugin_up_to_date": None,
+        "plugin_behind": None,
+        "plugin_update_available": None,
+    }
+    if not (install_dir / ".git").is_dir():
+        return base
+
+    base["plugin_can_update"] = True
+    git_exe = _resolve_git_executable()
+    if not git_exe:
+        return base
+
+    behind = _git_behind_count(install_dir, git_exe)
+    if behind is None:
+        return base
+
+    base["plugin_behind"] = behind
+    base["plugin_update_available"] = behind > 0
+    base["plugin_up_to_date"] = behind == 0
+    return base
+
+
 @router.get("/status")
 async def status():
     """GET /api/plugins/kanban-advanced/status"""
@@ -127,6 +212,7 @@ async def status():
         "max_turns": _get_max_turns(),
         "profiles": _check_profiles(),
         "gateway": _check_gateway(),
+        **_check_plugin_git_status(),
     }
 
 
@@ -238,8 +324,8 @@ async def init(request: Request):
     # Config overlay
     overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)
-    _hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
-    plugin_root = Path(__file__).parent.parent
+    hermes_home = resolve_hermes_home()
+    plugin_root = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
     config_file.write_text(
         build_overlay_yaml(
             working_branch=working_branch,
@@ -247,7 +333,7 @@ async def init(request: Request):
             coding_agent=coding_agent,
             policy_profile=policy_profile,
             bundle_path=plugin_root,
-            hermes_home=_hermes_home,
+            hermes_home=str(hermes_home),
             existing=existing_config,
         ),
         encoding="utf-8",
@@ -255,9 +341,7 @@ async def init(request: Request):
     output.append(f"   OK {config_file}")
 
     # Materialize skills
-    plugin_root = Path(__file__).parent.parent
-    skills_src = plugin_root / "plugin" / "skills"
-    hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+    skills_src = PLUGIN_ROOT / "plugin" / "skills"
     skills_dst = hermes_home / "skills" / "kanban-advanced"
     count = 0
     if skills_src.is_dir():
@@ -271,7 +355,7 @@ async def init(request: Request):
         output.append(f"   OK {count} skills -> {skills_dst}")
 
     # Provision scripts
-    scripts_src = plugin_root / "scripts"
+    scripts_src = PLUGIN_ROOT / "scripts"
     scripts_dst = hermes_home / "scripts"
     scripts_dst.mkdir(parents=True, exist_ok=True)
     for script_name in ["auto_unblock.sh", "board_keeper.sh", "token_tracker.py"]:
@@ -306,9 +390,9 @@ async def init(request: Request):
     return {"success": True, "output": output}
 
 
-@router.post("/update")
-async def update(request: Request):
-    """POST /api/plugins/kanban-advanced/update"""
+@router.post("/save")
+async def save(request: Request):
+    """POST /api/plugins/kanban-advanced/save — persist dashboard settings to config (not plugin Pull)."""
     try:
         body = await request.json()
     except Exception:
@@ -334,15 +418,15 @@ async def update(request: Request):
     max_turns = body.get("max_turns", 180)
 
     output = []
-    output.append("=== Updating settings ===")
+    output.append("=== Saving settings ===")
     output.append(f"   Working branch: {working_branch}")
     output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
     output.append(f"   Governance profile: {policy_profile}")
 
     overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)
-    _hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
-    plugin_root = Path(__file__).parent.parent
+    hermes_home = resolve_hermes_home()
+    plugin_root = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
     config_file.write_text(
         build_overlay_yaml(
             working_branch=working_branch,
@@ -350,12 +434,12 @@ async def update(request: Request):
             coding_agent=coding_agent,
             policy_profile=policy_profile,
             bundle_path=plugin_root,
-            hermes_home=_hermes_home,
+            hermes_home=str(hermes_home),
             existing=config,
         ),
         encoding="utf-8",
     )
-    output.append(f"   OK Updated {config_file}")
+    output.append(f"   OK Saved {config_file}")
 
     sync_project_env(
         project_root,
@@ -365,16 +449,15 @@ async def update(request: Request):
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )
-    output.append("   OK Updated .env")
+    output.append("   OK Saved .env")
 
     current_turns = _get_max_turns()
     if current_turns < max_turns:
         _run([HERMES_BIN, "-p", "orchestrator", "config", "set", "agent.max_turns", str(max_turns)])
         output.append(f"   OK max_turns set to {max_turns}")
 
-    plugin_root = Path(__file__).parent.parent
-    skills_src = plugin_root / "plugin" / "skills"
-    hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+    skills_src = PLUGIN_ROOT / "plugin" / "skills"
+    hermes_home = resolve_hermes_home()
     skills_dst = hermes_home / "skills" / "kanban-advanced"
     count = 0
     if skills_src.is_dir():
@@ -387,5 +470,5 @@ async def update(request: Request):
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
 
-    output.append("OK Settings updated")
+    output.append("OK Settings saved")
     return {"success": True, "output": output}

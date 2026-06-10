@@ -161,8 +161,8 @@ hermes --version
 # .hermes/kanban-overrides/kanban-config.yaml
 working_branch: <your-branch>
 
-# Option B — dashboard → Kanban-Advanced → Update settings (not Bootstrap)
-# Set Working branch, then click Update settings
+# Option B — dashboard → Kanban-Advanced → Save (not Bootstrap)
+# Set Working branch, then click Save
 
 # Option C — CLI init with explicit override
 hermes kanban-advanced init --project-root . --working-branch <your-branch>
@@ -171,7 +171,7 @@ hermes kanban-advanced init --project-root . --working-branch <your-branch>
 **Prevention (current behavior):**
 
 - Re-init **preserves** `working_branch` and `trigger_branch` from the existing overlay unless you pass `--working-branch` / `--trigger-branch`.
-- Dashboard **Bootstrap** on an already-initialized project also preserves branches from file; use **Update settings** to change them.
+- Dashboard **Bootstrap** on an already-initialized project also preserves branches from file; use **Save** to change them.
 - Pin the project when the gateway cwd is ambiguous (multi-clone or plugin dev tree):
 
 ```bash

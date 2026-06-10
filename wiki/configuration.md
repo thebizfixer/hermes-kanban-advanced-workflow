@@ -39,7 +39,7 @@ The `coding_agent_binary` flows through three layers to the worker:
 2. **Worker environment** — `.env` is sourced at session start → `KANBAN_CODING_AGENT` available as env var
 3. **Worker dispatch** — `[os.environ.get("KANBAN_CODING_AGENT", "agent"), "-p", prompt, ...]`
 
-To change the coding agent: edit `.env`, use dashboard **Update settings**, or re-run `hermes kanban-advanced init` (preserves existing `coding_agent_binary` unless you pick a new one interactively). The YAML config is the source of truth for documentation; the env var is what the worker reads at runtime.
+To change the coding agent: edit `.env`, use dashboard **Save**, or re-run `hermes kanban-advanced init` (preserves existing `coding_agent_binary` unless you pick a new one interactively). The YAML config is the source of truth for documentation; the env var is what the worker reads at runtime.
 
 ## Re-init and branch preservation
 
@@ -50,7 +50,7 @@ hermes kanban-advanced init --project-root .                    # keeps existing
 hermes kanban-advanced init --project-root . --working-branch staging  # override integration branch
 ```
 
-To change branches on an initialized project, prefer dashboard **Update settings** or edit `kanban-config.yaml` directly. **Working branch** defaults to git upstream / `origin/HEAD` / local `HEAD`, then `main`. **Trigger branch** is optional — leave blank to skip deploy-branch protection.
+To change branches on an initialized project, prefer dashboard **Save** or edit `kanban-config.yaml` directly. **Working branch** defaults to git upstream / `origin/HEAD` / local `HEAD`, then `main`. **Trigger branch** is optional — leave blank to skip deploy-branch protection.
 
 Optional keys you added manually (e.g. `feature_branch_prefix`, `gateway_timeout_seconds`) are preserved across re-init.
 
@@ -66,7 +66,7 @@ Set `KANBAN_PROJECT_ROOT` when you run multiple clones or when the gateway cwd m
 
 ## Policy profiles (single governance knob)
 
-Set at **init** (CLI `hermes kanban-advanced init`, dashboard **Governance profile** dropdown) or edit `policy_profile` in `kanban-config.yaml`. Init writes `KANBAN_POLICY_PROFILE` to `.env` as a runtime mirror. **Source of truth:** `kanban-config.yaml` — resolution order is config → `.env` → `balanced`. Re-run init/update to resync `.env` after hand-editing config.
+Set at **init** (CLI `hermes kanban-advanced init`, dashboard **Governance profile** dropdown) or edit `policy_profile` in `kanban-config.yaml`. Init writes `KANBAN_POLICY_PROFILE` to `.env` as a runtime mirror. **Source of truth:** `kanban-config.yaml` — resolution order is config → `.env` → `balanced`. Re-run init or click dashboard **Save** to resync `.env` after hand-editing config.
 
 | Profile | Card body policy | Evaluation chain | Board / plan gates |
 |---------|------------------|------------------|-------------------|

@@ -238,13 +238,14 @@ a:hover { text-decoration: underline; }
     </div>
   </div>
 
+  <p id="actionHint" class="form-hint" style="margin:0 0 10px">Bootstrap to run hermes kanban-advanced init with the following parameters. Save any parameter changes to plugin configuration after editing any field.</p>
   <div class="button-row">
     <button id="btnBootstrap" class="btn btn-primary" onclick="runBootstrap()">
       Bootstrap
       <span id="bootstrapSpinner" class="spinner"></span>
     </button>
-    <button id="btnUpdate" class="btn btn-secondary" onclick="runUpdate()" disabled>
-      Update settings
+    <button id="btnSave" class="btn btn-secondary" onclick="runSave()" disabled>
+      Save
     </button>
   </div>
 
@@ -368,7 +369,7 @@ async function runBootstrap() {
     if (result.success) {
       showToast('Bootstrap complete — plugin is ready', 'success');
       configLoaded = true; initRun = true;
-      document.getElementById('btnUpdate').disabled = false;
+      document.getElementById('btnSave').disabled = false;
     }
   }
 
@@ -376,23 +377,23 @@ async function runBootstrap() {
   await loadState();
 }
 
-async function runUpdate() {
+async function runSave() {
   if (!configLoaded) { showToast('Run bootstrap first', 'error'); return; }
-  var btn = document.getElementById('btnUpdate');
+  var btn = document.getElementById('btnSave');
   btn.disabled = true; clearConsole();
 
   var data = getFormData();
-  logLine('=== Updating settings ===');
+  logLine('=== Saving settings ===');
   logLine('Working branch: ' + data.working_branch);
   logLine('Coding agent: ' + data.coding_agent_binary);
   logLine('Max turns: ' + data.max_turns);
   logLine('');
 
-  var result = await apiCall('update', 'POST', data);
+  var result = await apiCall('save', 'POST', data);
 
   if (result.error) {
     logLine('ERROR: ' + result.error, 'line-err');
-    showToast('Update failed', 'error');
+    showToast('Save failed', 'error');
   } else {
     var lines = result.output || [];
     for (var i = 0; i < lines.length; i++) {
@@ -403,7 +404,7 @@ async function runUpdate() {
               : '';
       logLine(line, cls);
     }
-    showToast('Settings updated', 'success');
+    showToast('Settings saved', 'success');
   }
 
   btn.disabled = false;
@@ -446,7 +447,7 @@ async function loadState() {
   setProfileStatus('profileWorker', status.profiles && status.profiles.worker);
   setGatewayStatus(status.gateway);
 
-  document.getElementById('btnUpdate').disabled = !status.config_exists;
+  document.getElementById('btnSave').disabled = !status.config_exists;
 }
 
 document.getElementById('codingAgent').addEventListener('change', toggleCustomAgent);

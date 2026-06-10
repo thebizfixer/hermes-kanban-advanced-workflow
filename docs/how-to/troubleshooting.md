@@ -15,7 +15,7 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 | A001 — attestation missing | Re-run preflight + `kanban_attestation.py` |
 | torn-extend / dispatch stuck | `hermes gateway restart`; see `references/sqlite-kanban-db-recovery.md` |
 | Plugin not loading | `hermes plugins list`; restart Hermes after install |
-| Working branch reset to `main` after `hermes update` | Restore in `kanban-config.yaml` or dashboard **Update settings**; set `KANBAN_PROJECT_ROOT`; re-init now preserves branches — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
+| Working branch reset to `main` after `hermes update` | Restore in `kanban-config.yaml` or dashboard **Save**; set `KANBAN_PROJECT_ROOT`; re-init now preserves branches — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
 | Cross-mount / dual clone | `docs/examples/cross-mount-filesystems.md` |
 
 Full symptom list: [wiki/troubleshooting.md](../../wiki/troubleshooting.md).

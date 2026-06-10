@@ -3,7 +3,7 @@
 Overlay file: `.hermes/kanban-overrides/kanban-config.yaml` — created automatically by:
 
 - **CLI:** `hermes kanban-advanced init` (interactive, sets `coding_agent_binary` from PATH detection)
-- **Dashboard:** Hermes dashboard → **Kanban-Advanced** tab → Bootstrap (equivalent UI, no CLI needed)
+- **Dashboard:** Hermes dashboard → **Kanban-Advanced** tab → **Bootstrap** (runs `hermes kanban-advanced init`) or **Save** (persists field edits to config; plugin upgrades use **Pull** in the plugin view)
 
 To create manually:
 
@@ -15,7 +15,7 @@ Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.j
 
 ## Re-init
 
-`hermes kanban-advanced init` and dashboard **Bootstrap** refresh skills and cron scripts. When `kanban-config.yaml` already exists, branch settings are kept unless you pass explicit overrides. **Working branch** defaults from git upstream / `origin/HEAD` / local `HEAD`. **Trigger branch** is optional — when unset, E009 deploy-branch rules are disabled.
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh skills and cron scripts. When `kanban-config.yaml` already exists, branch settings are kept unless you pass explicit overrides. Use dashboard **Save** (not Bootstrap) to persist parameter edits after changing form fields. **Working branch** defaults from git upstream / `origin/HEAD` / local `HEAD`. **Trigger branch** is optional — when unset, E009 deploy-branch rules are disabled.
 
 ## Project root (dashboard)
 

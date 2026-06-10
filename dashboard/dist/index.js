@@ -46,7 +46,8 @@
   }
   function apiStatus() { return apiFetch("/api/plugins/kanban-advanced/status"); }
   function apiInit(data) { return apiFetch("/api/plugins/kanban-advanced/init", { method: "POST", body: JSON.stringify(data) }); }
-  function apiUpdate(data) { return apiFetch("/api/plugins/kanban-advanced/update", { method: "POST", body: JSON.stringify(data) }); }
+  function apiSave(data) { return apiFetch("/api/plugins/kanban-advanced/save", { method: "POST", body: JSON.stringify(data) }); }
+  function apiPluginUpdate() { return apiFetch("/api/dashboard/agent-plugins/kanban-advanced/update", { method: "POST" }); }
 
   var POLICY_PROFILES = [
     { value: "balanced", label: "balanced — block violations (default)" },
@@ -92,6 +93,7 @@
     var _useState14 = useState(null), selectedModel = _useState14[0], setSelectedModel = _useState14[1];
     // selectedModel is {provider: string, model: string} | null
     var _useState15 = useState(""), modelQuery = _useState15[0], setModelQuery = _useState15[1];
+    var _useState16 = useState(false), pluginUpdating = _useState16[0], setPluginUpdating = _useState16[1];
 
     function loadStatus() {
       apiStatus().then(function (s) {
@@ -165,12 +167,12 @@
       });
     }
 
-    function runUpdate() {
+    function runSave() {
       setBootstrapping(true);
       setConsoleLines([]);
       var data = getFormData();
-      addLines(["=== Updating settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
-      apiUpdate(data).then(function (r) {
+      addLines(["=== Saving settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
+      apiSave(data).then(function (r) {
         if (r.output) addLines(r.output);
         setBootstrapping(false);
         loadStatus();
@@ -179,6 +181,31 @@
         setBootstrapping(false);
       });
     }
+
+    function runPluginUpdate() {
+      setPluginUpdating(true);
+      setConsoleLines([]);
+      addLines(["=== Updating plugin (git pull) ===", ""]);
+      apiPluginUpdate().then(function (r) {
+        if (r.output) addLines(String(r.output).split("\n"));
+        addLines([r.unchanged ? "OK Plugin already up to date" : "OK Plugin updated"], "line-ok");
+        setPluginUpdating(false);
+        loadStatus();
+      }).catch(function (e) {
+        addLines(["ERROR: " + e.message], "line-err");
+        setPluginUpdating(false);
+      });
+    }
+
+    function initializedLabel() {
+      if (!statusInitialized) return "Not initialized";
+      if (status && status.plugin_can_update && status.plugin_up_to_date === true) return "Initialized (Up-to-date)";
+      if (status && status.plugin_can_update && status.plugin_update_available) return "Initialized (Update Plugin)";
+      return "Initialized";
+    }
+
+    var pluginUpdateDisabled = !status || !status.plugin_can_update || status.plugin_up_to_date === true
+      || status.plugin_update_available !== true || pluginUpdating || bootstrapping;
 
     // ── Model selector ──
     function openModelPicker(profileName) {
@@ -232,26 +259,37 @@
 
       // ── Status banner with inline buttons ──
       React.createElement(Card, { className: statusError ? "border-red-500/30" : statusInitialized ? "border-green-500/30" : "" },
-        React.createElement(CardContent, { className: "flex items-center gap-3 py-4" },
+        React.createElement(CardContent, { className: "flex items-start gap-3 py-4" },
           React.createElement(StatusDot, { status: statusError ? "error" : statusInitialized ? "ok" : "warn" }),
-          React.createElement("div", { className: "flex-1 min-w-0" },
+          React.createElement("div", { className: "flex-1 min-w-0 space-y-1" },
             React.createElement("p", { className: "text-sm font-medium" },
-              statusError ? "Cannot reach API"
-                : statusInitialized ? "Initialized"
-                : "Not initialized"
+              statusError ? "Cannot reach API" : initializedLabel()
             ),
-            React.createElement("p", { className: "text-xs text-muted-foreground mt-0.5 truncate" },
+            React.createElement("p", { className: "text-xs text-muted-foreground truncate" },
               statusError ? status.error
                 : statusInitialized ? "Config: " + (status.config_path || "kanban-config.yaml")
                 : "Run bootstrap to provision profiles, config, and cron scripts."
-            )
+            ),
+            !statusError ? React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
+              "Bootstrap to run hermes kanban-advanced init with the following parameters. Save any parameter changes to plugin configuration after editing any field."
+            ) : null
           ),
-          React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping, size: "sm" },
-            bootstrapping ? "Running…" : "Bootstrap"
-          ),
-          initialized ? React.createElement(Button, { variant: "outline", size: "sm", onClick: runUpdate, disabled: bootstrapping },
-            "Update"
-          ) : null
+          React.createElement("div", { className: "flex items-center gap-2 shrink-0" },
+            React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping || pluginUpdating, size: "sm" },
+              bootstrapping ? "Running…" : "Bootstrap"
+            ),
+            initialized ? React.createElement(Button, { variant: "outline", size: "sm", onClick: runSave, disabled: bootstrapping || pluginUpdating },
+              "Save"
+            ) : null,
+            status && status.plugin_can_update ? React.createElement(Button, {
+              variant: "outline",
+              size: "sm",
+              onClick: runPluginUpdate,
+              disabled: pluginUpdateDisabled
+            },
+              pluginUpdating ? "Updating…" : "Update Plugin"
+            ) : null
+          )
         )
       ),
 

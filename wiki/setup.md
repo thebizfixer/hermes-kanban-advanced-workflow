@@ -50,7 +50,7 @@
    ```
    This provisions config overlay, cron scripts, and environment settings. During init, you'll be asked which **coding agent binary** you use (Cursor CLI `agent`, Claude Code `claude`, OpenAI Codex `codex`, etc.). The choice is written to `.hermes/kanban-overrides/kanban-config.yaml` (`coding_agent_binary`) and `.env` (`KANBAN_CODING_AGENT`). Workers read this to dispatch the right binary. See [[configuration]] for what the overlay contains.
 
-   **Re-init after `hermes update`:** Safe to run again — existing `working_branch` / `trigger_branch` are preserved unless you pass `--working-branch`. To change the integration branch later, edit the overlay or use dashboard **Update settings** (not Bootstrap). If the dashboard shows the wrong branch, set `KANBAN_PROJECT_ROOT` to your app repo — see [[troubleshooting]].
+   **Re-init after `hermes update`:** Safe to run again — existing `working_branch` / `trigger_branch` are preserved unless you pass `--working-branch`. To change the integration branch later, edit the overlay or use dashboard **Save** (not Bootstrap). If the dashboard shows the wrong branch, set `KANBAN_PROJECT_ROOT` to your app repo — see [[troubleshooting]].
 
 ### Skill namespace
 
