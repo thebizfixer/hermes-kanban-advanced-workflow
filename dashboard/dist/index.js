@@ -103,7 +103,7 @@
     var _useState16 = useState(false), pluginUpdating = _useState16[0], setPluginUpdating = _useState16[1];
 
     function loadStatus() {
-      apiStatus().then(function (s) {
+      return apiStatus().then(function (s) {
         setStatus(s);
         if (s.config_exists) setInitialized(true);
         if (s.working_branch) setWorkingBranch(s.working_branch);
@@ -204,8 +204,11 @@
           }
           addLines([r.unchanged ? "OK Plugin already up to date" : "OK Plugin updated"], "line-ok");
         }
+        // Keep "Updating…" until the status refresh settles so the button
+        // never flickers back to "Update Plugin" mid-transition.
+        return loadStatus();
+      }).then(function () {
         setPluginUpdating(false);
-        loadStatus();
       }).catch(function (e) {
         addLines(["ERROR: " + e.message], "line-err");
         setPluginUpdating(false);
@@ -271,8 +274,8 @@
         labelColor = "#eab308";
       }
       return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "6px" } },
-        React.createElement("span", { style: { display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: dotColor, flexShrink: 0 } }),
-        React.createElement("span", { style: { fontSize: "12px", color: labelColor } }, labelText)
+        React.createElement("span", { style: { fontSize: "12px", color: labelColor } }, labelText),
+        React.createElement("span", { style: { display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: dotColor, flexShrink: 0 } })
       );
     }
 
