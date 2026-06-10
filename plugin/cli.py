@@ -435,7 +435,7 @@ def _handle_init(args) -> int:
             if child.is_dir() and skill_md.exists():
                 dst_dir = skills_dst / child.name
                 dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(skill_md.read_text())
+                (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
                 count += 1
         print(f"   OK {count} skills -> {skills_dst}")
     else:
@@ -450,7 +450,7 @@ def _handle_init(args) -> int:
         src = SCRIPTS_DIR / script_name
         dst = cron_dir / script_name
         if src.exists():
-            dst.write_text(src.read_text())
+            dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
             dst.chmod(0o755)
             print(f"   OK {script_name} -> {dst}")
         else:
