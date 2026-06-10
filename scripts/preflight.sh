@@ -243,6 +243,70 @@ check_profile_availability() {
   fi
 }
 
+check_model_reachability() {
+  # For each profile in PREFLIGHT_PROFILES, extract the configured provider from
+  # `hermes -p <profile> config show` and run `hermes auth status <provider>`.
+  # OAuth tokens (Nous Portal, stepfun, etc.) can be stale while the token file
+  # still exists — this catches expired sessions before decomposition dispatches
+  # workers that will silently exit rc=0 with no output.
+  local issues=()
+  local warnings=()
+
+  if ! command -v hermes >/dev/null 2>&1; then
+    record_check "model_reachability" "degraded" "degraded" \
+      "hermes not on PATH — skipping model reachability check"
+    return
+  fi
+
+  IFS=',' read -r -a _mr_profiles <<< "$PREFLIGHT_PROFILES"
+  for _mr_profile in "${_mr_profiles[@]}"; do
+    _mr_profile="$(printf '%s' "$_mr_profile" | tr -d '[:space:]"'\''')"
+    [[ -z "$_mr_profile" ]] && continue
+
+    local _mr_config_out=""
+    _mr_config_out="$(run_with_timeout "$CHECK_TIMEOUT" hermes -p "$_mr_profile" config show 2>/dev/null || true)"
+
+    local _mr_provider=""
+    _mr_provider="$(printf '%s' "$_mr_config_out" | grep -oE "'provider': '[^']+'" | head -1 \
+      | sed "s/'provider': '//; s/'$//")"
+
+    if [[ -z "$_mr_provider" ]]; then
+      warnings+=("${_mr_profile}: could not determine provider — verify manually")
+      continue
+    fi
+
+    local _mr_auth_out=""
+    local _mr_auth_rc=0
+    _mr_auth_out="$(run_with_timeout 10 hermes auth status "$_mr_provider" 2>&1)" \
+      || _mr_auth_rc=$?
+
+    local _mr_auth_lower
+    _mr_auth_lower="$(printf '%s' "$_mr_auth_out" | tr '[:upper:]' '[:lower:]')"
+
+    if printf '%s' "$_mr_auth_lower" | grep -qE 'logged out|not logged|expired|invalid|unauthenticated'; then
+      issues+=("${_mr_profile} (${_mr_provider}): auth expired — run: hermes auth add ${_mr_provider}")
+    elif printf '%s' "$_mr_auth_lower" | grep -qE 'logged in|authenticated|valid|active'; then
+      : # pass
+    elif [[ $_mr_auth_rc -ne 0 ]]; then
+      warnings+=("${_mr_profile} (${_mr_provider}): auth status check failed (rc=${_mr_auth_rc}) — verify manually")
+    fi
+    # rc=0 with no negative keywords: API-key or unknown auth — treat as pass
+  done
+
+  if ((${#issues[@]} > 0)); then
+    local _mr_joined
+    _mr_joined="$(IFS='; '; printf '%s' "${issues[*]}")"
+    record_check "model_reachability" "fail" "blocking" "$_mr_joined"
+  elif ((${#warnings[@]} > 0)); then
+    local _mr_joined
+    _mr_joined="$(IFS='; '; printf '%s' "${warnings[*]}")"
+    record_check "model_reachability" "degraded" "degraded" "$_mr_joined"
+  else
+    record_check "model_reachability" "pass" "blocking" \
+      "Model auth verified for profiles (${PREFLIGHT_PROFILES})"
+  fi
+}
+
 check_environment_parity() {
   local issues=()
   local warnings=()
@@ -513,6 +577,7 @@ check_secret_availability
 check_api_reachability
 check_gateway_health
 check_profile_availability
+check_model_reachability
 check_environment_parity
 check_token_log
 check_plan_backup

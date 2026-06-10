@@ -63,6 +63,7 @@ body {
 .status-dot.ok { background: var(--ka-green); }
 .status-dot.warn { background: var(--ka-yellow); }
 .status-dot.missing { background: var(--ka-text-quaternary); }
+.status-dot.err { background: #ef4444; }
 .status-text { flex: 1; }
 .status-text .label { font-size: 14px; font-weight: 510; color: var(--ka-text); }
 .status-text .detail { font-size: 13px; color: var(--ka-text-tertiary); margin-top: 2px; }
@@ -304,13 +305,38 @@ function setBanner(state, label, detail) {
 
 function setProfileStatus(id, info) {
   var el = document.getElementById(id);
-  if (!info || !info.exists) {
-    el.textContent = 'not found'; el.className = 'value missing';
-  } else if (!info.has_model) {
-    el.textContent = 'exists (no model)'; el.className = 'value warn';
+  el.innerHTML = '';
+  el.className = 'value';
+
+  var dot = document.createElement('span');
+  dot.className = 'status-dot';
+  var label = document.createTextNode('');
+
+  var inConfig = info && info.exists && info.has_model;
+
+  if (!inConfig) {
+    // Red: not in hermes config (profile missing or no model set)
+    dot.classList.add('err');
+    label = document.createTextNode(info && info.exists ? 'no model' : 'not found');
+  } else if (info.model_reachable === true) {
+    // Green: reachable
+    dot.classList.add('ok');
+    el.classList.add('ok');
+    label = document.createTextNode('reachable (' + (info.model || '?') + ')');
+  } else if (info.model_reachable === false) {
+    // Yellow: in config but auth stale / unreachable
+    dot.classList.add('warn');
+    el.classList.add('warn');
+    label = document.createTextNode('auth stale (' + (info.model || '?') + ')');
   } else {
-    el.textContent = 'configured (' + (info.model || '?') + ')'; el.className = 'value ok';
+    // Yellow: in config, reachability unknown (no OAuth flow for this provider)
+    dot.classList.add('warn');
+    el.classList.add('warn');
+    label = document.createTextNode('configured (' + (info.model || '?') + ')');
   }
+
+  el.appendChild(dot);
+  el.appendChild(label);
 }
 
 function setGatewayStatus(info) {

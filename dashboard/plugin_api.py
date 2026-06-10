@@ -69,6 +69,30 @@ def _read_env(project_root: Path) -> dict:
     return env
 
 
+def _check_model_reachable(provider: str) -> bool | None:
+    """Check provider auth status via `hermes auth status <provider>`.
+
+    Returns True (logged in), False (logged out / expired), or None (unknown —
+    command not available, provider doesn't use OAuth, or ambiguous output).
+    None is rendered as yellow in the dashboard (configured but unverified).
+    """
+    if not provider:
+        return None
+    try:
+        r = _run([HERMES_BIN, "auth", "status", provider], timeout=8)
+        out = (r.stdout + r.stderr).lower()
+        if any(k in out for k in ("logged out", "not logged", "expired", "invalid", "unauthenticated")):
+            return False
+        if any(k in out for k in ("logged in", "authenticated", "valid", "active")):
+            return True
+        # Command succeeded with no negative indicators — treat as reachable.
+        if r.returncode == 0:
+            return True
+        return False
+    except Exception:
+        return None
+
+
 def _check_profiles() -> dict:
     result = {}
     try:
@@ -78,7 +102,13 @@ def _check_profiles() -> dict:
         profiles_output = ""
 
     for profile in ["worker", "orchestrator"]:
-        info = {"exists": profile in profiles_output, "has_model": False, "model": ""}
+        info: dict = {
+            "exists": profile in profiles_output,
+            "has_model": False,
+            "model": "",
+            "provider": "",
+            "model_reachable": None,
+        }
         if info["exists"]:
             try:
                 r = _run([HERMES_BIN, "-p", profile, "config", "show"])
@@ -86,8 +116,15 @@ def _check_profiles() -> dict:
                 if m and m.group(1) and m.group(1) != "None":
                     info["has_model"] = True
                     info["model"] = m.group(1)
+                p = re.search(r"'provider':\s*'([^']+)'", r.stdout)
+                if p:
+                    info["provider"] = p.group(1)
             except Exception:
                 pass
+
+            if info["has_model"]:
+                info["model_reachable"] = _check_model_reachable(info["provider"])
+
         result[profile] = info
     return result
 
