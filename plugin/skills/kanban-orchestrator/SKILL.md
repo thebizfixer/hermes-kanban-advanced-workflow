@@ -37,16 +37,36 @@ You may be started by the **dispatcher** (not a human) because a non-orchestrato
 profile created a handoff card via `scripts/kanban_handoff.py`. You recognize this
 card by its title `Decompose: <plan_id>` and the body marker `Type: orchestrator-handoff`.
 Such a card is **SOP-only** — there is intentionally **no `agent -p` block**. Do NOT
-treat it as a coding task and do NOT look for an agent block (no E014 no-op). Instead:
+treat it as a coding task and do NOT look for an agent block (no E014 no-op).
 
-1. Read the plan path, repo root, and `working_branch` from the card body.
-2. Run the **Standard process** below (preflight → attestation → `kanban_decompose.py`
-   → crons → `validate_board.sh` → complete gate → ongoing duties).
-3. **Self-referential exception:** if the plan modifies the kanban-advanced governance
-   infrastructure itself, do NOT auto-decompose — block the handoff card and notify the
-   operator to run decomposition manually.
-4. When the board is decomposed and validated, complete the handoff card with a summary
-   listing the gate id and the number of cards dispatched.
+### Fast-path (follow this, not the full Standard process below)
+
+**Load ONLY this skill at entry. Do NOT load `kanban-worker` during decomposition —
+that skill is for workers, not orchestrators, and adds unnecessary context overhead.**
+
+```
+skill_view("kanban-advanced:kanban-orchestrator")
+```
+
+Check the card body for `pre_dispatch_gate:` and `cards_yaml:` metadata:
+
+| Card body shows | Action |
+|----------------|--------|
+| `pre_dispatch_gate: PASSED at …` | Skip pre_dispatch_gate.sh entirely — go straight to Standard Process **Step 2** (create gate) |
+| `pre_dispatch_gate: FAILED …` or `UNKNOWN` | Run `bash scripts/pre_dispatch_gate.sh <plan_id>` first and resolve failures |
+| `cards_yaml: <path>` (not "none") | Pass `--cards-yaml <path>` to `kanban_decompose.py` (richer workspace/branch metadata) |
+| `cards_yaml: none` | Pass `--plan <plan_path>` to `kanban_decompose.py` |
+
+The card body is a **command-first runbook** with literal CLI commands pre-substituted.
+Read the "Decomposition runbook" section in the card body and execute the steps in order.
+You do not need to re-derive paths, plan_id, or profile names — they are in the card body.
+
+**Self-referential exception:** if the plan modifies the kanban-advanced governance
+infrastructure itself, do NOT auto-decompose — block the handoff card and notify the
+operator to run decomposition manually.
+
+When the board is decomposed and validated, complete the handoff card with a summary
+listing the gate id and the number of cards dispatched.
 
 ## Role: Orchestrator
 

@@ -41,6 +41,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -164,6 +165,35 @@ def _gateway_running() -> bool:
     return r.returncode == 0 and "running" in r.stdout.lower()
 
 
+def _run_pre_dispatch_gate(plan_id: str, repo_root: Path) -> str:
+    """Run pre_dispatch_gate.sh and return a status stamp for the card body.
+
+    Returns 'PASSED at <iso-timestamp>' on rc=0, or 'UNKNOWN (not run)' if the
+    script is absent, or 'FAILED: <reason>' on non-zero exit.  Never raises.
+    """
+    gate_script = repo_root / "scripts" / "pre_dispatch_gate.sh"
+    if not gate_script.is_file():
+        return "UNKNOWN (pre_dispatch_gate.sh not found)"
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        r = subprocess.run(
+            ["bash", str(gate_script), plan_id],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            cwd=str(repo_root),
+        )
+        if r.returncode == 0:
+            return f"PASSED at {ts}"
+        summary = (r.stdout + r.stderr).strip().splitlines()
+        reason = next((l for l in summary if l.strip()), "non-zero exit").strip()[:120]
+        return f"FAILED at {ts}: {reason}"
+    except Exception as exc:
+        return f"UNKNOWN (error: {exc})"
+
+
 def _list_cards() -> list[dict]:
     """Return all board cards as dicts (best-effort JSON, fallback to text)."""
     try:
@@ -222,60 +252,97 @@ def _derive_plan_id(plan_path: Path, explicit: str | None) -> str | None:
 
 def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: str,
                 orchestrator_profile: str,
-                cards_yaml_path: Path | None = None) -> str:
-    """SOP-only handoff body. NO ``agent -p`` block by design."""
+                cards_yaml_path: Path | None = None,
+                gate_status: str = "UNKNOWN (not run)") -> str:
+    """SOP-only handoff body. NO ``agent -p`` block by design.
+
+    Designed as a command-first runbook: literal CLI commands are pre-substituted
+    so the orchestrator can execute without discovery overhead.  pre_dispatch_gate
+    status is stamped at creation time so the orchestrator skips re-running it when
+    already PASSED.
+    """
     if cards_yaml_path and cards_yaml_path.is_file():
-        decompose_cmd = (
-            f'python3 scripts/kanban_decompose.py --cards-yaml "{cards_yaml_path}" '
-            f'--gate-id <gate_id>'
-        )
-        decompose_note = (
-            f"Cards YAML exists at {cards_yaml_path} — it has richer per-card "
-            f"workspace/branch metadata. Pass --gate-id after you create the gate "
-            f"in Step 3 so the decomposer reuses it instead of creating a duplicate."
-        )
+        decompose_source = f'--cards-yaml "{cards_yaml_path}"'
+        source_note = f"(cards YAML — workspace/branch per card)"
     else:
-        decompose_cmd = (
-            f'python3 scripts/kanban_decompose.py --plan "{plan_path}" '
-            f'--gate-id <gate_id>'
-        )
-        decompose_note = (
-            "Pass --gate-id after you create the gate in Step 3 so the decomposer "
-            "reuses it instead of auto-creating a duplicate gate card."
-        )
+        decompose_source = f'--plan "{plan_path}"'
+        source_note = f"(plan markdown — workspace defaults to worktree)"
+
+    gate_skip = (
+        "pre_dispatch_gate already PASSED — skip directly to Step 2."
+        if gate_status.startswith("PASSED")
+        else f"pre_dispatch_gate status: {gate_status} — re-run if needed before Step 2."
+    )
 
     return f"""Type: {HANDOFF_TYPE}
 plan_id: {plan_id}
 Plan: {plan_path}
+cards_yaml: {cards_yaml_path or "none"}
 Repo: {repo_root}
 working_branch: {working_branch}
+pre_dispatch_gate: {gate_status}
 
-You are running under the **{orchestrator_profile}** profile via a board-mediated
-handoff. Execute the kanban-advanced decomposition SOP for the plan above. This is
-NOT a coding task — there is intentionally no `agent -p` block. Run the SOP from
-your terminal:
+## Decomposition runbook
 
-1. Load the skill: skill_view("kanban-advanced:kanban-orchestrator").
-2. PREFLIGHT — `hermes kanban-advanced preflight {plan_id}` (or
-   `bash scripts/preflight.sh`). Resolve any gate failure before continuing.
-3. ATTESTATION + GATE — complete Step 0c/0d attestation; create gate card:
-   `hermes kanban create gate --assignee {orchestrator_profile}`
-   `hermes kanban block <gate_id> "Gate — awaiting links"`
-   Then immediately create crons (auto-unblock 1m + board-keeper 3m) and verify
-   both are running BEFORE creating any implementation cards.
-4. DECOMPOSE — {decompose_cmd}
-   {decompose_note}
-   (block-on-create; never `--triage`, never `--parent` on create).
-5. VALIDATE — `bash scripts/validate_board.sh`. Fix every structural failure.
-6. COMPLETE GATE — only after validate passes, complete the gate card to release
-   wave 1. Then perform ongoing orchestrator duties (monitor, reconcile, audit).
+You are the **{orchestrator_profile}** profile. This is a board-mediated handoff —
+SOP-only, no `agent -p` block, not a coding task.
 
-Self-referential exception: if this plan modifies the kanban-advanced governance
-infrastructure itself, do NOT auto-run decomposition — block this card and notify
-the operator to run it manually.
+**Load skill first (ONLY this skill — do NOT load kanban-worker at entry):**
+```
+skill_view("kanban-advanced:kanban-orchestrator")
+```
 
-When decomposition is complete and the board is validated, complete this card with
-a summary listing the gate id and the number of cards dispatched.
+{gate_skip}
+
+### Step 2 — Create gate card and crons
+
+```bash
+hermes kanban create "Gate — {plan_id}" --assignee {orchestrator_profile}
+# note the gate_id printed above, then:
+hermes kanban block <gate_id> "Gate — awaiting links"
+```
+
+**Immediately after gate — create crons BEFORE impl cards:**
+```
+cronjob(action="create", name="kanban-auto-unblock-1m", schedule="every 1m",
+        deliver="origin", no_agent=true, repeat=999, script="scripts/auto_unblock.sh")
+cronjob(action="create", name="kanban-board-keeper-3m", schedule="every 3m",
+        deliver="origin", no_agent=true, repeat=999, script="scripts/board_keeper.sh")
+cronjob(action="list")  # verify both job_ids show next_run_at in the future
+```
+
+**STOP if either cron fails to verify — do not create implementation cards.**
+
+### Step 3 — Decompose
+
+Substitute `<gate_id>` from Step 2:
+```bash
+python3 scripts/kanban_decompose.py {decompose_source} --gate-id <gate_id>
+```
+{source_note} — block-on-create; never `--triage`, never `--parent` on create.
+
+### Step 4 — Validate
+
+```bash
+bash scripts/validate_board.sh
+```
+Fix every structural failure before proceeding.
+
+### Step 5 — Complete gate
+
+```bash
+hermes kanban complete <gate_id> --summary "Gate complete. Auto-unblock: <cron1_id>. Board-keeper: <cron2_id>. N cards dispatched."
+```
+
+Then perform ongoing orchestrator duties (monitor, reconcile, final audit).
+
+---
+
+**Self-referential exception:** if this plan modifies the kanban-advanced governance
+infrastructure itself, block this card and notify the operator to run decomposition
+manually.
+
+When done, complete this card: `hermes kanban complete <this_card_id> --summary "Decomposed <plan_id>: gate=<gate_id>, N impl cards."`
 """
 
 
@@ -330,10 +397,16 @@ def main() -> int:
     orchestrator_profile = overlay.get("orchestrator_profile", "orchestrator")
     working_branch = overlay.get("working_branch", "main")
 
+    # Run pre_dispatch_gate.sh now and stamp the result.  This lets the
+    # orchestrator skip re-running it when the card shows PASSED.
+    gate_status = _run_pre_dispatch_gate(plan_id, project_root)
+
     title = f"Decompose: {plan_id}"
     body = _build_body(
         plan_id, plan_path, project_root, working_branch,
-        orchestrator_profile, cards_yaml_path=cards_yaml_path,
+        orchestrator_profile,
+        cards_yaml_path=cards_yaml_path,
+        gate_status=gate_status,
     )
 
     # ── Preconditions ──────────────────────────────────────────────────────
