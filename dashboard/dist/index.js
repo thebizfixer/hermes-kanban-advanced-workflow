@@ -75,6 +75,7 @@
   function StatusDot(props) {
     var color = props.status === "ok" ? "bg-green-500"
       : props.status === "warn" ? "bg-yellow-500"
+      : props.status === "err" ? "bg-red-500"
       : "bg-muted-foreground/30";
     return React.createElement("span", { className: cn("inline-block w-2 h-2 rounded-full flex-shrink-0", color) });
   }
@@ -250,9 +251,33 @@
 
     // ── Render helpers ──
     function profileBadge(info) {
-      if (!info || !info.exists) return React.createElement(Badge, { variant: "outline", className: "text-muted-foreground" }, "not found");
-      if (!info.has_model) return React.createElement(Badge, { variant: "outline", className: "text-yellow-500 border-yellow-500/30" }, "exists (no model)");
-      return React.createElement(Badge, { variant: "outline", className: "text-green-500 border-green-500/30" }, "configured (" + (info.model || "?") + ")");
+      var inConfig = info && info.exists && info.has_model;
+      var dotStatus, labelText, labelColor;
+      if (!inConfig) {
+        // Red: not in hermes config (profile missing or no model set)
+        dotStatus = "err";
+        labelText = info && info.exists ? "no model" : "not found";
+        labelColor = "text-red-400";
+      } else if (info.model_reachable === true) {
+        // Green: auth verified reachable
+        dotStatus = "ok";
+        labelText = "reachable (" + (info.model || "?") + ")";
+        labelColor = "text-green-500";
+      } else if (info.model_reachable === false) {
+        // Yellow: in config but auth stale / expired
+        dotStatus = "warn";
+        labelText = "auth stale (" + (info.model || "?") + ")";
+        labelColor = "text-yellow-500";
+      } else {
+        // Yellow: configured but reachability unknown (API-key provider, no OAuth)
+        dotStatus = "warn";
+        labelText = "configured (" + (info.model || "?") + ")";
+        labelColor = "text-yellow-500";
+      }
+      return React.createElement("div", { className: "flex items-center gap-1.5" },
+        React.createElement(StatusDot, { status: dotStatus }),
+        React.createElement("span", { className: "text-xs " + labelColor }, labelText)
+      );
     }
 
     var statusInitialized = status && status.config_exists;
@@ -301,7 +326,12 @@
               onClick: runPluginUpdate,
               disabled: pluginUpdateDisabled
             },
-              pluginUpdating ? "Updating…" : "Update Plugin"
+              pluginUpdating
+                ? React.createElement("span", { className: "flex items-center gap-1.5" },
+                    React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
+                    "Updating…"
+                  )
+                : "Update Plugin"
             ) : null
           )
         )
