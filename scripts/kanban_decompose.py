@@ -58,6 +58,8 @@ def parse_args():
     p.add_argument("--dry-run", action="store_true", help="Parse and print cards, don't create")
     p.add_argument("--no-crons", action="store_true", help="Skip cron creation")
     p.add_argument("--json", action="store_true", help="Machine-readable JSON output")
+    p.add_argument("--gate-id", help="Reuse an existing gate card ID instead of auto-creating one "
+                                     "(pass when orchestrator SOP already created the gate)")
     p.add_argument("--stagger-ms", type=int, default=1500,
                    help="Millis between card creates (default: 1500)")
     p.add_argument("--pause-every", type=int, default=5,
@@ -293,18 +295,26 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
     try:
         cmd = ["hermes", "kanban", "create", title, "--assignee", assignee]
 
-        # Code-gen cards: add workspace and branch
-        if card_type == "code-gen" and card.get("workspace"):
-            cmd.extend(["--workspace", card["workspace"]])
-        if card_type == "code-gen" and card.get("branch"):
-            cmd.extend(["--branch", card["branch"]])
+        # Code-gen cards must run in a worktree, not scratch.  Default to
+        # worktree with an auto-generated branch when the plan omits them.
+        if card_type == "code-gen":
+            workspace = card.get("workspace") or "worktree"
+            plan_id = card.get("plan_id", "plan")
+            card_key = card.get("key", "card")
+            branch = card.get("branch") or f"kanban/{plan_id}/{card_key}"
+            cmd.extend(["--workspace", workspace])
+            cmd.extend(["--branch", branch])
 
         # Read body from temp file, pass inline (--body-file not supported in all Hermes versions)
         with open(tmpfile, 'r', encoding="utf-8") as bf:
             body_content = bf.read()
         cmd.extend(["--body", body_content])
 
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            timeout=30,
+        )
         out = result.stdout.strip()
         err = result.stderr.strip()
 
@@ -455,12 +465,17 @@ def main():
     print(f"\nPlan: {len(all_cards)} cards ({len(impl_cards)} impl, {len(gate_cards)} gate, {len(root_cards)} root)")
     print(f"Mode: {'DRY-RUN' if args.dry_run else 'LIVE'}\n")
 
-    # ── Step 1: Create gate card (ready → block immediately) ──
+    # ── Step 1: Gate card ──────────────────────────────────────────────────
     print("=== Step 1: Gate card (create → block) ===")
-    gate_id = create_card(gate_card, args.dry_run, block_after=True)
-    if not gate_id:
-        sys.exit("ERROR: Failed to create gate card")
-    print(f"  Gate: {gate_id} (blocked — orchestrator-only control card)")
+    if args.gate_id:
+        # Orchestrator SOP already created and blocked the gate — reuse it.
+        gate_id = args.gate_id
+        print(f"  Gate: {gate_id} (reusing existing — skipping auto-create)")
+    else:
+        gate_id = create_card(gate_card, args.dry_run, block_after=True)
+        if not gate_id:
+            sys.exit("ERROR: Failed to create gate card")
+        print(f"  Gate: {gate_id} (blocked — orchestrator-only control card)")
     time.sleep(args.stagger_ms / 1000)
 
     # ── Step 2: Create implementation cards (blocked on create) ──

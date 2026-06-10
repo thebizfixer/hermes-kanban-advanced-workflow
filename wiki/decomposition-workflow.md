@@ -53,18 +53,22 @@ Without this, triage cards may be LLM-rewritten even when you intended manual de
 ## Standard decomposition sequence
 
 ```
-0. VERIFY DB integrity          PRAGMA integrity_check → 'ok'
-1. CREATE gate → block          create gate, block immediately (<1s race window)
-2. CREATE impl cards (stagger)  create each card, block immediately; ≥1s stagger, 3s pause / 5 cards
-3. CREATE root + audit          root: create only; audit: create + block
-4. COMPLETE root                hermes kanban complete <root_id> (placeholder only)
-5. LINK dependencies            gate → all impl; wave_parent; ordinal_parent; impl → audit
-6. CREATE crons                 auto_unblock (every 1m) + board_keeper (every 3m)
-7. RUN validate_board.sh        full governance gate — fail closed
-8. COMPLETE gate (orchestrator) validate passes → hermes kanban complete <gate_id>
+0.  VERIFY DB integrity         PRAGMA integrity_check → 'ok'
+1.  CREATE root card            create root, do not block (completed immediately)
+2.  CREATE gate → block         create gate, block immediately (<1s race window)
+3.  CREATE auto-unblock cron    cronjob every 1m — BEFORE impl cards exist
+4.  CREATE board-keeper cron    cronjob every 3m — BEFORE impl cards exist
+5.  VERIFY both crons running   cronjob(action="list") — hard stop if either missing
+6.  CREATE impl cards (stagger) create each card, block immediately; ≥1s stagger, 3s pause / 5 cards
+                                 pass --gate-id to kanban_decompose.py to avoid duplicate gate
+7.  CREATE audit card           create + block (gates on all impl)
+8.  COMPLETE root               hermes kanban complete <root_id> (placeholder only)
+9.  LINK dependencies           gate → all impl; wave_parent; ordinal_parent; impl → audit
+10. RUN validate_board.sh       full governance gate — fail closed
+11. COMPLETE gate (orchestrator) validate passes → hermes kanban complete <gate_id>
 ```
 
-`kanban_decompose.py` implements steps 1–5 and prints orchestrator instructions for 7–8. Crons (step 6) are orchestrator-created per `kanban-orchestrator` SKILL. Step 8 is **orchestrator-only** — not a human checkpoint.
+`kanban_decompose.py` implements steps 6–9 (pass `--gate-id` to skip re-creating the gate). Crons (steps 3–5) are **orchestrator-created before card creation** per `kanban-orchestrator` SKILL. Step 11 is **orchestrator-only** — not a human checkpoint.
 
 Manual orchestration may create root before gate (SKILL step order); both paths must **complete root** and use **block-on-create** for gate, impl, and audit.
 

@@ -298,39 +298,42 @@ Draft the graph out loud before creating anything:
 ### Standard process (mandatory for every plan)
 
 ```
-0. VERIFY DB integrity              python3 -c "import sqlite3; db=sqlite3.connect('$HERMES_HOME/kanban.db'); print(db.execute('PRAGMA integrity_check').fetchone()[0]); db.close()"
+0.  VERIFY DB integrity             python3 -c "import sqlite3; db=sqlite3.connect('$HERMES_HOME/kanban.db'); print(db.execute('PRAGMA integrity_check').fetchone()[0]); db.close()"
                                      Must return 'ok'. Remove stale init.lock if present.
-1. CREATE root card                  hermes kanban create "<plan>" --assignee ${orchestrator_profile}
-2. CREATE gate (blocked)            hermes kanban create gate --assignee ${orchestrator_profile}
+1.  CREATE root card                 hermes kanban create "<plan>" --assignee ${orchestrator_profile}
+2.  CREATE gate (blocked)           hermes kanban create gate --assignee ${orchestrator_profile}
                                      hermes kanban block <gate_id> "Gate — awaiting dependency links"
-3. CREATE all implementation cards  Create independent cards as ready. Create dependent cards as ready,
-   (STAGGERED)                      then immediately block before the dispatcher claims them.
+3.  CREATE auto-unblock cron        cronjob(action="create", name="kanban-auto-unblock-1m",
+                                      schedule="every 1m", deliver="origin", no_agent=true,
+                                      repeat=999, script="scripts/auto_unblock.sh")
+4.  CREATE board keeper cron        cronjob(action="create", name="kanban-board-keeper-3m",
+                                      schedule="every 3m", deliver="origin", no_agent=true,
+                                      repeat=999, script="scripts/board_keeper.sh")
+5.  VERIFY both crons running       cronjob(action="list") — confirm both job_ids with
+                                      next_run_at in the future. Store job IDs.
+                                      STOP here if crons cannot be verified — do not create
+                                      implementation cards without a functioning auto-unblock.
+6.  CREATE all implementation cards Create independent cards as ready. Create dependent cards as ready,
+    (STAGGERED)                     then immediately block before the dispatcher claims them.
                                      Stagger creates: ≥1s between cards, ≥3s pause every 5 cards.
                                      ALL implementation cards assigned to ${worker_profile} (worker profile).
                                      Gate, root, audit assigned to ${orchestrator_profile} (orchestrator profile).
-4. CREATE final audit card          hermes kanban create "Final audit: <plan>" --assignee ${orchestrator_profile}
+                                     Pass --gate-id <gate_id> to kanban_decompose.py to avoid duplicate gate.
+7.  CREATE final audit card         hermes kanban create "Final audit: <plan>" --assignee ${orchestrator_profile}
                                      hermes kanban block <audit_id> "Awaiting parent completion"
-5. COMPLETE root immediately        hermes kanban complete <root_id> --summary "Root complete — N cards dispatched."
-6. LINK all dependencies            hermes kanban link <parent> <child>
-7. CREATE auto-unblock cron         cronjob(action="create", name="kanban-auto-unblock-1m",
-                                      schedule="every 1m", deliver="origin", no_agent=true,
-                                      repeat=999, script="scripts/auto_unblock.sh")
-8. CREATE board keeper cron         cronjob(action="create", name="kanban-board-keeper-3m",
-                                      schedule="every 3m", deliver="origin", no_agent=true,
-                                      repeat=999, script="scripts/board_keeper.sh")
-9. VERIFY both crons running        cronjob(action="list") — confirm both job_ids with
-                                      next_run_at in the future
+8.  COMPLETE root immediately       hermes kanban complete <root_id> --summary "Root complete — N cards dispatched."
+9.  LINK all dependencies           hermes kanban link <parent> <child>
 10. RUN validate_board.sh           bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
-                                      Full governance gate: cron health (scripts executable + hermes PATH +
-                                      crons running), agent blocks, workspace isolation, parent links,
-                                      dependency gating, test lines, budget heuristics.
+                                     Full governance gate: cron health (scripts executable + hermes PATH +
+                                     crons running), agent blocks, workspace isolation, parent links,
+                                     dependency gating, test lines, budget heuristics.
 11. COMPLETE gate (orchestrator)    After validate passes: hermes kanban complete <gate_id> --summary "Gate complete.
-                                      Auto-unblock cron: <id>, Board keeper cron: <id>."
-                                      Do NOT unblock the gate first — completion marks it done; auto_unblock.sh
-                                      releases wave-1 children on the next cron tick.
+                                     Auto-unblock cron: <id>, Board keeper cron: <id>."
+                                     Do NOT unblock the gate first — completion marks it done; auto_unblock.sh
+                                     releases wave-1 children on the next cron tick.
 ```
 
-**Auto-progression (mandatory):** LLM orchestrators cannot poll the board autonomously — they only act when prompted. The mechanical work of "check parents → unblock children" and "salvage iteration-limit cards" must be delegated to scripts. The auto-unblock and board keeper crons are created as a mandatory hard gate in Steps 7–9 — crons are created and verified BEFORE validate_board.sh runs (Step 10), so the full governance gate includes cron health. The gate cannot complete until both crons are verified running AND validate_board.sh passes.
+**Auto-progression (mandatory):** Crons are created at Steps 3–5, **before any implementation cards exist**. This guarantees auto-unblock is polling before the first worker completes. If the orchestrator session terminates after card creation but before gate completion, crons are already in place and wave progression continues. The gate cannot complete until crons are verified running (Step 5) AND validate_board.sh passes (Step 10).
 
 **Cron removal during cleanup:** Both crons must be removed during `kanban-advanced:kanban-cleanup`:
 

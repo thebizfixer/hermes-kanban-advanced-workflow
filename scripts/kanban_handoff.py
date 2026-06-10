@@ -221,8 +221,29 @@ def _derive_plan_id(plan_path: Path, explicit: str | None) -> str | None:
 
 
 def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: str,
-                orchestrator_profile: str) -> str:
+                orchestrator_profile: str,
+                cards_yaml_path: Path | None = None) -> str:
     """SOP-only handoff body. NO ``agent -p`` block by design."""
+    if cards_yaml_path and cards_yaml_path.is_file():
+        decompose_cmd = (
+            f'python3 scripts/kanban_decompose.py --cards-yaml "{cards_yaml_path}" '
+            f'--gate-id <gate_id>'
+        )
+        decompose_note = (
+            f"Cards YAML exists at {cards_yaml_path} — it has richer per-card "
+            f"workspace/branch metadata. Pass --gate-id after you create the gate "
+            f"in Step 3 so the decomposer reuses it instead of creating a duplicate."
+        )
+    else:
+        decompose_cmd = (
+            f'python3 scripts/kanban_decompose.py --plan "{plan_path}" '
+            f'--gate-id <gate_id>'
+        )
+        decompose_note = (
+            "Pass --gate-id after you create the gate in Step 3 so the decomposer "
+            "reuses it instead of auto-creating a duplicate gate card."
+        )
+
     return f"""Type: {HANDOFF_TYPE}
 plan_id: {plan_id}
 Plan: {plan_path}
@@ -237,13 +258,16 @@ your terminal:
 1. Load the skill: skill_view("kanban-advanced:kanban-orchestrator").
 2. PREFLIGHT — `hermes kanban-advanced preflight {plan_id}` (or
    `bash scripts/preflight.sh`). Resolve any gate failure before continuing.
-3. ATTESTATION — complete the Step 0c/0d attestation gate (plan has agent-prompt
-   blocks, auto_decompose is false, orchestrator/worker profiles exist).
-4. DECOMPOSE — `python3 scripts/kanban_decompose.py --plan "{plan_path}"`
+3. ATTESTATION + GATE — complete Step 0c/0d attestation; create gate card:
+   `hermes kanban create gate --assignee {orchestrator_profile}`
+   `hermes kanban block <gate_id> "Gate — awaiting links"`
+   Then immediately create crons (auto-unblock 1m + board-keeper 3m) and verify
+   both are running BEFORE creating any implementation cards.
+4. DECOMPOSE — {decompose_cmd}
+   {decompose_note}
    (block-on-create; never `--triage`, never `--parent` on create).
-5. CRONS — create the auto-unblock (1m) and board-keeper (3m) cron jobs.
-6. VALIDATE — `bash scripts/validate_board.sh`. Fix every structural failure.
-7. COMPLETE GATE — only after validate passes, complete the gate card to release
+5. VALIDATE — `bash scripts/validate_board.sh`. Fix every structural failure.
+6. COMPLETE GATE — only after validate passes, complete the gate card to release
    wave 1. Then perform ongoing orchestrator duties (monitor, reconcile, audit).
 
 Self-referential exception: if this plan modifies the kanban-advanced governance
@@ -291,13 +315,26 @@ def main() -> int:
         emit({"ok": False, "error": "could not determine plan_id"})
         return 5
 
+    # Prefer --cards-yaml when it exists alongside the plan (richer per-card metadata).
+    cards_yaml_path: Path | None = None
+    for candidate in [
+        plan_path.parent / f"{plan_id}.yaml",
+        plan_path.with_suffix(".yaml"),
+    ]:
+        if candidate.is_file():
+            cards_yaml_path = candidate
+            break
+
     project_root = _find_project_root(plan_path.parent)
     overlay = _read_overlay(project_root)
     orchestrator_profile = overlay.get("orchestrator_profile", "orchestrator")
     working_branch = overlay.get("working_branch", "main")
 
     title = f"Decompose: {plan_id}"
-    body = _build_body(plan_id, plan_path, project_root, working_branch, orchestrator_profile)
+    body = _build_body(
+        plan_id, plan_path, project_root, working_branch,
+        orchestrator_profile, cards_yaml_path=cards_yaml_path,
+    )
 
     # ── Preconditions ──────────────────────────────────────────────────────
     if not _orchestrator_profile_exists(orchestrator_profile):
