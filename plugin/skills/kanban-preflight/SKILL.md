@@ -39,7 +39,7 @@ Exit codes: **0** = pass or degraded-only; **1** = blocking failure — stop.
 
 ## Preflight checklist (automated in `preflight.sh`)
 
-Run `bash ${bundle_path}/scripts/preflight.sh` from the repository root. Checks include `filesystem_coherence`, `kanban_db_integrity`, memory, secrets, API, gateway, profiles, environment parity, token log, and plan backup.
+Run `bash ${bundle_path}/scripts/preflight.sh` from the repository root. Checks include `filesystem_coherence`, `kanban_db_integrity`, memory, secrets, API, gateway, profiles, **Hermes** `model_reachability` (profile LLM ping), **coding-agent** `coding_agent_cli_reachability` (`check_coding_agent_cli.py` — separate from Hermes), environment parity, token log, and plan backup.
 
 Each check maps to a JSON `id` in script output. **Blocking** failures halt decomposition; **degraded** warnings may proceed with operator acknowledgment.
 
@@ -167,8 +167,6 @@ hermes gateway run   # tmux or background for persistence
 
 ```bash
 hermes profile list
-agent --version
-agent status | grep -q "Logged in"
 # SOUL integrity (${worker_profile} path)
 grep -qE '%3C|%3E' "${HERMES_HOME}/profiles/${worker_profile}/SOUL.md" \
   && echo "CORRUPT" || echo "clean"
@@ -176,7 +174,46 @@ grep -qE '%3C|%3E' "${HERMES_HOME}/profiles/${worker_profile}/SOUL.md" \
 
 **Env knobs:** `PREFLIGHT_PROFILES` (comma-separated; overlay `preflight_profiles` or default `kanban-advanced-worker,kanban-advanced-orchestrator`).
 
-**Typical fixes:** `hermes profile create …`; `agent login`; restore SOUL.md from backup; remove stale `cursor` shim shadowing `agent` (see autonomy-gaps plan).
+**Typical fixes:** `hermes profile create …`; `hermes auth add <provider>` when model ping fails; restore SOUL.md from backup.
+
+---
+
+### 5b. Hermes model reachability (`model_reachability`) — automated
+
+**Goal:** Each profile in `PREFLIGHT_PROFILES` can complete a minimal `hermes -p <profile> chat -q "say ok"` within the ping timeout. Catches typos in Hermes model config and expired provider tokens for **dispatch profiles** — not the external coding CLI.
+
+**Env knobs:** `PREFLIGHT_MODEL_PING_TIMEOUT` (default `15`).
+
+**Typical fixes:** Fix profile `model.default` in `config.yaml`; run `hermes auth add <provider>`.
+
+---
+
+### 5c. Coding-agent CLI reachability (`coding_agent_cli_reachability`) — automated
+
+**Goal:** The configured `coding_agent_binary` (`KANBAN_CODING_AGENT`) can run a headless one-line smoke via `check_coding_agent_cli.py` before decomposition. Workers dispatch this CLI separately from Hermes — a green Hermes profile dot does **not** satisfy this check.
+
+**Manual verification:**
+
+```bash
+PYTHONPATH=. python3 ${bundle_path}/scripts/check_coding_agent_cli.py
+# Full dashboard parity (180s):
+PYTHONPATH=. python3 ${bundle_path}/scripts/check_coding_agent_cli.py --full
+```
+
+**Env knobs:** `PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT` (default `45`), `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` (audit-noted skip).
+
+**Typical fixes (by binary):**
+
+| Binary | Fix |
+| --- | --- |
+| `agent` (Cursor) | `agent login` — `agent status` alone is not sufficient when OAuth is stale |
+| `claude` | `claude login` or Anthropic API key |
+| `codex` | Codex/OpenAI login or `OPENAI_API_KEY` |
+| `grok` | `GROK_API_KEY` |
+| `gemini` | Gemini CLI login |
+| `aider` | Provider keys in aider config / env |
+
+After re-auth: delete `.hermes/kanban/preflight_cache.json` and re-run `pre_dispatch_gate.sh`.
 
 ---
 

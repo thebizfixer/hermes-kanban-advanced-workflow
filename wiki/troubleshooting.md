@@ -112,6 +112,44 @@ Per-binary flags: `plugin/data/references/coding-agent-cli-invocation.md`. Do **
 
 **Prevention:** Step 3 uses `coding_agent_invoke.sh smoke` after `worktree_setup.sh`. Preflight cache (< 30 min) can skip smoke on Step 2 fast path — if auth changed, delete `.hermes/kanban/preflight_cache.json` or wait for expiry.
 
+### Cursor OAuth expired (`agent status` OK, smoke fails)
+
+**Symptom:** `agent status` reports logged in, but `agent -p "say ok" --trust` fails with `Authentication required`, times out, or hangs. Preflight / `pre_dispatch_gate.sh` blocks on `coding_agent_cli_reachability`. Workers tag `[escalation:coding_agent:auth]` — not a protocol violation.
+
+**Why:** Cursor CLI uses OAuth in `~/.config/cursor/auth.json`. Tokens expire (~9+ days). `agent status` only checks that the file exists / looks logged in; it does **not** prove headless execution works. `CURSOR_API_KEY` does **not** authenticate the CLI.
+
+**Diagnose (gateway host / WSL):**
+
+```bash
+agent status
+agent -p "say ok" --trust
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+bash hermes-kanban-advanced-workflow/scripts/preflight.sh | python3 -m json.tool
+```
+
+**Fix (operator):**
+
+```bash
+agent login                    # interactive OAuth refresh
+rm -f .hermes/kanban/preflight_cache.json
+# Dashboard: Update Plugin → Bootstrap (or provision.sh) → hermes gateway restart
+bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
+```
+
+**Alternative:** Switch `coding_agent_binary` to another authenticated CLI (Claude, Codex, …) via dashboard **Save** if Cursor auth cannot be refreshed on that host.
+
+### Coding-agent auth failed (non-Cursor binary)
+
+**Symptom:** Preflight `coding_agent_cli_reachability` or `pre_dispatch_gate.sh` `coding_agent_cli` check fails. Same worker tag `[escalation:coding_agent:auth]` applies — not a protocol violation.
+
+**Fix by binary:** `claude login` / Anthropic key; Codex or `OPENAI_API_KEY`; `GROK_API_KEY` for grok; Gemini CLI login; aider provider keys in config. Re-run:
+
+```bash
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+```
+
+Slow cold starts: `PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT=120` or `check_coding_agent_cli.py --full`.
+
 ### "Gateway not running" (G001)
 
 **Symptom:** Cards sit in `ready` forever. `hermes gateway status` shows stopped.

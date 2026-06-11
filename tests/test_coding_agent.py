@@ -12,6 +12,7 @@ from plugin.coding_agent import (
     _interpret_smoke_result,
     build_dispatch_argv,
     build_smoke_argv,
+    describe_smoke_failure,
     is_auto_model,
     normalize_coding_agent_model,
     parse_cursor_list_models,
@@ -131,6 +132,38 @@ Tip: use --model <id>
                 json_attempt=True,
             )
         )
+
+    def test_authentication_required_is_auth_fail(self) -> None:
+        self.assertFalse(
+            _interpret_smoke_result(
+                "agent",
+                returncode=1,
+                stdout="",
+                stderr="Authentication required",
+                json_attempt=True,
+            )
+        )
+
+    def test_describe_smoke_failure_timeout_mentions_oauth(self) -> None:
+        msg = describe_smoke_failure("agent", timed_out=True)
+        self.assertIn("timed out", msg.lower())
+        self.assertIn("oauth", msg.lower())
+
+    def test_agent_probe_runs_before_json_smoke(self) -> None:
+        calls: list[list[str]] = []
+
+        def _run(cmd, timeout=90):
+            calls.append(list(cmd))
+            if len(calls) == 1:
+                return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+            return SimpleNamespace(returncode=0, stdout='{"is_error":false}', stderr="")
+
+        result = smoke_test_coding_agent("agent", CODING_AGENT_MODEL_AUTO, _run)
+        self.assertTrue(result)
+        self.assertGreaterEqual(len(calls), 2)
+        self.assertNotIn("--output-format", calls[0])
+        self.assertIn("--trust", calls[0])
+        self.assertIn("--output-format", calls[1])
 
 
 class TestCodingAgentSmokeLive(unittest.TestCase):

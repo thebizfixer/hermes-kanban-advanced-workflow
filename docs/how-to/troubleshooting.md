@@ -20,5 +20,6 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 | Plugin update / `git pull`: local changes would be overwritten | Install dir is upstream mirror only — **Update Plugin** auto-resets; or `git reset --hard HEAD && git clean -fd` in `plugin_install_path` — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
 | Cross-mount / dual clone | `docs/examples/cross-mount-filesystems.md` |
 | Coding agent smoke failed / E020 (dashboard green, worker blocks) | Worktree smoke: `coding_agent_invoke.sh smoke`; Cursor needs `--trust` in worktree — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
+| Cursor `agent status` OK but smoke fails / `[escalation:coding_agent:auth]` | Stale OAuth — `agent login`, invalidate preflight cache — [wiki/troubleshooting.md § Cursor OAuth](../../wiki/troubleshooting.md) |
 
 Full symptom list: [wiki/troubleshooting.md](../../wiki/troubleshooting.md).

@@ -42,6 +42,9 @@ Canonical source: `plugin/data/registry/error-codes.yaml`
 ### [unauthenticated] in worker.log is cosmetic
 The Cursor background indexing service logs `[unauthenticated] Error` during normal operation. Workers that grep worker.log for `unauthenticated` will false-positive block on every card. Auth smoke: `bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke`. Cursor failures with `Workspace Trust Required` mean `--trust` was omitted — not missing JSON support.
 
+### `[escalation:coding_agent:auth]` — stale OAuth, not protocol violation
+When `agent status` shows logged in but `agent -p "say ok" --trust` fails or times out, the OAuth token in `~/.config/cursor/auth.json` is likely expired. Block with `[escalation:coding_agent:auth]` — **do not** use `[escalation:coding_agent:attempt:N]` (that implies retryable dispatch). Operator fix: `agent login`, delete `.hermes/kanban/preflight_cache.json`, re-run `preflight.sh` / `pre_dispatch_gate.sh`. Preflight now runs `check_coding_agent_cli.py` before decomposition.
+
 ### CURSOR_API_KEY is a decoy env var
 Cursor CLI authenticates via OAuth token in `~/.config/cursor/auth.json`, not the env var. Setting `CURSOR_API_KEY` has no effect.
 

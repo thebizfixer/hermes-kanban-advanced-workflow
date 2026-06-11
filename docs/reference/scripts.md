@@ -8,7 +8,7 @@ Every governance script is in `scripts/`.  All paths below use `${bundle_path}/s
 bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 ```
 
-Single gate before decomposition. Runs in order: plan on `${working_branch}` → plan pushed → preflight → attestation → card policy present → plan memory seeded → DB integrity → **cron scripts executable** → **hermes on PATH**.  Replaces the old multi-step Steps 0a–0e.  Fails on any blocking check with a specific error.
+Single gate before decomposition. Runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py`) → attestation → card policy present → plan memory seeded → DB integrity → **cron scripts executable** → **hermes on PATH**.  Replaces the old multi-step Steps 0a–0e.  Fails on any blocking check with a specific error.
 
 Added checks in v1.1: `test -x` (not just `test -f`) for cron scripts, and hermes PATH verification so crons can invoke `hermes kanban` commands.
 
@@ -43,7 +43,7 @@ Cron health (check 0) was hardened in v1.1: per-script executable verification, 
 bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 ```
 
-Environment gating before decomposition. 8 checks: filesystem coherence, kanban DB integrity, memory budget, secret availability, API reachability, hermes version + goal flag, gateway health, profile availability, environment parity.  Returns JSON with `status: pass | degraded | fail`.  See `kanban-advanced:kanban-preflight` skill for full details.
+Environment gating before decomposition. Checks include filesystem coherence, kanban DB integrity, memory budget, secret availability, API reachability, hermes version + goal flag, gateway health, profile availability, **Hermes** model reachability (profile LLM ping), **coding-agent CLI reachability** (`check_coding_agent_cli.py` — separate from Hermes profiles), and environment parity. Returns JSON with `status: pass | degraded | fail`. See `kanban-advanced:kanban-preflight` skill for full details.
 
 ## Cron scripts
 
@@ -101,6 +101,17 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$F
 Headless smoke and dispatch for the configured coding CLI. Reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from the environment. Per-binary flags (Cursor `--trust`, Codex `--sandbox workspace-write`, Grok `--format json`, etc.) are documented in `plugin/data/references/coding-agent-cli-invocation.md`. Python equivalent: `build_smoke_argv` / `build_dispatch_argv` in `plugin/coding_agent.py` (used by dashboard **Save** / init smoke).
 
 Workers run **smoke** from the worktree in Step 3 and **dispatch** in Step 4 after building `FULL_PROMPT`.
+
+### `check_coding_agent_cli.py`
+
+```bash
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py --full
+```
+
+Auth gate for the configured coding CLI (reads `coding_agent_binary` / `KANBAN_CODING_AGENT` from overlay + `.env`). Used by `preflight.sh` (`coding_agent_cli_reachability`) and `pre_dispatch_gate.sh` (`coding_agent_cli` check). Exit 0 = smoke passed; 1 = on PATH but failed (auth, trust, timeout); 2 = binary missing.
+
+Cursor: `agent status` is not sufficient when OAuth is stale — run `agent login`, delete `.hermes/kanban/preflight_cache.json`, re-run gate. See [wiki/troubleshooting.md](../../wiki/troubleshooting.md).
 
 ### `install_pre_push_hook.sh` / `install_pre_commit_hook.sh`
 

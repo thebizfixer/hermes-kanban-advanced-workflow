@@ -73,6 +73,7 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 - **Project root:** `KANBAN_PROJECT_ROOT` or `HERMES_KANBAN_CONFIG` when dashboard resolves wrong repo after `hermes update`
 - Fields: `working_branch` (defaults from git upstream / origin default), optional `trigger_branch`, `policy_profile` (`advisory` | `balanced` | `strict`), `coding_agent_binary`, `coding_agent_model` (`auto` or CLI model ID), `max_turns`; status includes `project_root`, `default_working_branch`, `coding_agent_cli` (on_path, model_reachable when probe=1)
 - Coding agent env: `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL` — worker dispatch via `scripts/coding_agent_invoke.sh` (or `build_dispatch_argv` in `plugin/coding_agent.py`); card bodies must not use `--model` / `--output-format` / `--trust` (P005)
+- Auth gate (any binary): `scripts/check_coding_agent_cli.py` — preflight `coding_agent_cli_reachability` + `pre_dispatch_gate.sh`; separate from Hermes profile `model_reachability`
 - SSOT headless flags: `plugin/data/references/coding-agent-cli-invocation.md`; user reference: `docs/reference/coding-agents.md`
 - Dashboard: Hermes profile dots (`profiles.*.model_reachable`) ≠ coding CLI dot (`coding_agent_cli.model_reachable`); both probed when `probe=1`
 - Dashboard API: `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` for model picker
@@ -84,6 +85,6 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 - Plugin entry: `__init__.py` → `plugin/__init__.py` → `register(ctx)`
 - Skills: `plugin/skills/<name>/SKILL.md` (11 skills)
 - Data: `plugin/data/` (references, registry, policies, prompts)
-- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py)
+- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, check_coding_agent_cli.py, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py)
 - Dashboard: `dashboard/` (settings tab — `manifest.json`, `plugin_api.py`, `index.html`)
 - README: `README.md`

@@ -176,9 +176,23 @@ cd "$WORKTREE_PATH"
 timeout 180 bash "$INVOKE" smoke
 ```
 
-If smoke fails, block with E020 — do **not** fall back to direct coding.
+If smoke fails, classify before blocking:
 
-Per-binary flags: `plugin/data/references/coding-agent-cli-invocation.md`. **Cursor (`agent`):** `-p --output-format json --trust` (the invoke script adds these). Exit 1 with `Workspace Trust Required` means `--trust` was omitted — not missing JSON support. The Cursor CLI ignores `CURSOR_API_KEY`; it authenticates via OAuth in `~/.config/cursor/auth.json`.
+| Smoke signal | Block tag | Operator action |
+|--------------|-----------|-----------------|
+| `Authentication required`, `authentication`, timeout (exit 124), or hang with no output | `[escalation:coding_agent:auth]` | **Do not** use `attempt:N` retry ladder — auth is an operator fix. Operator runs `agent login` on the gateway host (Cursor), then deletes `.hermes/kanban/preflight_cache.json`, re-runs preflight / attestation, and unblocks. |
+| `Workspace Trust Required` | `[escalation:coding_agent:trust]` | Confirm `coding_agent_invoke.sh` passes `--trust`; re-run `worktree_setup.sh` if trust files missing. |
+| Other non-zero / empty JSON | E020 or `[escalation:coding_agent:attempt:1]` | Environment fix + one retry only if not auth/trust. |
+
+```bash
+# Example — auth failure (no 3× retry loop)
+kanban_block "$HERMES_KANBAN_TASK" \
+  "[escalation:coding_agent:auth] Cursor CLI OAuth expired — operator must run: agent login"
+```
+
+Do **not** fall back to direct coding on smoke failure.
+
+Per-binary flags: `plugin/data/references/coding-agent-cli-invocation.md`. **Cursor (`agent`):** `-p --output-format json --trust` (the invoke script adds these). Exit 1 with `Workspace Trust Required` means `--trust` was omitted — not missing JSON support. The Cursor CLI ignores `CURSOR_API_KEY`; it authenticates via OAuth in `~/.config/cursor/auth.json`. **`agent status` is not sufficient** — it can show logged-in while `agent -p "say ok" --trust` still fails when the token is stale (~9+ days).
 
 - **Workspace trust:** `worktree_setup.sh` pre-trusts the worktree using a cross-platform hash (Windows drive-letter paths: strip colon, replace `\` and `/` with `-`; Unix paths: strip leading `/`, replace `/` with `-`). Still pass `--trust` on every Cursor headless call.
 

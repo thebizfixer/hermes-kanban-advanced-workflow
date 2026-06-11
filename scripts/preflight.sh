@@ -243,6 +243,47 @@ check_profile_availability() {
   fi
 }
 
+check_coding_agent_cli_reachability() {
+  # Hermes profile model_reachability pings the LLM backend for dispatch profiles.
+  # Workers dispatch a separate coding-agent CLI (Cursor agent, Claude, Codex, …).
+  # This check must pass before decomposition — dashboard green dot is not enough.
+  local probe_timeout="${PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT:-45}"
+  local binary="${KANBAN_CODING_AGENT:-}"
+  local out="" rc=0
+
+  if [[ "${PREFLIGHT_SKIP_CODING_AGENT_CLI:-}" == "1" ]]; then
+    record_check "coding_agent_cli_reachability" "pass" "blocking" \
+      "Skipped by PREFLIGHT_SKIP_CODING_AGENT_CLI=1 (audit-noted override)"
+    return
+  fi
+
+  if [[ -f "$OVERLAY_CONFIG" ]]; then
+    _cab="$(grep -E '^coding_agent_binary:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^coding_agent_binary: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
+    [[ -n "$_cab" ]] && binary="$_cab"
+  fi
+  binary="${binary:-agent}"
+
+  if ! command -v "$binary" >/dev/null 2>&1; then
+    record_check "coding_agent_cli_reachability" "fail" "blocking" \
+      "Coding agent binary '${binary}' not on PATH — install CLI or fix coding_agent_binary"
+    return
+  fi
+
+  out="$(cd "$REPO_ROOT" && PYTHONPATH="$REPO_ROOT" python3 "$SCRIPT_DIR/check_coding_agent_cli.py" --timeout "$probe_timeout" 2>&1)" \
+    || rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    record_check "coding_agent_cli_reachability" "pass" "blocking" \
+      "Coding agent CLI (${binary}) headless smoke passed"
+  elif [[ $rc -eq 2 ]]; then
+    record_check "coding_agent_cli_reachability" "fail" "blocking" \
+      "Coding agent binary '${binary}' not on PATH"
+  else
+    record_check "coding_agent_cli_reachability" "fail" "blocking" \
+      "${out:-Coding agent CLI (${binary}) smoke failed — see docs: wiki/troubleshooting.md § Cursor OAuth}"
+  fi
+}
+
 check_model_reachability() {
   # For each profile in PREFLIGHT_PROFILES, send a minimal chat query to confirm
   # the model is reachable. This catches typos in model names and truly expired
@@ -573,6 +614,7 @@ check_api_reachability
 check_gateway_health
 check_profile_availability
 check_model_reachability
+check_coding_agent_cli_reachability
 check_environment_parity
 check_token_log
 check_plan_backup

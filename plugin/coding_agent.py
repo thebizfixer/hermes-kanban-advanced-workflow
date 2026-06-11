@@ -14,6 +14,7 @@ from typing import Callable
 CODING_AGENT_MODEL_AUTO = "auto"
 SMOKE_PROMPT = "say ok"
 SMOKE_TIMEOUT_SECONDS = 180
+AUTH_PROBE_TIMEOUT_SECONDS = 45
 
 
 @dataclass(frozen=True)
@@ -316,8 +317,11 @@ def _interpret_smoke_result(
     combined = f"{stdout}\n{stderr}".lower()
     auth_fail_tokens = (
         "unauthorized",
+        "authentication required",
         "authentication",
         "not logged in",
+        "login required",
+        "sign in",
         "api key",
         "invalid model",
         "model not found",
@@ -343,6 +347,91 @@ def _interpret_smoke_result(
     return None
 
 
+def _cursor_status_suggests_logged_in(run: Callable[..., object] | None = None) -> bool:
+    """Cursor `agent status` can show OAuth present while headless execution still fails."""
+    if not binary_on_path("agent"):
+        return False
+    try:
+        if run is not None:
+            result = run(["agent", "status"], timeout=10)
+            stdout = getattr(result, "stdout", "") or ""
+            stderr = getattr(result, "stderr", "") or ""
+        else:
+            completed = subprocess.run(
+                ["agent", "status"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            stdout = completed.stdout or ""
+            stderr = completed.stderr or ""
+        combined = f"{stdout}\n{stderr}".lower()
+        return any(
+            token in combined
+            for token in ("logged in", "authenticated", "auth.json")
+        )
+    except Exception:
+        return False
+
+
+def describe_smoke_failure(
+    binary: str,
+    *,
+    stdout: str = "",
+    stderr: str = "",
+    timed_out: bool = False,
+    run: Callable[..., object] | None = None,
+) -> str:
+    combined = f"{stdout}\n{stderr}".lower()
+    if timed_out:
+        base = (
+            f"{binary}: smoke timed out — headless execution did not complete"
+        )
+        if binary == "agent":
+            base += (
+                " (expired Cursor OAuth often hangs instead of returning "
+                "'Authentication required')"
+            )
+        else:
+            return base
+    elif "workspace trust required" in combined:
+        return (
+            f"{binary}: workspace trust required — pass --trust on headless "
+            "calls from worktrees (coding_agent_invoke.sh does this)"
+        )
+    elif any(
+        token in combined
+        for token in (
+            "authentication required",
+            "authentication",
+            "unauthorized",
+            "not logged in",
+            "login required",
+            "sign in",
+        )
+    ):
+        base = f"{binary}: authentication failed for headless execution"
+    else:
+        snippet = (stderr or stdout).strip().splitlines()
+        tail = snippet[-1] if snippet else "no output"
+        base = f"{binary}: smoke failed ({tail})"
+
+    if binary == "agent":
+        base += (
+            ". Cursor CLI uses OAuth (~/.config/cursor/auth.json), not "
+            "CURSOR_API_KEY"
+        )
+        if _cursor_status_suggests_logged_in(run):
+            base += (
+                "; agent status looks logged in but execution failed — "
+                "token likely expired. Fix: agent login (interactive refresh), "
+                "then delete .hermes/kanban/preflight_cache.json"
+            )
+        else:
+            base += ". Fix: agent login"
+    return base
+
+
 def smoke_test_coding_agent(
     binary: str,
     model: str | None,
@@ -356,6 +445,23 @@ def smoke_test_coding_agent(
     if adapter.binary not in ADAPTERS and not shutil.which(binary):
         return None
     try:
+        if binary == "agent":
+            probe_timeout = min(timeout, AUTH_PROBE_TIMEOUT_SECONDS)
+            plain_argv = build_smoke_argv(binary, model, json_output=False)
+            try:
+                probe = _run_binary_command(plain_argv, run, timeout=probe_timeout)
+                probe_ok = _interpret_smoke_result(
+                    binary,
+                    returncode=getattr(probe, "returncode", 1),
+                    stdout=getattr(probe, "stdout", "") or "",
+                    stderr=getattr(probe, "stderr", "") or "",
+                    json_attempt=False,
+                )
+                if probe_ok is False:
+                    return False
+            except subprocess.TimeoutExpired:
+                return False
+
         json_argv = build_smoke_argv(binary, model, json_output=True)
         result = _run_binary_command(json_argv, run, timeout=timeout)
         returncode = getattr(result, "returncode", 1)

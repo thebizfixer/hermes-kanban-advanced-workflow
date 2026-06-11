@@ -37,7 +37,27 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$F
 
 Model flag when not `auto`: `--model <id>` (all supported binaries).
 
-Implementation: [`plugin/coding_agent.py`](../../plugin/coding_agent.py) (`build_smoke_argv`, `build_dispatch_argv`). Tests: [`tests/test_coding_agent.py`](../../tests/test_coding_agent.py).
+Implementation: [`plugin/coding_agent.py`](../../plugin/coding_agent.py) (`build_smoke_argv`, `build_dispatch_argv`, `smoke_test_coding_agent`). Tests: [`tests/test_coding_agent.py`](../../tests/test_coding_agent.py).
+
+## Auth gate (preflight / pre-dispatch)
+
+Before decomposition, `preflight.sh` runs `coding_agent_cli_reachability` and `pre_dispatch_gate.sh` runs `check_coding_agent_cli.py`. Both smoke the **configured** binary from `coding_agent_binary` / `KANBAN_CODING_AGENT` — not hardcoded to Cursor.
+
+```bash
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+```
+
+This is **separate** from Hermes profile `model_reachability` (`hermes -p <profile> chat`). Workers still re-smoke from each worktree in Step 3.
+
+| Failure | Typical fix |
+| --- | --- |
+| Cursor (`agent`) auth / timeout | `agent login` — `agent status` can show logged in with stale OAuth |
+| `claude` | `claude login` or API key |
+| `codex` | Codex login or `OPENAI_API_KEY` |
+| `grok` | `GROK_API_KEY` |
+| Slow cold start | `PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT=120` or `check_coding_agent_cli.py --full` |
+
+After re-auth: delete `.hermes/kanban/preflight_cache.json`. See [wiki/troubleshooting.md](../../wiki/troubleshooting.md).
 
 ## Cursor CLI (`agent`) — recommended default
 

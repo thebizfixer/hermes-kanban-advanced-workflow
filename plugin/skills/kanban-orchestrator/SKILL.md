@@ -217,7 +217,9 @@ A single script gates all pre-decomposition checks. Run before any card creation
 bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 ```
 
-This runs in order: plan on `${working_branch}` → plan pushed → preflight → attestation → card policy present → plan memory seeded → DB integrity. Fails on any blocking check with a specific error.
+This runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py` — separate from Hermes profile model reachability) → attestation → card policy present → plan memory seeded → DB integrity. Fails on any blocking check with a specific error.
+
+**Coding-agent auth gate (blocking):** If `coding_agent_cli` or preflight `coding_agent_cli_reachability` fails, **do not decompose**. Cursor: `agent status` can lie when OAuth in `~/.config/cursor/auth.json` is expired — operator runs `agent login`, then Update Plugin → Bootstrap/provision → `hermes gateway restart` → delete `.hermes/kanban/preflight_cache.json` → re-run gate.
 
 After the gate passes, proceed directly to the Standard process. Plans may sit for hours or days while the user thinks them over. After the plan is optimized:
 
