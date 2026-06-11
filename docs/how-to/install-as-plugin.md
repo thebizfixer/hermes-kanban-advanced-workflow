@@ -36,7 +36,9 @@ hermes kanban-advanced init --project-root . --working-branch <branch-name>
 
 Replace `<branch-name>` with your integration branch (e.g. `main`).
 
-**Dashboard alternative:** Hermes dashboard → **Kanban-Advanced** tab → **Bootstrap** (same operation as CLI init).
+**Dashboard alternative:** Hermes dashboard → **Kanban-Advanced** tab → set **Coding Agent** (binary + model) → **Bootstrap** (same operation as CLI init).
+
+CLI init step **1c** asks for the binary; step **1c-ii** asks for the model (`auto` or an ID — Cursor: live list from `agent --list-models`). Both are smoke-tested when the binary is on PATH.
 
 ### Dispatch profiles (created by init)
 
@@ -63,9 +65,9 @@ Agent reference: [wiki/bootstrap.md](../../wiki/bootstrap.md)
 1. **Config overlay** — `.hermes/kanban-overrides/kanban-config.yaml`
 2. **Shared skill materialization** — all 11 skills → `$HERMES_HOME/skills/kanban-advanced/`
 3. **Cron scripts** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`
-4. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true` in `.env`
+4. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE` in `.env`
 
-Configure model thinking per role after bootstrap if desired — see [wiki/configuration.md](../../wiki/configuration.md).
+Configure **Hermes dispatch profile** models (orchestrator / worker) separately from the **coding CLI** model — see [wiki/configuration.md](../../wiki/configuration.md) and [coding agents](../reference/coding-agents.md).
 
 ---
 

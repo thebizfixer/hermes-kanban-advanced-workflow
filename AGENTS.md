@@ -17,6 +17,7 @@ Load the relevant wiki page for detailed instructions:
 | How do I set this up? | `wiki/setup.md` |
 | How does init / bootstrap work? (profiles, SOUL, skills) | `wiki/bootstrap.md` |
 | How do I configure it? | `wiki/configuration.md` |
+| Which coding agent / model does the worker use? | `docs/reference/coding-agents.md` |
 | How does governance work? | `wiki/governance.md` |
 | Why block-on-create / decomposition workflow? | `wiki/decomposition-workflow.md` |
 | Something is broken | `wiki/troubleshooting.md` |

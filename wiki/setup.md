@@ -28,7 +28,7 @@
    ```
    Init creates `kanban-advanced-orchestrator` and `kanban-advanced-worker` (or renames legacy `orchestrator`/`worker`), installs plugin **SOUL.md** prompts, seeds **role-only** profile skills (no Hermes bundled skills), and verifies the result. Full detail: [[bootstrap]].
 
-   This also provisions config overlay, cron scripts, and environment settings. During init, you'll be asked which **coding agent binary** you use (Cursor CLI `agent`, Claude Code `claude`, OpenAI Codex `codex`, etc.). The choice is written to `.hermes/kanban-overrides/kanban-config.yaml` (`coding_agent_binary`) and `.env` (`KANBAN_CODING_AGENT`). Workers read this to dispatch the right binary. See [[configuration]] for what the overlay contains.
+   This also provisions config overlay, cron scripts, and environment settings. During init, you'll pick the **coding agent binary** (Cursor `agent`, Claude `claude`, Codex `codex`, etc.) and **model** (`auto` or a CLI-specific ID — Cursor lists via `agent --list-models`). Values are written to `kanban-config.yaml` (`coding_agent_binary`, `coding_agent_model`) and `.env` (`KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`). Init runs a smoke test when the binary is on PATH. Change later via dashboard **Coding Agent** → **Save**. See [[configuration]] and [coding agents](../docs/reference/coding-agents.md).
 
    **Re-init after `hermes update`:** Safe to run again — existing `working_branch` / `trigger_branch` are preserved unless you pass `--working-branch`. Bootstrap re-seeds dispatch profile SOUL/skills and re-verifies. To change the integration branch later, edit the overlay or use dashboard **Save** (not Bootstrap). If the dashboard shows the wrong branch, set `KANBAN_PROJECT_ROOT` to your app repo — see [[troubleshooting]].
 
@@ -71,7 +71,7 @@ Set during init (step 1c). Supported agents:
 | `aider` | Aider | `pip install aider-install` |
 | `gemini` | Gemini CLI | `npm i -g @google/gemini-cli` |
 
-The worker reads `KANBAN_CODING_AGENT` from the environment (set in `.env`) and dispatches the coding agent with `[coding_agent, "-p", prompt, ...]`. To change later, edit `.env` or re-run `hermes kanban-advanced init`.
+The worker reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from `.env`, extracts the prompt from the card body, and builds `[binary, "-p", prompt, …]` adding `--model` only when the model is not `auto`. To change binary or model: dashboard **Save**, edit `.env` / `kanban-config.yaml`, or re-run init (preserves existing model unless you override interactively).
 
 5. **Verify dispatch profiles on disk** (see [[bootstrap#verify-on-disk-after-bootstrap]]):
    ```bash

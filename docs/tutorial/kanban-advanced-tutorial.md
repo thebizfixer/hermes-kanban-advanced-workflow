@@ -57,7 +57,9 @@ OK kanban-advanced-orchestrator: 9 skills seeded [...]
 OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)
 ```
 
-Init copies model config from your default profile when missing. To set explicitly:
+Init copies **Hermes profile** model config from your default profile when missing. Init also asks for the **coding agent binary and model** (step 1c / 1c-ii) — stored as `coding_agent_binary` / `coding_agent_model` and synced to `.env`. Use `auto` for the CLI default model.
+
+To set Hermes dispatch profile models explicitly:
 
 ```bash
 hermes -p kanban-advanced-worker config set model.default <your-model>
@@ -66,7 +68,7 @@ hermes -p kanban-advanced-worker config set model.provider <your-provider>
 
 **Agent says:**
 
-> "Navigate to your project and run init (or use dashboard **Bootstrap**). What's your integration branch? You should see `HERMES_HOME`, profile creation with `no default skills`, SOUL/skills seeded, and `Profiles verified`. If `hermes profile show` reports 90+ skills, something went wrong — see wiki/bootstrap.md."
+> "Navigate to your project and run init (or use dashboard **Bootstrap**). What's your integration branch? Pick your coding agent binary and model on the dashboard **Coding Agent** card (or answer CLI prompts 1c / 1c-ii). You should see `HERMES_HOME`, profile creation with `no default skills`, SOUL/skills seeded, `coding_agent_model` in config, and `Profiles verified`. If `hermes profile show` reports 90+ skills, something went wrong — see wiki/bootstrap.md."
 
 Full reference: [wiki/bootstrap.md](../../wiki/bootstrap.md)
 

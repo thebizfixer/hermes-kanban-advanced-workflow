@@ -86,6 +86,28 @@ The status banner shows **Initialized (Up-to-date)** or **Initialized (Update Pl
 
 Use `project_root` to confirm the API resolved the correct repo (especially after `hermes update` or when multiple clones are on disk). If it points at the plugin install tree, set `KANBAN_PROJECT_ROOT` to your application repo before opening the tab.
 
+## `GET /api/plugins/kanban-advanced/coding-agent/models`
+
+Lists model IDs for the dashboard coding-agent picker.
+
+**Query:** `binary` (required) — e.g. `agent`, `claude`, `codex`.
+
+**Response:**
+
+```json
+{
+  "binary": "agent",
+  "source": "cli",
+  "supports_model_pick": true,
+  "models": [
+    { "id": "auto", "label": "Auto (CLI default)" },
+    { "id": "composer-2.5", "label": "Composer 2.5 (current)" }
+  ]
+}
+```
+
+Cursor uses `agent --list-models`. Other supported binaries return curated defaults until a list command is wired in `plugin/coding_agent.py`.
+
 ## `POST /api/plugins/kanban-advanced/init`
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
@@ -100,10 +122,13 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
   "working_branch": "main",
   "trigger_branch": "",
   "coding_agent_binary": "agent",
+  "coding_agent_model": "auto",
   "policy_profile": "balanced",
   "max_turns": 180
 }
 ```
+
+`coding_agent_model`: `auto` or a CLI-specific model ID (see `GET …/coding-agent/models`).
 
 `policy_profile`: `advisory` | `balanced` | `strict` — governance enforcement level (default `balanced`).
 
@@ -122,6 +147,8 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
     "   OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)",
     "   OK 'agent' found on PATH",
     "   coding_agent_binary: agent",
+    "   coding_agent_model: auto (Auto (CLI default))",
+    "   OK coding CLI reachable (Auto (CLI default))",
     "   OK /path/to/kanban-config.yaml",
     "   OK 11 skills -> ...",
     "   OK auto_unblock.sh -> ...",
