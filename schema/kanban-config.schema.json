@@ -51,6 +51,11 @@
       "description": "Headless CLI coding agent binary dispatched by the worker profile. Substituted as ${coding_agent_binary}. Set during init (agent=Cursor, claude=Claude Code, codex=OpenAI Codex, etc.).",
       "default": "agent"
     },
+    "coding_agent_model": {
+      "type": "string",
+      "description": "Model ID for the coding-agent CLI (injected at worker dispatch from KANBAN_CODING_AGENT_MODEL). Use auto for the CLI default.",
+      "default": "auto"
+    },
     "bundle_path": {
       "type": "string",
       "description": "Path to the plugin root relative to repo root. Used by provision.sh to locate skill source files.",

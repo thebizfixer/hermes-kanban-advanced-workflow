@@ -34,6 +34,8 @@ preflight_profiles: "kanban-advanced-worker,kanban-advanced-orchestrator"
 # Substituted as ${coding_agent_binary} in skill files.
 # ---------------------------------------------------------------------------
 coding_agent_binary: agent
+# Model ID for the coding CLI (Cursor: agent --list-models). Use "auto" for CLI default.
+coding_agent_model: "auto"
 
 # ---------------------------------------------------------------------------
 # Paths (set automatically by init — override only if your layout differs)

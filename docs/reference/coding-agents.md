@@ -1,6 +1,6 @@
 # Coding Agents
 
-Any headless coding agent on PATH works. The worker extracts and executes the `agent -p` fenced block from the card body.
+Any headless coding agent on PATH works. The worker extracts the prompt from the card body's fenced block and dispatches **`KANBAN_CODING_AGENT`** with **`KANBAN_CODING_AGENT_MODEL`** (from `kanban-config.yaml` / `.env` — set at init or dashboard **Save**). Use `auto` for the CLI default; the worker injects `--model` only when a specific model ID is configured.
 
 | Binary   | Source                   | Install                                            | Headless invocation                  |
 | -------- | ------------------------ | -------------------------------------------------- | ------------------------------------ |

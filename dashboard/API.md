@@ -32,6 +32,17 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
   "trigger_branch": "",
   "coding_agent": "agent",
   "coding_agent_binary": "agent",
+  "coding_agent_model": "auto",
+  "coding_agent_cli": {
+    "binary": "agent",
+    "display_name": "Cursor CLI",
+    "on_path": true,
+    "model": "auto",
+    "model_label": "Auto (CLI default)",
+    "model_configured": true,
+    "model_reachable": true,
+    "supports_model_pick": true
+  },
   "policy_profile": "balanced",
   "max_turns": 180,
   "profiles": {
@@ -66,6 +77,8 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
 | `plugin_behind` | Commits behind upstream; `null` when not checkable |
 | `plugin_update_available` | `true` when `plugin_behind > 0` |
 | `plugin_local_changes` | Porcelain dirty count in `plugin_install_path`; `null` when not checkable |
+
+`coding_agent_cli.model_reachable` is populated when `probe=1` (same slow path as Hermes profile model pings). Use `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` to populate the dashboard model picker.
 
 When `config_exists` is false, the dashboard shows the bootstrap form.
 
@@ -123,7 +136,7 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 
 ## `POST /api/plugins/kanban-advanced/save`
 
-Saves settings in an already-initialized config (dashboard button: **Save**). Writes to `kanban-config.yaml` and `.env`. Request body values for `working_branch`, `trigger_branch`, and `coding_agent_binary` are applied as submitted. This endpoint does not pull or upgrade the plugin — use Hermes plugin **Pull** for that.
+Saves settings in an already-initialized config (dashboard button: **Save**). Writes to `kanban-config.yaml` and `.env`. Request body values for `working_branch`, `trigger_branch`, `coding_agent_binary`, and `coding_agent_model` are applied as submitted. Runs a coding-CLI smoke test when the binary is on PATH. This endpoint does not pull or upgrade the plugin — use Hermes plugin **Pull** for that.
 
 **Request:** Same shape as init.
 

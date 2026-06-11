@@ -38,7 +38,9 @@ from .config_overlay import (
     read_overlay_config,
     resolve_branch_settings,
     resolve_coding_agent,
+    resolve_coding_agent_model,
 )
+from .coding_agent import interactive_pick_model
 from .profile_bootstrap import (
     dispatch_profile_names,
     ensure_dispatch_profiles,
@@ -389,6 +391,17 @@ def _handle_init(args) -> int:
     print(f"   coding_agent_binary: {coding_binary}")
     print("    Workers will use this binary when executing agent-prompt blocks.")
 
+    coding_model = resolve_coding_agent_model(project_root)
+    if existing_config.get("coding_agent_model") and not force:
+        print(f"   coding_agent_model: {coding_model} (preserved from config)")
+    else:
+        coding_model = interactive_pick_model(
+            coding_binary,
+            _run,
+            default=coding_model,
+            force=force,
+        )
+
     # ── 1d. Governance policy profile ───────────────────────────────
     print()
     print("1d. Governance enforcement level...")
@@ -429,6 +442,7 @@ def _handle_init(args) -> int:
             working_branch=working_branch,
             trigger_branch=trigger_branch,
             coding_agent=coding_binary,
+            coding_agent_model=coding_model,
             policy_profile=policy_profile,
             bundle_path=plugin_root,
             hermes_home=hermes_home,
@@ -499,6 +513,7 @@ def _handle_init(args) -> int:
         {
             "HERMES_ENABLE_PROJECT_PLUGINS": "true",
             "KANBAN_CODING_AGENT": coding_binary,
+            "KANBAN_CODING_AGENT_MODEL": coding_model,
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )

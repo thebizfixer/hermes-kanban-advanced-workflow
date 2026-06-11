@@ -99,12 +99,24 @@
         }
       });
     }
+    if (extra.coding_agent_model == null && base.coding_agent_model != null) {
+      merged.coding_agent_model = base.coding_agent_model;
+    }
+    if (base.coding_agent_cli && extra.coding_agent_cli) {
+      merged.coding_agent_cli = Object.assign({}, base.coding_agent_cli, extra.coding_agent_cli);
+      if (extra.coding_agent_cli.model_reachable == null && base.coding_agent_cli.model_reachable != null) {
+        merged.coding_agent_cli.model_reachable = base.coding_agent_cli.model_reachable;
+      }
+    }
     return merged;
   }
 
   function apiStatus(query) {
     var q = query ? ("?" + query) : "";
     return apiFetch("/api/plugins/kanban-advanced/status" + q);
+  }
+  function apiCodingAgentModels(binary) {
+    return apiFetch("/api/plugins/kanban-advanced/coding-agent/models?binary=" + encodeURIComponent(binary));
   }
   function apiInit(data) { return apiFetch("/api/plugins/kanban-advanced/init", { method: "POST", body: JSON.stringify(data) }); }
   function apiSave(data) { return apiFetch("/api/plugins/kanban-advanced/save", { method: "POST", body: JSON.stringify(data) }); }
@@ -147,6 +159,7 @@
     var _useState3 = useState(""), workingBranch = _useState3[0], setWorkingBranch = _useState3[1];
     var _useState3b = useState(""), triggerBranch = _useState3b[0], setTriggerBranch = _useState3b[1];
     var _useState4 = useState("agent"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
+    var _useState4b = useState("auto"), codingAgentModel = _useState4b[0], setCodingAgentModel = _useState4b[1];
     var _useState5 = useState(""), customAgent = _useState5[0], setCustomAgent = _useState5[1];
     var _useState6 = useState(180), maxTurns = _useState6[0], setMaxTurns = _useState6[1];
     var _useState6b = useState("balanced"), policyProfile = _useState6b[0], setPolicyProfile = _useState6b[1];
@@ -162,6 +175,14 @@
     var _useState15 = useState(""), modelQuery = _useState15[0], setModelQuery = _useState15[1];
     var _useState16 = useState(false), pluginUpdating = _useState16[0], setPluginUpdating = _useState16[1];
     var _useState17 = useState(false), statusProbing = _useState17[0], setStatusProbing = _useState17[1];
+    var _useState18 = useState(false), editingCodingAgentModel = _useState18[0], setEditingCodingAgentModel = _useState18[1];
+    var _useState19 = useState(null), codingAgentModelOptions = _useState19[0], setCodingAgentModelOptions = _useState19[1];
+    var _useState20 = useState(""), codingAgentModelQuery = _useState20[0], setCodingAgentModelQuery = _useState20[1];
+    var _useState21 = useState(null), pendingCodingAgentModel = _useState21[0], setPendingCodingAgentModel = _useState21[1];
+
+    function resolvedCodingBinary() {
+      return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
+    }
 
     function applyStatusToForm(s) {
       if (!s || s.error) return;
@@ -175,6 +196,8 @@
         if (found) setCodingAgent(s.coding_agent);
         else { setCodingAgent("__custom__"); setCustomAgent(s.coding_agent); }
       }
+      if (s.coding_agent_model) setCodingAgentModel(s.coding_agent_model);
+      else setCodingAgentModel("auto");
       if (s.max_turns) setMaxTurns(s.max_turns);
       if (s.policy_profile) setPolicyProfile(s.policy_profile);
     }
@@ -228,10 +251,11 @@
     }
 
     function getFormData() {
-      var agent = codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
+      var agent = resolvedCodingBinary();
       return {
         working_branch: workingBranch.trim() || (status && status.default_working_branch) || "main",
         coding_agent_binary: agent,
+        coding_agent_model: (codingAgentModel || "auto").trim() || "auto",
         max_turns: parseInt(maxTurns) || 180,
         trigger_branch: triggerBranch.trim(),
         policy_profile: policyProfile
@@ -256,7 +280,7 @@
       setBootstrapping(true);
       setConsoleLines([]);
       var data = getFormData();
-      addLines(["=== Bootstrap starting ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
+      addLines(["=== Bootstrap starting ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary + " (" + data.coding_agent_model + ")", "Max turns: " + data.max_turns, ""]);
       apiInit(data).then(function (r) {
         if (r.error) {
           addLines(["ERROR: " + r.error], "line-err");
@@ -276,7 +300,7 @@
       setBootstrapping(true);
       setConsoleLines([]);
       var data = getFormData();
-      addLines(["=== Saving settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary, "Max turns: " + data.max_turns, ""]);
+      addLines(["=== Saving settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary + " (" + data.coding_agent_model + ")", "Max turns: " + data.max_turns, ""]);
       apiSave(data).then(function (r) {
         if (r.output) addLines(r.output);
         setBootstrapping(false);
@@ -335,6 +359,24 @@
       }
     }
 
+    function openCodingAgentModelPicker() {
+      var binary = resolvedCodingBinary();
+      setPendingCodingAgentModel(codingAgentModel || "auto");
+      setCodingAgentModelQuery("");
+      setEditingCodingAgentModel(true);
+      apiCodingAgentModels(binary).then(function (opts) {
+        setCodingAgentModelOptions(opts);
+      }).catch(function () {
+        setCodingAgentModelOptions({ error: true, models: [{ id: "auto", label: "Auto (CLI default)" }] });
+      });
+    }
+
+    function applyCodingAgentModelChoice() {
+      setCodingAgentModel(pendingCodingAgentModel || "auto");
+      setEditingCodingAgentModel(false);
+      setPendingCodingAgentModel(null);
+    }
+
     function setProfileModel(profileName, provider, model) {
       setChangingModel(true);
       apiFetch("/api/profiles/" + encodeURIComponent(profileName) + "/model", {
@@ -351,6 +393,37 @@
     }
 
     // ── Render helpers ──
+    function codingAgentBadge(cli, modelId) {
+      var info = cli || {};
+      var model = modelId || codingAgentModel || "auto";
+      var dotColor, labelText, labelColor;
+      if (!info.on_path) {
+        dotColor = "#ef4444";
+        labelText = "binary not on PATH";
+        labelColor = "#f87171";
+      } else if (info.model_reachable === true) {
+        dotColor = "#22c55e";
+        labelText = "reachable (" + model + ")";
+        labelColor = "#22c55e";
+      } else if (info.model_reachable === false) {
+        dotColor = "#eab308";
+        labelText = "auth/model failed (" + model + ")";
+        labelColor = "#eab308";
+      } else if (statusProbing) {
+        dotColor = "#94a3b8";
+        labelText = "checking (" + model + ")";
+        labelColor = "#94a3b8";
+      } else {
+        dotColor = "#eab308";
+        labelText = "configured (" + model + ")";
+        labelColor = "#eab308";
+      }
+      return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "6px" } },
+        React.createElement("span", { style: { fontSize: "12px", color: labelColor } }, labelText),
+        React.createElement("span", { style: { display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", backgroundColor: dotColor, flexShrink: 0 } })
+      );
+    }
+
     function profileBadge(info) {
       var inConfig = info && info.exists && info.has_model;
       var dotColor, labelText, labelColor;
@@ -583,9 +656,69 @@
               codingAgent === "__custom__" ? React.createElement("div", { className: "space-y-1.5" },
                 React.createElement(Label, { className: "text-xs" }, "Custom binary name"),
                 React.createElement(Input, { value: customAgent, onChange: function (e) { setCustomAgent(e.target.value); }, placeholder: "e.g. my-agent", className: "h-9" })
-              ) : null
+              ) : null,
+              React.createElement("div", {
+                className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors",
+                onClick: openCodingAgentModelPicker
+              },
+                React.createElement("div", { className: "min-w-0" },
+                  React.createElement("span", { className: "text-sm block" }, "Model"),
+                  React.createElement("span", { className: "text-[11px] text-muted-foreground font-mono truncate block" }, codingAgentModel || "auto")
+                ),
+                codingAgentBadge(status && status.coding_agent_cli, codingAgentModel)
+              ),
+              React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Click model to change. Use auto for the CLI default. Save or Bootstrap to apply.")
             )
           ),
+          editingCodingAgentModel ? React.createElement("div", {
+            className: "fixed inset-0 z-[100] flex items-center justify-center bg-background/85 backdrop-blur-sm p-4",
+            onClick: function (e) { if (e.target === e.currentTarget) setEditingCodingAgentModel(false); }
+          },
+            React.createElement("div", {
+              className: "relative w-full max-w-md border border-border bg-card shadow-2xl flex flex-col overflow-hidden max-h-[80vh]",
+              onClick: function (e) { e.stopPropagation(); }
+            },
+              React.createElement("header", { className: "border-b border-border px-4 py-3" },
+                React.createElement("h3", { className: "text-sm font-semibold" }, "Coding agent model"),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground font-mono mt-0.5" }, resolvedCodingBinary())
+              ),
+              React.createElement("div", { className: "p-3 border-b border-border" },
+                React.createElement(Input, {
+                  value: codingAgentModelQuery,
+                  onChange: function (e) { setCodingAgentModelQuery(e.target.value); },
+                  placeholder: "Filter models…",
+                  className: "h-8 text-xs"
+                })
+              ),
+              React.createElement("div", { className: "flex-1 overflow-y-auto min-h-0" },
+                !codingAgentModelOptions ? React.createElement("p", { className: "p-4 text-xs text-muted-foreground" }, "Loading models…")
+                  : (codingAgentModelOptions.models || []).filter(function (m) {
+                      var q = (codingAgentModelQuery || "").toLowerCase();
+                      if (!q) return true;
+                      return (m.id || "").toLowerCase().indexOf(q) >= 0 || (m.label || "").toLowerCase().indexOf(q) >= 0;
+                    }).map(function (m) {
+                      var isSel = pendingCodingAgentModel === m.id;
+                      var isCurrent = codingAgentModel === m.id;
+                      return React.createElement("div", {
+                        key: m.id,
+                        className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (isSel ? " bg-accent/10" : ""),
+                        onClick: function () { setPendingCodingAgentModel(m.id); }
+                      },
+                        React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, isSel ? "✓" : ""),
+                        React.createElement("span", { className: "flex-1 truncate font-mono" }, m.label || m.id),
+                        isCurrent ? React.createElement("span", { className: "text-[10px] text-primary shrink-0" }, "current") : null
+                      );
+                    })
+              ),
+              React.createElement("footer", { className: "border-t border-border p-3 flex items-center justify-between gap-2" },
+                React.createElement("span", { className: "text-[11px] text-muted-foreground font-mono truncate" }, pendingCodingAgentModel || "auto"),
+                React.createElement("div", { className: "flex items-center gap-1.5" },
+                  React.createElement(Button, { variant: "outline", size: "sm", onClick: function () { setEditingCodingAgentModel(false); } }, "Cancel"),
+                  React.createElement(Button, { size: "sm", disabled: !pendingCodingAgentModel, onClick: applyCodingAgentModelChoice }, "Select")
+                )
+              )
+            )
+          ) : null,
 
           // Governance + orchestrator tuning
           React.createElement(Card, null,

@@ -8,6 +8,7 @@ from pathlib import Path
 
 DEFAULT_WORKING_BRANCH = "main"
 DEFAULT_CODING_AGENT = "agent"
+DEFAULT_CODING_AGENT_MODEL = "auto"
 DEFAULT_POLICY_PROFILE = "balanced"
 VALID_POLICY_PROFILES = frozenset({"advisory", "balanced", "strict"})
 
@@ -48,6 +49,7 @@ _MANAGED_KEYS = frozenset({
     "worker_profile",
     "preflight_profiles",
     "coding_agent_binary",
+    "coding_agent_model",
     "bundle_path",
     "skills_output_path",
     "plan_memory_path",
@@ -339,20 +341,47 @@ def resolve_coding_agent(
     return env.get("KANBAN_CODING_AGENT", DEFAULT_CODING_AGENT)
 
 
+def resolve_coding_agent_model(
+    project_root: Path,
+    *,
+    coding_agent_model: str | None = None,
+    env: dict[str, str] | None = None,
+) -> str:
+    from plugin.coding_agent import normalize_coding_agent_model
+
+    if coding_agent_model is not None:
+        return normalize_coding_agent_model(coding_agent_model)
+    existing = read_overlay_config(overlay_path(project_root))
+    if existing.get("coding_agent_model"):
+        return normalize_coding_agent_model(existing["coding_agent_model"])
+    env = env or {}
+    if env.get("KANBAN_CODING_AGENT_MODEL"):
+        return normalize_coding_agent_model(env["KANBAN_CODING_AGENT_MODEL"])
+    return DEFAULT_CODING_AGENT_MODEL
+
+
 def build_overlay_yaml(
     *,
     working_branch: str,
     trigger_branch: str | None,
     coding_agent: str,
+    coding_agent_model: str | None = None,
     policy_profile: str = DEFAULT_POLICY_PROFILE,
     bundle_path: Path | str,
     hermes_home: Path | str,
     existing: dict[str, str] | None = None,
 ) -> str:
     """Build overlay YAML, preserving user keys not managed by init/save."""
+    from plugin.coding_agent import normalize_coding_agent_model
+
     existing = dict(existing or {})
     worker_profile, orchestrator_profile, preflight_profiles = resolve_dispatch_profiles(
         existing
+    )
+    model_value = normalize_coding_agent_model(
+        coding_agent_model
+        if coding_agent_model is not None
+        else existing.get("coding_agent_model")
     )
     managed: dict[str, str] = {
         "schema_version": "1.0.0",
@@ -364,6 +393,7 @@ def build_overlay_yaml(
         "worker_profile": worker_profile,
         "preflight_profiles": preflight_profiles,
         "coding_agent_binary": coding_agent,
+        "coding_agent_model": model_value,
         "bundle_path": str(bundle_path),
         "skills_output_path": str(Path(hermes_home) / "skills" / "kanban-advanced"),
         "plan_memory_path": existing.get("plan_memory_path", ".hermes/kanban/memory"),
@@ -375,7 +405,7 @@ def build_overlay_yaml(
     for key, val in managed.items():
         if key == "preflight_profiles":
             lines.append(f'preflight_profiles: "{val}"')
-        elif key in ("schema_version", "policy_profile"):
+        elif key in ("schema_version", "policy_profile", "coding_agent_model"):
             lines.append(f'{key}: "{val}"')
         else:
             lines.append(f"{key}: {val}")

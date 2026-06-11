@@ -13,6 +13,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 |----------|---------|---------|
 | `working_branch` | Integration branch; orchestrator merges completed sections here | Detected from git upstream / `origin/HEAD` at init, or set explicitly |
 | `coding_agent_binary` | Headless CLI coding agent binary on PATH (set during init) | `agent` (Cursor CLI), `claude`, `codex`, etc. |
+| `coding_agent_model` | Model ID for the coding CLI (`auto` = CLI default) | `auto` |
 | `feature_branch_prefix` | Prefix for per-section worktree branches | `wt/` |
 | `required_secrets` | Comma-separated env vars checked by preflight | `MONGODB_URI,SECRET_KEY` |
 | `preflight_api_url` | Health endpoint for API reachability check | `http://127.0.0.1:8000/healthz` |
@@ -38,11 +39,12 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 
 The `coding_agent_binary` flows through three layers to the worker:
 
-1. **Init (step 1c)** — user picks from supported agents table → written to `kanban-config.yaml` and `.env` as `KANBAN_CODING_AGENT`
-2. **Worker environment** — `.env` is sourced at session start → `KANBAN_CODING_AGENT` available as env var
-3. **Worker dispatch** — `[os.environ.get("KANBAN_CODING_AGENT", "agent"), "-p", prompt, ...]`
+1. **Init (step 1c)** — user picks binary from supported agents table → written to `kanban-config.yaml` and `.env` as `KANBAN_CODING_AGENT`
+2. **Init (step 1c-ii)** — user picks model (`auto` or a CLI-specific ID; Cursor: `agent --list-models`) → `coding_agent_model` in YAML and `KANBAN_CODING_AGENT_MODEL` in `.env`
+3. **Worker environment** — `.env` is sourced at session start → both env vars available
+4. **Worker dispatch** — builds `[KANBAN_CODING_AGENT, "-p", prompt, ...]` and adds `--model` when `KANBAN_CODING_AGENT_MODEL` is not `auto`
 
-To change the coding agent: edit `.env`, use dashboard **Save**, or re-run `hermes kanban-advanced init` (preserves existing `coding_agent_binary` unless you pick a new one interactively). The YAML config is the source of truth for documentation; the env var is what the worker reads at runtime.
+To change binary or model: use dashboard **Coding Agent** (binary + model row) and **Save**, edit `kanban-config.yaml` / `.env`, or re-run `hermes kanban-advanced init` (preserves existing values unless you override interactively).
 
 ## Re-init and branch preservation
 

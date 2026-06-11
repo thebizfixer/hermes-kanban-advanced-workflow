@@ -85,8 +85,9 @@ stop = threading.Event()
 task_id = os.environ["HERMES_KANBAN_TASK"]
 workspace = os.environ["HERMES_KANBAN_WORKSPACE"]
 
-# Read coding_agent_binary from config overlay (default: "agent")
+# Read coding agent from project .env (set by kanban-advanced init / dashboard Save)
 coding_agent = os.environ.get("KANBAN_CODING_AGENT", "agent")
+coding_agent_model = os.environ.get("KANBAN_CODING_AGENT_MODEL", "auto")
 
 # Extract prompt, Files:, and Mode: from card body
 prompt = "<extract the agent -p prompt string from card body>"
@@ -105,9 +106,12 @@ def _heartbeat_loop():
 
 hb = threading.Thread(target=_heartbeat_loop, daemon=True)
 hb.start()
+cmd = [coding_agent, "-p", prompt, "--output-format", "json"]
+if coding_agent_model and coding_agent_model not in ("auto", "default", ""):
+    cmd.extend(["--model", coding_agent_model])
 try:
     result = subprocess.run(
-        [coding_agent, "-p", prompt, "--model", "<your-model>", "--output-format", "json"],
+        cmd,
         capture_output=True, text=True, timeout=900, cwd=workspace
     )
 finally:

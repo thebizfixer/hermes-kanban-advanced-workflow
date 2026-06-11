@@ -33,6 +33,7 @@ from plugin.config_overlay import (  # noqa: E402
     read_overlay_config,
     resolve_branch_settings,
     resolve_coding_agent,
+    resolve_coding_agent_model,
     resolve_dispatch_profiles,
     resolve_hermes_home,
     resolve_plugin_install_dir,
@@ -40,6 +41,12 @@ from plugin.config_overlay import (  # noqa: E402
     resolve_policy_profile,
     resolve_project_root,
     sync_project_env,
+)
+from plugin.coding_agent import (  # noqa: E402
+    check_coding_agent_cli,
+    list_models_for_binary,
+    model_display_label,
+    normalize_coding_agent_model,
 )
 from plugin.profile_bootstrap import (  # noqa: E402
     dispatch_profile_names,
@@ -463,6 +470,17 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
     config_exists = overlay_path(project_root).is_file()
 
     coding_agent = resolve_coding_agent(project_root, env=env)
+    coding_agent_model = resolve_coding_agent_model(project_root, env=env)
+    coding_agent_cli = check_coding_agent_cli(
+        coding_agent,
+        coding_agent_model,
+        _run,
+        probe=probe,
+        cache_get=_cache_get,
+        cache_set=_cache_set,
+        probe_ttl=_TTL_MODEL_PROBE,
+    )
+    coding_agent_cli["model_label"] = model_display_label(coding_agent_model)
 
     configured_branch = config.get("working_branch")
     if configured_branch:
@@ -482,6 +500,8 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         "trigger_branch": config.get("trigger_branch", ""),
         "coding_agent": coding_agent,
         "coding_agent_binary": coding_agent,
+        "coding_agent_model": coding_agent_model,
+        "coding_agent_cli": coding_agent_cli,
         "policy_profile": resolve_policy_profile(project_root, env=env),
         "max_turns": _get_max_turns(
             project_root, orchestrator_config_show=orch_config_show
@@ -512,6 +532,47 @@ async def status(request: Request):
     return _build_status(probe=probe, git_fetch=git_fetch)
 
 
+@router.get("/coding-agent/models")
+async def coding_agent_models(request: Request):
+    """GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent"""
+    binary = (request.query_params.get("binary") or "agent").strip()
+    return list_models_for_binary(binary, _run)
+
+
+def _append_coding_agent_cli_log(
+    output: list[str],
+    binary: str,
+    model: str,
+    *,
+    probe: bool = True,
+) -> None:
+    cli = check_coding_agent_cli(
+        binary,
+        model,
+        _run,
+        probe=probe,
+        cache_get=_cache_get if probe else None,
+        cache_set=_cache_set if probe else None,
+        probe_ttl=_TTL_MODEL_PROBE,
+    )
+    label = model_display_label(model)
+    if not cli.get("on_path"):
+        output.append(f"   !  '{binary}' not found on PATH")
+        return
+    output.append(f"   OK '{binary}' found on PATH")
+    output.append(f"   coding_agent_binary: {binary}")
+    output.append(f"   coding_agent_model: {model} ({label})")
+    if not probe:
+        return
+    reachable = cli.get("model_reachable")
+    if reachable is True:
+        output.append(f"   OK coding CLI reachable ({label})")
+    elif reachable is False:
+        output.append(f"   !  coding CLI auth/model check failed ({label})")
+    else:
+        output.append(f"   !  coding CLI smoke inconclusive ({label})")
+
+
 @router.post("/init")
 async def init(request: Request):
     """POST /api/plugins/kanban-advanced/init"""
@@ -533,6 +594,11 @@ async def init(request: Request):
             coding_agent=body.get("coding_agent_binary"),
             env=env,
         )
+        coding_agent_model = resolve_coding_agent_model(
+            project_root,
+            coding_agent_model=body.get("coding_agent_model"),
+            env=env,
+        )
     else:
         working_branch, trigger_branch, kept = resolve_branch_settings(
             project_root,
@@ -545,6 +611,9 @@ async def init(request: Request):
             project_root,
             coding_agent=body.get("coding_agent_binary"),
             env=env,
+        )
+        coding_agent_model = normalize_coding_agent_model(
+            body.get("coding_agent_model", "auto")
         )
 
     output = []
@@ -614,17 +683,10 @@ async def init(request: Request):
         _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)], env=init_env)
         output.append(f"   OK max_turns set to {max_turns}")
 
-    # Coding agent
-    coding_path = None
-    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
-        if (Path(path_dir) / coding_agent).exists():
-            coding_path = Path(path_dir) / coding_agent
-            break
-    if coding_path:
-        output.append(f"   OK '{coding_agent}' found on PATH")
-    else:
-        output.append(f"   !  '{coding_agent}' not found on PATH")
-    output.append(f"   coding_agent_binary: {coding_agent}")
+    # Coding agent binary + model (+ smoke when binary is on PATH)
+    _append_coding_agent_cli_log(
+        output, coding_agent, coding_agent_model, probe=True
+    )
 
     # Config overlay
     overlay_dir = config_file.parent
@@ -636,6 +698,7 @@ async def init(request: Request):
             working_branch=working_branch,
             trigger_branch=trigger_branch,
             coding_agent=coding_agent,
+            coding_agent_model=coding_agent_model,
             policy_profile=policy_profile,
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
@@ -698,6 +761,7 @@ async def init(request: Request):
         {
             "HERMES_ENABLE_PROJECT_PLUGINS": "true",
             "KANBAN_CODING_AGENT": coding_agent,
+            "KANBAN_CODING_AGENT_MODEL": coding_agent_model,
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )
@@ -747,6 +811,10 @@ async def save(request: Request):
     else:
         trigger_branch = normalize_optional_branch(config.get("trigger_branch"))
     coding_agent = body.get("coding_agent_binary") or config.get("coding_agent_binary") or resolve_coding_agent(project_root, env=env)
+    if "coding_agent_model" in body:
+        coding_agent_model = normalize_coding_agent_model(body.get("coding_agent_model"))
+    else:
+        coding_agent_model = resolve_coding_agent_model(project_root, env=env)
     if "policy_profile" in body:
         policy_profile = normalize_policy_profile(body.get("policy_profile"))
     else:
@@ -758,6 +826,9 @@ async def save(request: Request):
     output.append(f"   Working branch: {working_branch}")
     output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
     output.append(f"   Governance profile: {policy_profile}")
+    _append_coding_agent_cli_log(
+        output, coding_agent, coding_agent_model, probe=True
+    )
 
     overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)
@@ -768,6 +839,7 @@ async def save(request: Request):
             working_branch=working_branch,
             trigger_branch=trigger_branch,
             coding_agent=coding_agent,
+            coding_agent_model=coding_agent_model,
             policy_profile=policy_profile,
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
@@ -782,6 +854,7 @@ async def save(request: Request):
         {
             "HERMES_ENABLE_PROJECT_PLUGINS": "true",
             "KANBAN_CODING_AGENT": coding_agent,
+            "KANBAN_CODING_AGENT_MODEL": coding_agent_model,
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )

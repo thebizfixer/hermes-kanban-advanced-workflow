@@ -180,7 +180,13 @@ If this exits 0, the agent is functional regardless of log noise. Block only if 
 # agent -p "Implement WS3 per plan §Phase 1, Workstream 3. ..."
 # ```
 # Capture agent stdout for token extraction (mandatory):
-AGENT_OUTPUT=$(agent -p "$FULL_PROMPT" --output-format json 2>&1)
+CODING_AGENT="${KANBAN_CODING_AGENT:-agent}"
+CODING_MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
+if [ "$CODING_MODEL" = "auto" ] || [ "$CODING_MODEL" = "default" ] || [ -z "$CODING_MODEL" ]; then
+  AGENT_OUTPUT=$("$CODING_AGENT" -p "$FULL_PROMPT" --output-format json 2>&1)
+else
+  AGENT_OUTPUT=$("$CODING_AGENT" -p "$FULL_PROMPT" --model "$CODING_MODEL" --output-format json 2>&1)
+fi
 echo "$AGENT_OUTPUT" > "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/agent_output_${HERMES_KANBAN_TASK}.json"
 
 # Extract token data for exact reporting:
@@ -237,8 +243,16 @@ FULL_PROMPT="$GOVERNANCE
 ---
 
 ${brief}${AGENT_PROMPT}"
-agent -p "$FULL_PROMPT"
+CODING_AGENT="${KANBAN_CODING_AGENT:-agent}"
+CODING_MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
+if [ "$CODING_MODEL" = "auto" ] || [ "$CODING_MODEL" = "default" ] || [ -z "$CODING_MODEL" ]; then
+  "$CODING_AGENT" -p "$FULL_PROMPT"
+else
+  "$CODING_AGENT" -p "$FULL_PROMPT" --model "$CODING_MODEL"
+fi
 ```
+
+> **Model injection (config, not card body):** `KANBAN_CODING_AGENT_MODEL` comes from `kanban-config.yaml` / `.env` (dashboard **Save** or init). Do **not** put `--model` in the card body's fenced block — card body policy P005 blocks that. The worker injects the configured model at dispatch time.
 
 ### Step 5 — Monitor
 
