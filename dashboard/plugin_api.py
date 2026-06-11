@@ -43,6 +43,7 @@ from plugin.config_overlay import (  # noqa: E402
     sync_project_env,
 )
 from plugin.coding_agent import (  # noqa: E402
+    SMOKE_TIMEOUT_SECONDS,
     check_coding_agent_cli,
     list_models_for_binary,
     model_display_label,
@@ -107,6 +108,13 @@ def _run(
         encoding="utf-8", errors="replace",
         timeout=timeout, cwd=cwd, env=env,
     )
+
+
+def _run_coding_agent_cli(
+    cmd: list[str], timeout: int = SMOKE_TIMEOUT_SECONDS, cwd: str | None = None, env: dict | None = None
+) -> subprocess.CompletedProcess:
+    """Subprocess runner for coding-CLI smoke/list — longer timeout than generic _run."""
+    return _run(cmd, timeout=timeout, cwd=cwd, env=env)
 
 
 def _read_config(project_root: Path) -> dict:
@@ -424,7 +432,12 @@ def _materialize_plugin_assets(plugin_root: Path, hermes_home: Path) -> list[str
     scripts_src = plugin_root / "scripts"
     scripts_dst = hermes_home / "scripts"
     scripts_dst.mkdir(parents=True, exist_ok=True)
-    for script_name in ["auto_unblock.sh", "board_keeper.sh", "token_tracker.py"]:
+    for script_name in [
+        "auto_unblock.sh",
+        "board_keeper.sh",
+        "token_tracker.py",
+        "coding_agent_invoke.sh",
+    ]:
         src = scripts_src / script_name
         dst = scripts_dst / script_name
         if src.exists():
@@ -478,7 +491,7 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
     coding_agent_cli = check_coding_agent_cli(
         coding_agent,
         coding_agent_model,
-        _run,
+        _run_coding_agent_cli,
         probe=probe,
         cache_get=_cache_get,
         cache_set=_cache_set,
@@ -540,7 +553,7 @@ async def status(request: Request):
 async def coding_agent_models(request: Request):
     """GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent"""
     binary = (request.query_params.get("binary") or "agent").strip()
-    return list_models_for_binary(binary, _run)
+    return list_models_for_binary(binary, _run_coding_agent_cli)
 
 
 def _append_coding_agent_cli_log(
@@ -553,7 +566,7 @@ def _append_coding_agent_cli_log(
     cli = check_coding_agent_cli(
         binary,
         model,
-        _run,
+        _run_coding_agent_cli,
         probe=probe,
         cache_get=_cache_get if probe else None,
         cache_set=_cache_set if probe else None,
@@ -749,7 +762,12 @@ async def init(request: Request):
     scripts_src = plugin_root / "scripts"
     scripts_dst = hermes_home / "scripts"
     scripts_dst.mkdir(parents=True, exist_ok=True)
-    for script_name in ["auto_unblock.sh", "board_keeper.sh", "token_tracker.py"]:
+    for script_name in [
+        "auto_unblock.sh",
+        "board_keeper.sh",
+        "token_tracker.py",
+        "coding_agent_invoke.sh",
+    ]:
         src = scripts_src / script_name
         dst = scripts_dst / script_name
         if src.exists():

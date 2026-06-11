@@ -154,3 +154,7 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$F
 | Worker Step 4 | `coding_agent_invoke.sh dispatch` | Same worktree; full prompt + stdout capture |
 
 A green dashboard coding-agent dot does not replace worktree smoke — Cursor especially may pass at project root but fail in a new worktree without `--trust`.
+
+**Smoke timeout:** Dashboard and init use **180s** (`SMOKE_TIMEOUT_SECONDS` in `plugin/coding_agent.py`). Workers should allow the same when using `terminal()` (`timeout 180 bash … smoke`). Subprocess timeout returns `model_reachable: false`, not yellow/inconclusive.
+
+**Worker dispatch:** Hermes workers must use **`terminal()`** to run `bash "$INVOKE" dispatch …` (up to **900s**). Do not use `execute_code`. Resolve `$INVOKE` via `bundle_path` in config, then `$HERMES_HOME/plugins/kanban-advanced`, then `$HERMES_HOME/scripts/coding_agent_invoke.sh` after **Update Plugin** / `provision.sh`.

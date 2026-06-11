@@ -114,6 +114,13 @@ Tip: use --model <id>
         self.assertIn("--output-format", argv)
         self.assertIn("composer-2.5", argv)
 
+    def test_smoke_timeout_returns_false(self) -> None:
+        def _timeout(cmd, timeout=90):
+            raise subprocess.TimeoutExpired(cmd, timeout)
+
+        result = smoke_test_coding_agent("agent", CODING_AGENT_MODEL_AUTO, _timeout)
+        self.assertFalse(result)
+
     def test_workspace_trust_failure_is_auth_fail(self) -> None:
         self.assertFalse(
             _interpret_smoke_result(

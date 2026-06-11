@@ -6,13 +6,14 @@ import json
 import os
 import re
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 CODING_AGENT_MODEL_AUTO = "auto"
 SMOKE_PROMPT = "say ok"
-SMOKE_TIMEOUT_SECONDS = 90
+SMOKE_TIMEOUT_SECONDS = 180
 
 
 @dataclass(frozen=True)
@@ -386,6 +387,8 @@ def smoke_test_coding_agent(
                 json_attempt=False,
             )
         return interpreted
+    except subprocess.TimeoutExpired:
+        return False
     except Exception:
         return None
 

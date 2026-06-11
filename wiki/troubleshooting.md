@@ -59,6 +59,36 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> -
 - E018: Token log missing exact agent attribution. Capture coding-agent stdout and log with `source=agent`.
 - E020: Agent output not captured or smoke failed. See **Coding agent smoke failed** below.
 
+### Stale skills / plugin updated mid-kanban execution
+
+**Symptom:** Workers still run old smoke commands (missing `--trust`, wrong `coding_agent_invoke.sh` path, or direct coding instead of delegation). Materialized skill at `$HERMES_HOME/skills/kanban-advanced/kanban-worker/SKILL.md` does not match plugin source. `provision.sh --check` reports drift.
+
+**Root cause:** Bootstrap or **Update Plugin** was run while cards were in flight, or only the git checkout was updated without rematerializing skills/scripts. Workers load profile skills from disk — stale copies persist until reprovisioned.
+
+**Fix (reset provisioning — pause dispatch first):**
+
+```bash
+# 1. Pause / block new work if a plan is active
+hermes kanban list
+
+# 2. Dashboard: Update Plugin → Bootstrap (or Save)
+#    CLI equivalent after pull:
+hermes kanban-advanced init --project-root .
+
+# 3. Re-materialize project skills tree (if skills_output_path is set)
+bash hermes-kanban-advanced-workflow/scripts/provision.sh
+bash hermes-kanban-advanced-workflow/scripts/provision.sh --check
+
+# 4. Restart gateway so workers reload skills
+hermes gateway restart
+
+# 5. Verify materialized worker skill
+grep -E 'coding_agent_invoke|terminal\(\)' \
+  "$HERMES_HOME/skills/kanban-advanced/kanban-worker/SKILL.md"
+```
+
+Also confirm the worker profile loads **plugin** skills (`kanban-worker` from `$HERMES_HOME/skills/kanban-advanced/`), not the built-in `devops/kanban-worker` copy. `hermes profile show kanban-advanced-worker | grep Skills:` should list only role skills (count 2), with content from the materialized plugin tree.
+
 ### "Coding agent smoke failed" / E020 / `Workspace Trust Required`
 
 **Symptom:** Worker blocks at Step 3 or E020. Dashboard **Coding Agent** dot may still be green. Cursor stderr shows `Workspace Trust Required`, or smoke exits non-zero from the worktree.

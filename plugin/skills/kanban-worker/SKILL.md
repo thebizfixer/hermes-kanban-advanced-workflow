@@ -156,23 +156,35 @@ if [ "$WORKTREE_BASE" != "$INTEGRATION_HEAD" ]; then
 fi
 ```
 
-- **Coding-agent smoke (mandatory, replaces log-grep):** Do NOT check for `[unauthenticated]` in worker logs — this is the Cursor background indexing service (cosmetic, not blocking). Do NOT rely on `agent status` alone — it shows OAuth state but not execution capability. Verify the configured binary can run a one-line prompt from the worktree:
+- **Coding-agent smoke (mandatory, replaces log-grep):** Do NOT check for `[unauthenticated]` in worker logs — this is the Cursor background indexing service (cosmetic, not blocking). Do NOT rely on `agent status` alone — it shows OAuth state but not execution capability. Verify the configured binary can run a one-line prompt from the worktree using **`terminal()`** (not `execute_code`):
 
 ```bash
-INVOKE=hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh
-if bash "$INVOKE" smoke >/dev/null 2>&1; then
-  echo "[worker] coding-agent smoke: OK (${KANBAN_CODING_AGENT:-agent})"
-else
-  echo "[worker] coding-agent smoke failed — block card (E020)"
-  exit 1
-fi
+# Resolve plugin bundle (ordered fallbacks)
+BUNDLE=""
+for candidate in \
+  "$(grep -E '^bundle_path:' .hermes/kanban-overrides/kanban-config.yaml 2>/dev/null | head -1 | sed 's/^bundle_path: *//; s/^[\"'\'']//; s/[\"'\'']$//')" \
+  "${HERMES_HOME}/plugins/kanban-advanced" \
+  "${HERMES_KANBAN_REPO_ROOT:-.}/hermes-kanban-advanced-workflow"; do
+  [ -n "$candidate" ] && [ -f "$candidate/scripts/coding_agent_invoke.sh" ] && BUNDLE="$candidate" && break
+done
+[ -n "$BUNDLE" ] || BUNDLE="hermes-kanban-advanced-workflow"
+INVOKE="$BUNDLE/scripts/coding_agent_invoke.sh"
+[ -x "$INVOKE" ] || INVOKE="${HERMES_HOME}/scripts/coding_agent_invoke.sh"
+
+# Smoke: allow up to 180s (cold Cursor start + JSON). Uses --trust for agent.
+cd "$WORKTREE_PATH"
+timeout 180 bash "$INVOKE" smoke
 ```
 
-Per-binary flags are in `plugin/data/references/coding-agent-cli-invocation.md`. **Cursor (`agent`):** use `-p --output-format json --trust`. Exit 1 with `Workspace Trust Required` means `--trust` was omitted — not missing JSON support. The Cursor CLI ignores `CURSOR_API_KEY`; it authenticates via OAuth in `~/.config/cursor/auth.json`.
+If smoke fails, block with E020 — do **not** fall back to direct coding.
+
+Per-binary flags: `plugin/data/references/coding-agent-cli-invocation.md`. **Cursor (`agent`):** `-p --output-format json --trust` (the invoke script adds these). Exit 1 with `Workspace Trust Required` means `--trust` was omitted — not missing JSON support. The Cursor CLI ignores `CURSOR_API_KEY`; it authenticates via OAuth in `~/.config/cursor/auth.json`.
 
 - **Workspace trust:** `worktree_setup.sh` pre-trusts the worktree using a cross-platform hash (Windows drive-letter paths: strip colon, replace `\` and `/` with `-`; Unix paths: strip leading `/`, replace `/` with `-`). Still pass `--trust` on every Cursor headless call.
 
 ### Step 4 — Handoff to coding agent
+
+**Dispatch mechanism (mandatory):** Use the **`terminal()`** tool to run the coding CLI. Do **not** use `execute_code` (cannot host 900s subprocesses). Do **not** call bare `coding_agent_invoke.sh` without a resolved path (exit 127). If dispatch fails, `kanban_block` with evidence — **never** fall back to direct coding.
 
 Do NOT construct the prompt from scratch. Extract the fenced `agent` block from the card body, prepend governance + memory brief, then dispatch via the shared invoke script. Start the heartbeat thread before the agent call.
 
@@ -183,7 +195,18 @@ Do NOT construct the prompt from scratch. Extract the fenced `agent` block from 
 # ```agent
 # agent -p "Implement WS3 per plan §Phase 1, Workstream 3. ..."
 # ```
-GOVERNANCE=$(cat hermes-kanban-advanced-workflow/plugin/data/references/coding-agent-governance.md 2>/dev/null)
+BUNDLE=""
+for candidate in \
+  "$(grep -E '^bundle_path:' .hermes/kanban-overrides/kanban-config.yaml 2>/dev/null | head -1 | sed 's/^bundle_path: *//; s/^[\"'\'']//; s/[\"'\'']$//')" \
+  "${HERMES_HOME}/plugins/kanban-advanced" \
+  "${HERMES_KANBAN_REPO_ROOT:-.}/hermes-kanban-advanced-workflow"; do
+  [ -n "$candidate" ] && [ -f "$candidate/scripts/coding_agent_invoke.sh" ] && BUNDLE="$candidate" && break
+done
+[ -n "$BUNDLE" ] || BUNDLE="hermes-kanban-advanced-workflow"
+INVOKE="$BUNDLE/scripts/coding_agent_invoke.sh"
+[ -x "$INVOKE" ] || INVOKE="${HERMES_HOME}/scripts/coding_agent_invoke.sh"
+
+GOVERNANCE=$(cat "$BUNDLE/plugin/data/references/coding-agent-governance.md" 2>/dev/null)
 if [ -z "$GOVERNANCE" ]; then
   GOVERNANCE="## Governance
 ### Files boundary
@@ -218,9 +241,11 @@ FULL_PROMPT="$GOVERNANCE
 
 ${brief}${AGENT_PROMPT}"
 
-INVOKE=hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh
-AGENT_OUTPUT=$(bash "$INVOKE" dispatch "$FULL_PROMPT" 2>&1)
-echo "$AGENT_OUTPUT" > "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/agent_output_${HERMES_KANBAN_TASK}.json"
+# terminal() example — run from worktree; allow up to 900s for the coding agent
+cd "$WORKTREE_PATH"
+timeout 900 bash "$INVOKE" dispatch "$FULL_PROMPT" \
+  > "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/agent_output_${HERMES_KANBAN_TASK}.json" 2>&1
+AGENT_OUTPUT=$(cat "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/agent_output_${HERMES_KANBAN_TASK}.json")
 
 # Extract token data when the CLI returns JSON (Cursor / Claude):
 if echo "$AGENT_OUTPUT" | python3 -c "

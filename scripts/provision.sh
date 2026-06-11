@@ -319,7 +319,7 @@ copy_bootstrap
 # $HERMES_HOME/scripts/. Sync them so crons don't pick up stale copies.
 CRON_SCRIPTS_DIR="${HERMES_HOME}/scripts"
 mkdir -p "$CRON_SCRIPTS_DIR"
-for script in auto_unblock.sh board_keeper.sh; do
+for script in auto_unblock.sh board_keeper.sh coding_agent_invoke.sh; do
     if [ -f "${BUNDLE_PATH}/scripts/${script}" ]; then
         case "$MODE" in
             apply)
