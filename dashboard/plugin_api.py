@@ -488,7 +488,7 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
     else:
         detected_branch = detect_default_working_branch(project_root) or "main"
 
-    worker_profile, orchestrator_profile = resolve_dispatch_profiles(config)
+    worker_profile, orchestrator_profile, _ = resolve_dispatch_profiles(config)
     orch_config_show = _profile_config_show(orchestrator_profile)
 
     return {
