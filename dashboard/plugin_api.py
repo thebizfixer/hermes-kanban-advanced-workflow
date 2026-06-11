@@ -23,7 +23,6 @@ from plugin.config_overlay import (  # noqa: E402
     DEFAULT_ORCHESTRATOR_PROFILE,
     DEFAULT_PLUGIN_NAME,
     DEFAULT_WORKER_PROFILE,
-    PLUGIN_ROOT,
     build_overlay_yaml,
     detect_default_working_branch,
     normalize_optional_branch,
@@ -35,6 +34,7 @@ from plugin.config_overlay import (  # noqa: E402
     resolve_dispatch_profiles,
     resolve_hermes_home,
     resolve_plugin_install_dir,
+    resolve_plugin_skills_src,
     resolve_policy_profile,
     resolve_project_root,
     sync_project_env,
@@ -50,6 +50,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 HERMES_BIN = os.environ.get("HERMES_BIN", "hermes")
+
+
+def _hermes_subprocess_env(hermes_home: Path | str) -> dict[str, str]:
+    return {**os.environ, "HERMES_HOME": str(hermes_home)}
 
 
 def _run(
@@ -452,6 +456,8 @@ async def init(request: Request):
 
     output = []
     output.append(f"kanban-advanced init -- bootstrapping {project_root}")
+    hermes_home_pre = resolve_hermes_home(project_root)
+    output.append(f"   HERMES_HOME: {hermes_home_pre}")
     output.append(f"   Working branch: {working_branch}")
     output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
     if "policy_profile" in body:
@@ -466,7 +472,6 @@ async def init(request: Request):
     if kept:
         output.append("   Preserved branch settings from existing kanban-config.yaml")
 
-    hermes_home_pre = resolve_hermes_home()
     worker_profile, orchestrator_profile = dispatch_profile_names(existing_config)
     dispatch_profiles = [worker_profile, orchestrator_profile]
 
@@ -485,6 +490,8 @@ async def init(request: Request):
             "error": "Failed to ensure dispatch profiles",
         }
 
+    init_env = _hermes_subprocess_env(hermes_home_pre)
+
     # Model config
     for profile in dispatch_profiles:
         profiles = _check_profiles(project_root)
@@ -493,15 +500,15 @@ async def init(request: Request):
         else:
             output.append(f"   !  {profile}: no model configured — copy from current profile")
             try:
-                r = _run([HERMES_BIN, "config", "show"])
+                r = _run([HERMES_BIN, "config", "show"], env=init_env)
                 dm = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", r.stdout)
                 dp = re.search(r"'provider':\s*'([^']+)'", r.stdout)
                 du = re.search(r"'base_url':\s*'([^']*)'", r.stdout)
                 if dm and dp:
-                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.default", dm.group(1)])
-                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.provider", dp.group(1)])
+                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.default", dm.group(1)], env=init_env)
+                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.provider", dp.group(1)], env=init_env)
                     if du and du.group(1):
-                        _run([HERMES_BIN, "-p", profile, "config", "set", "model.base_url", du.group(1)])
+                        _run([HERMES_BIN, "-p", profile, "config", "set", "model.base_url", du.group(1)], env=init_env)
                     output.append(f"   OK {profile} configured")
             except Exception as e:
                 output.append(f"   !  Skipped: {e}")
@@ -511,7 +518,7 @@ async def init(request: Request):
     if current_turns >= max_turns:
         output.append(f"   OK {orchestrator_profile}: max_turns = {current_turns}")
     else:
-        _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)])
+        _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)], env=init_env)
         output.append(f"   OK max_turns set to {max_turns}")
 
     # Coding agent
@@ -529,7 +536,7 @@ async def init(request: Request):
     # Config overlay
     overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)
-    hermes_home = resolve_hermes_home()
+    hermes_home = hermes_home_pre
     plugin_root = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
     config_file.write_text(
         build_overlay_yaml(
@@ -546,7 +553,7 @@ async def init(request: Request):
     output.append(f"   OK {config_file}")
 
     # Materialize skills
-    skills_src = PLUGIN_ROOT / "plugin" / "skills"
+    skills_src = resolve_plugin_skills_src(DEFAULT_PLUGIN_NAME)
     skills_dst = hermes_home / "skills" / "kanban-advanced"
     count = 0
     if skills_src.is_dir():
@@ -558,6 +565,8 @@ async def init(request: Request):
                 (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
+    else:
+        output.append(f"   X Skills not found at {skills_src}")
 
     # Reconcile profiles: rename → seed role-only skills → verify (+ fix retry)
     worker_profile, orchestrator_profile = dispatch_profile_names(
@@ -580,7 +589,7 @@ async def init(request: Request):
         }
 
     # Provision scripts
-    scripts_src = PLUGIN_ROOT / "scripts"
+    scripts_src = plugin_root / "scripts"
     scripts_dst = hermes_home / "scripts"
     scripts_dst.mkdir(parents=True, exist_ok=True)
     for script_name in ["auto_unblock.sh", "board_keeper.sh", "token_tracker.py"]:
@@ -658,7 +667,7 @@ async def save(request: Request):
 
     overlay_dir = config_file.parent
     overlay_dir.mkdir(parents=True, exist_ok=True)
-    hermes_home = resolve_hermes_home()
+    hermes_home = resolve_hermes_home(project_root)
     plugin_root = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
     config_file.write_text(
         build_overlay_yaml(
@@ -690,8 +699,7 @@ async def save(request: Request):
         _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)])
         output.append(f"   OK max_turns set to {max_turns}")
 
-    skills_src = PLUGIN_ROOT / "plugin" / "skills"
-    hermes_home = resolve_hermes_home()
+    skills_src = resolve_plugin_skills_src(DEFAULT_PLUGIN_NAME)
     skills_dst = hermes_home / "skills" / "kanban-advanced"
     count = 0
     if skills_src.is_dir():
@@ -758,14 +766,14 @@ async def update_plugin():
     if not ok:
         return {"success": False, "error": err or "git sync failed", "output": output}
 
-    hermes_home = resolve_hermes_home()
+    project_root = resolve_project_root()
+    hermes_home = resolve_hermes_home(project_root)
     output.extend(_materialize_plugin_assets(install_dir, hermes_home))
 
     # Reconcile dispatch profiles so a code pull also fixes profile state:
     # rename legacy worker/orchestrator → kanban-advanced-*, reseed role-only
     # skills, then verify (with one fix retry). Without this, "Update Plugin"
     # pulls new code but leaves stale profiles named worker/orchestrator.
-    project_root = resolve_project_root()
     worker_profile, orchestrator_profile = dispatch_profile_names(
         read_overlay_config(overlay_path(project_root))
     )

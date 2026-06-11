@@ -28,6 +28,9 @@ from .config_overlay import (
     DEFAULT_WORKER_PROFILE,
     build_overlay_yaml,
     normalize_policy_profile,
+    resolve_hermes_home,
+    resolve_plugin_install_dir,
+    resolve_plugin_skills_src,
     resolve_policy_profile,
     sync_project_env,
     normalize_optional_branch,
@@ -204,7 +207,8 @@ def _handle_init(args) -> int:
     Does not report "ready" until every step passes.
     """
     project_root = Path(args.project_root).resolve()
-    hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+    hermes_home = resolve_hermes_home(project_root)
+    plugin_root = resolve_plugin_install_dir()
     force = args.force
     config_file = overlay_path(project_root)
     existing_config = read_overlay_config(config_file)
@@ -226,6 +230,7 @@ def _handle_init(args) -> int:
             pass
 
     print(f"kanban-advanced init -- bootstrapping {project_root}")
+    print(f"   HERMES_HOME: {hermes_home}")
     print(f"  HERMES_HOME: {hermes_home}")
     print(f"  Working branch: {working_branch}")
     print(f"  Trigger branch: {trigger_branch or '(none — optional protected branch not set)'}")
@@ -425,7 +430,7 @@ def _handle_init(args) -> int:
             trigger_branch=trigger_branch,
             coding_agent=coding_binary,
             policy_profile=policy_profile,
-            bundle_path=PLUGIN_ROOT,
+            bundle_path=plugin_root,
             hermes_home=hermes_home,
             existing=existing_config,
         ),
@@ -435,7 +440,7 @@ def _handle_init(args) -> int:
 
     # ── 2a. Materialize skills so skill_view() can resolve them ────────
     print("2a. Materializing skills...")
-    skills_src = PLUGIN_ROOT / "plugin" / "skills"
+    skills_src = resolve_plugin_skills_src()
     skills_dst = hermes_home / "skills" / "kanban-advanced"
     count = 0
     if skills_src.is_dir():

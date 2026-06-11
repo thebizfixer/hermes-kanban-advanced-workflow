@@ -90,6 +90,41 @@ def _profile_home(hermes_home: Path, profile: str) -> Path:
     return hermes_home / "profiles" / profile
 
 
+def _resolve_profile_home_cli(
+    run: RunFn,
+    hermes_bin: str,
+    profile: str,
+    env: dict[str, str] | None,
+) -> Path | None:
+    """Ask Hermes where a profile actually lives (authoritative vs guessed paths)."""
+    try:
+        r = _run_home(run, [hermes_bin, "profile", "show", profile], env)
+        if r.returncode != 0:
+            return None
+        for line in r.stdout.splitlines():
+            if line.strip().lower().startswith("path:"):
+                raw = line.split(":", 1)[1].strip()
+                if raw:
+                    return Path(raw).expanduser().resolve()
+    except Exception:
+        return None
+    return None
+
+
+def _resolve_profile_home(
+    run: RunFn,
+    hermes_bin: str,
+    hermes_home: Path,
+    profile: str,
+    env: dict[str, str] | None,
+) -> Path | None:
+    cli_home = _resolve_profile_home_cli(run, hermes_bin, profile, env)
+    if cli_home is not None:
+        return cli_home
+    fallback = _profile_home(hermes_home, profile)
+    return fallback if fallback.is_dir() else None
+
+
 def _default_profile_home(hermes_home: Path) -> Path:
     """Hermes stores the active default profile at $HERMES_HOME root."""
     for candidate in (hermes_home, hermes_home / "profiles" / "default"):
@@ -128,7 +163,9 @@ def _create_dispatch_profile(
         run, [hermes_bin, "profile", "create", profile_name, "--no-skills"], env
     )
     if r.returncode == 0:
-        profile_home = _profile_home(hermes_home, profile_name)
+        profile_home = _resolve_profile_home_cli(run, hermes_bin, profile_name, env)
+        if profile_home is None:
+            profile_home = _profile_home(hermes_home, profile_name)
         _opt_out_bundled_skills(profile_home)
         _copy_profile_config_from_default(hermes_home, profile_name)
         # Hermes may leave an empty skills/ dir; remove before role-only seeding.
@@ -175,7 +212,10 @@ def ensure_dispatch_profiles(
                 if r.returncode == 0:
                     log(f"   OK Renamed '{legacy_name}' -> '{new_name}'")
                     profiles_output += f"\n{new_name}"
-                    renamed_home = _profile_home(home, new_name)
+                    renamed_home = (
+                        _resolve_profile_home_cli(run, hermes_bin, new_name, env)
+                        or _profile_home(home, new_name)
+                    )
                     _opt_out_bundled_skills(renamed_home)
                     skills_dir = renamed_home / "skills"
                     if skills_dir.exists():
@@ -217,11 +257,14 @@ def _prompts_src_from_skills(skills_src: Path) -> Path:
 
 
 def seed_dispatch_profile_souls(
+    run: RunFn,
+    hermes_bin: str,
     hermes_home: Path,
     prompts_src: Path,
     worker_profile: str,
     orchestrator_profile: str,
     *,
+    env: dict[str, str] | None = None,
     log: Callable[[str], Any] = print,
 ) -> int:
     """Install plugin role prompts as each dispatch profile's SOUL.md."""
@@ -233,8 +276,8 @@ def seed_dispatch_profile_souls(
     for role, profile in role_profiles.items():
         prompt_name = _PROFILE_SOUL_PROMPTS_BY_ROLE[role]
         prompt_file = prompts_src / prompt_name
-        profile_home = _profile_home(hermes_home, profile)
-        if not profile_home.is_dir():
+        profile_home = _resolve_profile_home(run, hermes_bin, hermes_home, profile, env)
+        if profile_home is None or not profile_home.is_dir():
             log(f"   !  {profile}: profile home not found — skipping SOUL.md")
             continue
         if not prompt_file.is_file():
@@ -242,7 +285,7 @@ def seed_dispatch_profile_souls(
             continue
         soul_dst = profile_home / "SOUL.md"
         soul_dst.write_text(prompt_file.read_text(encoding="utf-8"), encoding="utf-8")
-        log(f"   OK {profile}: SOUL.md <- {prompt_name}")
+        log(f"   OK {profile}: SOUL.md <- {prompt_name} ({profile_home})")
         seeded += 1
     return seeded
 
@@ -267,11 +310,14 @@ def run_provision_profile_check(
 
 
 def seed_dispatch_profile_skills(
+    run: RunFn,
+    hermes_bin: str,
     hermes_home: Path,
     skills_src: Path,
     worker_profile: str,
     orchestrator_profile: str,
     *,
+    env: dict[str, str] | None = None,
     log: Callable[[str], Any] = print,
 ) -> int:
     """Wipe inherited profile skills and seed only role-specific plugin skills."""
@@ -281,9 +327,10 @@ def seed_dispatch_profile_skills(
     }
     total = 0
     for profile, allowed_skills in profile_map.items():
-        profile_home = _profile_home(hermes_home, profile)
-        if not profile_home.is_dir():
-            log(f"   !  {profile}: profile home not found at {profile_home} — skipping")
+        profile_home = _resolve_profile_home(run, hermes_bin, hermes_home, profile, env)
+        if profile_home is None or not profile_home.is_dir():
+            guessed = _profile_home(hermes_home, profile)
+            log(f"   !  {profile}: profile home not found (guessed {guessed}) — skipping")
             continue
         _opt_out_bundled_skills(profile_home)
         profile_skills = profile_home / "skills"
@@ -301,7 +348,7 @@ def seed_dispatch_profile_skills(
                     skill_md.read_text(encoding="utf-8"), encoding="utf-8"
                 )
                 seeded += 1
-        log(f"   OK {profile}: {seeded} skills seeded {sorted(allowed_skills)}")
+        log(f"   OK {profile}: {seeded} skills seeded {sorted(allowed_skills)} ({profile_home})")
         total += seeded
     return total
 
@@ -330,7 +377,10 @@ def verify_dispatch_profiles(
     for profile, allowed in role_map.items():
         if not _profile_present(profiles_output, profile):
             issues.append(f"profile '{profile}' not found (expected prefixed name)")
-        profile_home = _profile_home(hermes_home, profile)
+        profile_home = _resolve_profile_home(run, hermes_bin, hermes_home, profile, env)
+        if profile_home is None:
+            issues.append(f"profile '{profile}' home path could not be resolved")
+            continue
         if not (profile_home / NO_BUNDLED_SKILLS_MARKER).is_file():
             issues.append(
                 f"profile '{profile}' missing {NO_BUNDLED_SKILLS_MARKER} "
@@ -379,12 +429,29 @@ def reconcile_dispatch_profiles(
     ):
         return False
 
+    env = _home_env(hermes_home)
     prompts_src = _prompts_src_from_skills(skills_src)
+    if not prompts_src.is_dir():
+        log(f"   !  Prompts dir missing at {prompts_src}")
     seed_dispatch_profile_souls(
-        hermes_home, prompts_src, worker_profile, orchestrator_profile, log=log
+        run,
+        hermes_bin,
+        hermes_home,
+        prompts_src,
+        worker_profile,
+        orchestrator_profile,
+        env=env,
+        log=log,
     )
     seed_dispatch_profile_skills(
-        hermes_home, skills_src, worker_profile, orchestrator_profile, log=log
+        run,
+        hermes_bin,
+        hermes_home,
+        skills_src,
+        worker_profile,
+        orchestrator_profile,
+        env=env,
+        log=log,
     )
 
     issues = verify_dispatch_profiles(
@@ -396,10 +463,24 @@ def reconcile_dispatch_profiles(
             log(f"      - {issue}")
         # One reseed attempt covers stale/extra skill dirs after rename.
         seed_dispatch_profile_souls(
-            hermes_home, prompts_src, worker_profile, orchestrator_profile, log=log
+            run,
+            hermes_bin,
+            hermes_home,
+            prompts_src,
+            worker_profile,
+            orchestrator_profile,
+            env=env,
+            log=log,
         )
         seed_dispatch_profile_skills(
-            hermes_home, skills_src, worker_profile, orchestrator_profile, log=log
+            run,
+            hermes_bin,
+            hermes_home,
+            skills_src,
+            worker_profile,
+            orchestrator_profile,
+            env=env,
+            log=log,
         )
         issues = verify_dispatch_profiles(
             run, hermes_bin, hermes_home, worker_profile, orchestrator_profile

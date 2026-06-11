@@ -105,11 +105,13 @@ def resolve_project_root(start: Path | None = None) -> Path:
     return config_hit or git_hit or env_hit or start
 
 
-def resolve_hermes_home() -> Path:
+def resolve_hermes_home(project_root: Path | str | None = None) -> Path:
     """Resolve Hermes state directory ($HERMES_HOME / $HERMES_STATE_DIR / defaults).
 
     When running inside Hermes Agent, delegates to ``hermes_constants.get_hermes_home``.
-    Otherwise mirrors ``scripts/lib/hermes_home.sh`` resolution order.
+    Otherwise mirrors ``scripts/lib/hermes_home.sh`` resolution order, then project-local
+    ``<project>/.hermes`` (common for project-scoped plugins), then Windows
+    ``%LOCALAPPDATA%/hermes``.
     """
     try:
         from hermes_constants import get_hermes_home
@@ -122,6 +124,27 @@ def resolve_hermes_home() -> Path:
         raw = os.environ.get(env_name, "").strip()
         if raw:
             return Path(raw).expanduser().resolve()
+
+    roots: list[Path] = []
+    if project_root is not None:
+        roots.append(Path(project_root).expanduser().resolve())
+    else:
+        try:
+            roots.append(resolve_project_root())
+        except Exception:
+            pass
+
+    for root in roots:
+        project_hermes = root / ".hermes"
+        if project_hermes.is_dir():
+            return project_hermes.resolve()
+
+    if os.name == "nt":
+        local = os.environ.get("LOCALAPPDATA", "").strip()
+        if local:
+            local_hermes = Path(local) / "hermes"
+            if local_hermes.is_dir():
+                return local_hermes.resolve()
 
     # Mirror scripts/lib/hermes_home.sh — data dir only (not %LOCALAPPDATA%/hermes install tree).
     home = Path.home()
@@ -138,6 +161,16 @@ def resolve_hermes_home() -> Path:
     if userprofile_hermes is not None:
         return userprofile_hermes.resolve()
     return home_hermes.resolve()
+
+
+def resolve_plugin_skills_src(plugin_name: str = DEFAULT_PLUGIN_NAME) -> Path:
+    """Installed plugin checkout's skill bundle (``plugin/skills``)."""
+    return resolve_plugin_install_dir(plugin_name) / "plugin" / "skills"
+
+
+def resolve_plugin_prompts_src(plugin_name: str = DEFAULT_PLUGIN_NAME) -> Path:
+    """Installed plugin checkout's role prompts (``plugin/data/prompts``)."""
+    return resolve_plugin_install_dir(plugin_name) / "plugin" / "data" / "prompts"
 
 
 def resolve_plugin_install_dir(plugin_name: str = DEFAULT_PLUGIN_NAME) -> Path:
