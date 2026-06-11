@@ -416,7 +416,7 @@ def main() -> int:
         emit({
             "ok": False,
             "error": f"orchestrator profile '{orchestrator_profile}' not found",
-            "fix": f"hermes profile create {orchestrator_profile} --clone  (or: hermes kanban-advanced init)",
+            "fix": f"hermes kanban-advanced init  (creates {orchestrator_profile} with role-only skills)",
         })
         return 2
 

@@ -452,10 +452,9 @@ def _handle_init(args) -> int:
         return 1
 
     # ── 2b. Reconcile profiles: rename → seed role skills → verify+fix ─
-    # `profile create --clone` copies the default profile's entire skill tree
-    # (stale built-in kanban-*). reconcile_dispatch_profiles wipes that, seeds
-    # only the role-specific skills, then VERIFIES the end state (prefixed
-    # names + role-only skills) and reseeds once if verification fails.
+    # Dispatch profiles are created with `--no-skills` (no Hermes bundled skills).
+    # reconcile_dispatch_profiles installs plugin SOUL.md prompts, seeds role-only
+    # skills, writes `.no-bundled-skills`, then VERIFIES and reseeds once if needed.
     worker_profile, orchestrator_profile = dispatch_profile_names(
         read_overlay_config(config_file)
     )
