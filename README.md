@@ -129,7 +129,7 @@ You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* 
 - **[KPIs](docs/reference/kpis.md)** — success rate, token burn, failure-mode distribution
 - **[Personas](docs/reference/personas.md)** — orchestrator/worker roles, worker lifecycle
 - **[Governance Scripts](docs/reference/scripts.md)** — evaluation chain, attestation, card policy, recovery
-- **[Coding Agents](docs/reference/coding-agents.md)** — supported headless CLI agents
+- **[Coding Agents](docs/reference/coding-agents.md)** — supported headless CLIs, dashboard vs worktree smoke, `coding_agent_invoke.sh`
 - **[Limitations](docs/reference/limitations.md)** — what the plugin can't automate
 
 ### Explanation

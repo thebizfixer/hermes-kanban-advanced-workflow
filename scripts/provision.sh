@@ -371,8 +371,8 @@ fi
 # skill_manage patches are not always persisted — verify marker strings.
 WORKER_SKILL="${SKILLS_OUTPUT_PATH}/kanban-worker/SKILL.md"
 if [ -f "$WORKER_SKILL" ] && [[ "$MODE" == "apply" || "$MODE" == "check" ]]; then
-    if ! grep -q "agent.*echo hello.*output-format json" "$WORKER_SKILL" 2>/dev/null; then
-        echo "[provision] WARNING: Cursor CLI auth verification patch missing from $WORKER_SKILL"
+    if ! grep -q "coding_agent_invoke.sh smoke" "$WORKER_SKILL" 2>/dev/null; then
+        echo "[provision] WARNING: coding-agent smoke patch missing from $WORKER_SKILL"
         echo "[provision] This patch prevents false-positive [unauthenticated] worker blocks."
     fi
     if ! grep -q "workspace-trusted" "$WORKER_SKILL" 2>/dev/null; then

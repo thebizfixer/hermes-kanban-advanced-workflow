@@ -8,6 +8,9 @@ from types import SimpleNamespace
 
 from plugin.coding_agent import (
     CODING_AGENT_MODEL_AUTO,
+    _agent_smoke_json_unsupported,
+    _interpret_smoke_result,
+    build_dispatch_argv,
     build_smoke_argv,
     is_auto_model,
     normalize_coding_agent_model,
@@ -48,18 +51,79 @@ Tip: use --model <id>
         argv = build_smoke_argv("agent", CODING_AGENT_MODEL_AUTO)
         self.assertEqual(argv[0], "agent")
         self.assertIn("-p", argv)
+        self.assertIn("--output-format", argv)
         self.assertIn("--trust", argv)
         self.assertNotIn("--model", argv)
+
+    def test_build_smoke_argv_agent_plain_fallback(self) -> None:
+        argv = build_smoke_argv("agent", CODING_AGENT_MODEL_AUTO, json_output=False)
+        self.assertIn("--trust", argv)
+        self.assertNotIn("--output-format", argv)
 
     def test_build_smoke_argv_agent_explicit_model(self) -> None:
         argv = build_smoke_argv("agent", "composer-2.5")
         self.assertIn("--model", argv)
         self.assertIn("composer-2.5", argv)
 
+    def test_agent_plain_smoke_interpretation(self) -> None:
+        self.assertTrue(
+            _interpret_smoke_result(
+                "agent",
+                returncode=0,
+                stdout="Hello! How can I help you today?",
+                stderr="",
+                json_attempt=False,
+            )
+        )
+
+    def test_agent_smoke_json_unsupported_detection(self) -> None:
+        self.assertTrue(
+            _agent_smoke_json_unsupported("", "error: unknown option --output-format")
+        )
+
     def test_build_smoke_argv_codex(self) -> None:
         argv = build_smoke_argv("codex", "o4-mini")
         self.assertEqual(argv[:2], ["codex", "exec"])
+        self.assertIn("--json", argv)
         self.assertIn("--model", argv)
+
+    def test_build_smoke_argv_claude_json(self) -> None:
+        argv = build_smoke_argv("claude", CODING_AGENT_MODEL_AUTO)
+        self.assertIn("--output-format", argv)
+        self.assertIn("--dangerously-skip-permissions", argv)
+
+    def test_build_smoke_argv_grok(self) -> None:
+        argv = build_smoke_argv("grok", CODING_AGENT_MODEL_AUTO)
+        self.assertIn("--prompt", argv)
+        self.assertIn("--format", argv)
+
+    def test_build_smoke_argv_gemini(self) -> None:
+        argv = build_smoke_argv("gemini", CODING_AGENT_MODEL_AUTO)
+        self.assertIn("--yolo", argv)
+        self.assertIn("--output-format", argv)
+
+    def test_build_dispatch_argv_codex_sandbox(self) -> None:
+        argv = build_dispatch_argv("codex", "do work", CODING_AGENT_MODEL_AUTO)
+        self.assertIn("--sandbox", argv)
+        self.assertIn("workspace-write", argv)
+        self.assertIn("do work", argv)
+
+    def test_build_dispatch_argv_agent_trust(self) -> None:
+        argv = build_dispatch_argv("agent", "implement feature", "composer-2.5")
+        self.assertIn("--trust", argv)
+        self.assertIn("--output-format", argv)
+        self.assertIn("composer-2.5", argv)
+
+    def test_workspace_trust_failure_is_auth_fail(self) -> None:
+        self.assertFalse(
+            _interpret_smoke_result(
+                "agent",
+                returncode=1,
+                stdout="",
+                stderr="Workspace Trust Required",
+                json_attempt=True,
+            )
+        )
 
 
 class TestCodingAgentSmokeLive(unittest.TestCase):

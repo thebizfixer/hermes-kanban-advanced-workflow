@@ -11,18 +11,33 @@ Set both at **init** (CLI step 1c / 1c-ii) or dashboard **Bootstrap** / **Save**
 
 **Card bodies must not include `--model`.** Policy P005 blocks model overrides in fenced blocks when the assignee Hermes profile has model config. The worker injects `--model` from `KANBAN_CODING_AGENT_MODEL` at dispatch time when the value is not `auto`.
 
+## SSOT invocation reference
+
+Per-binary headless flags, structured output, and trust/permissions are documented in:
+
+[`plugin/data/references/coding-agent-cli-invocation.md`](../../plugin/data/references/coding-agent-cli-invocation.md)
+
+Workers and smoke tests should call:
+
+```bash
+bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke
+bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$FULL_PROMPT"
+```
+
 ## Supported binaries
 
-| Binary   | Source                   | Install                                            | Headless invocation                  | Model flag (when not `auto`) |
-| -------- | ------------------------ | -------------------------------------------------- | ------------------------------------ | ---------------------------- |
-| `agent`  | Cursor CLI               | `curl https://cursor.com/install -fsS \| bash` | `agent -p "..."`                     | `--model <id>` (`agent --list-models`) |
-| `claude` | Claude Code              | `npm i -g @anthropic-ai/claude-code`               | `claude -p "..."`                    | `--model <alias or full name>` |
-| `codex`  | OpenAI Codex             | `pip install openai-codex`                         | `codex exec "..."`                   | `--model <id>` |
-| `grok`   | superagent-ai/grok-cli   | `npm i -g grok-dev`                                | `grok -p "..."`                      | `--model <id>` (when supported) |
-| `aider`  | Aider-AI/aider           | `pip install aider-install`                        | `aider --message "..." --yes-always` | `--model <id>` |
-| `gemini` | google-gemini/gemini-cli | `npm i -g @google/gemini-cli`                      | `gemini -p "..."`                    | `--model <id>` |
+| Binary | Source | Install | Headless invocation | Structured output | Permissions / trust |
+| --- | --- | --- | --- | --- | --- |
+| `agent` | Cursor CLI | `curl https://cursor.com/install -fsS \| bash` | `agent -p "..."` | `--output-format json` (with `-p`) | `--trust` (with `-p`, required in worktrees) |
+| `claude` | Claude Code | `npm i -g @anthropic-ai/claude-code` | `claude -p "..."` | `--output-format json` (with `-p`) | `--dangerously-skip-permissions` |
+| `codex` | OpenAI Codex | `pip install openai-codex` | `codex exec "..."` | `--json` (JSONL) | `-a never`; `--sandbox workspace-write` for edits |
+| `grok` | superagent-ai/grok-cli | `npm i -g grok-dev` | `grok --prompt "..."` | `--format json` (NDJSON) | `GROK_API_KEY` |
+| `aider` | Aider-AI/aider | `pip install aider-install` | `aider --message "..."` | text only | `--yes-always` |
+| `gemini` | google-gemini/gemini-cli | `npm i -g @google/gemini-cli` | `gemini --yolo "..."` | `--output-format json` | `--yolo` / `--approval-mode=yolo` |
 
-Implementation: [`plugin/coding_agent.py`](../../plugin/coding_agent.py) (adapters, list-models, smoke test). Tests: [`tests/test_coding_agent.py`](../../tests/test_coding_agent.py).
+Model flag when not `auto`: `--model <id>` (all supported binaries).
+
+Implementation: [`plugin/coding_agent.py`](../../plugin/coding_agent.py) (`build_smoke_argv`, `build_dispatch_argv`). Tests: [`tests/test_coding_agent.py`](../../tests/test_coding_agent.py).
 
 ## Cursor CLI (`agent`) — recommended default
 
@@ -36,11 +51,60 @@ agent --list-models
 
 ```bash
 agent -p "say ok" --output-format json --trust
-# with explicit model:
-agent -p "say ok" --model composer-2.5 --output-format json --trust
 ```
 
+**Dispatch:**
+
+```bash
+agent -p "$FULL_PROMPT" --output-format json --trust
+```
+
+**JSON result:** single object with `is_error`, `usage.inputTokens`, `usage.outputTokens`, `duration_api_ms`, `result`.
+
+**Common failure:** exit 1 with `Workspace Trust Required` when `--trust` is omitted in a new worktree. `worktree_setup.sh` pre-provisions trust files; workers still pass `--trust` on every headless call.
+
 On Windows, `agent` may resolve to `agent.CMD` in `%LOCALAPPDATA%\cursor-agent\`; the plugin resolves PATH shims before subprocess calls.
+
+## Claude Code (`claude`)
+
+```bash
+claude -p "say ok" --output-format json --dangerously-skip-permissions
+```
+
+`-p` skips the workspace trust dialog in trusted directories. Parse JSON `is_error` when present.
+
+## OpenAI Codex (`codex`)
+
+```bash
+codex exec --json -a never "say ok"
+codex exec --json --sandbox workspace-write -a never "$FULL_PROMPT"
+```
+
+Stdout is JSONL (`turn.completed` carries usage). Progress logs on stderr.
+
+## Grok CLI (`grok`)
+
+```bash
+grok --prompt "say ok" --format json
+```
+
+Requires `GROK_API_KEY`. Output is newline-delimited JSON events.
+
+## Gemini CLI (`gemini`)
+
+```bash
+gemini --yolo --output-format json "say ok"
+```
+
+Use `--sandbox` when you want tool isolation. Folder trust is configured in Gemini settings (`security.folderTrust`).
+
+## Aider (`aider`)
+
+```bash
+aider --message "say ok" --yes-always --no-git
+```
+
+Text output only — token attribution uses estimates unless you add a separate metering hook.
 
 ## CLI init prompts
 
@@ -56,20 +120,23 @@ Re-init **preserves** `coding_agent_model` unless you use `--force` or answer th
 2. **Model** — click the row to open the picker (`GET /api/plugins/kanban-advanced/coding-agent/models?binary=<name>`).
 3. **Save** or **Bootstrap** — writes YAML + `.env`, reconciles profiles, runs smoke.
 
-Status field `coding_agent_cli.model_reachable` is filled on the slow status path (`probe=1`), like Hermes profile model pings.
+Status field `coding_agent_cli.model_reachable` is filled on the slow status path (`probe=1`). **Save** and **Bootstrap** also smoke the coding CLI when the binary is on PATH. This is separate from `profiles.*.model_reachable`, which pings the **Hermes** LLM backend for dispatch profiles.
+
+Dashboard smoke runs from **project root**. Workers re-smoke from each **worktree** (Step 3) — a green dashboard dot does not skip worktree smoke.
 
 ## Worker dispatch (runtime)
 
-From `kanban-worker` SKILL Step 4 — prompt extraction unchanged; command built from env:
+From `kanban-worker` SKILL Step 3–4 — use the shared invoke script (reads `KANBAN_CODING_AGENT` / `KANBAN_CODING_AGENT_MODEL`):
 
 ```bash
-CODING_AGENT="${KANBAN_CODING_AGENT:-agent}"
-CODING_MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
-if [ "$CODING_MODEL" = "auto" ] || [ "$CODING_MODEL" = "default" ] || [ -z "$CODING_MODEL" ]; then
-  "$CODING_AGENT" -p "$FULL_PROMPT" --output-format json
-else
-  "$CODING_AGENT" -p "$FULL_PROMPT" --model "$CODING_MODEL" --output-format json
-fi
+# Step 3 — smoke from worktree
+bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke
+
+# Step 4 — dispatch after building FULL_PROMPT
+AGENT_OUTPUT=$(bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$FULL_PROMPT" 2>&1)
+echo "$AGENT_OUTPUT" > "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/agent_output_${HERMES_KANBAN_TASK}.json"
 ```
+
+Do **not** put `--model` or `--output-format` in the card body's fenced block — the worker injects those from config at dispatch time (P005).
 
 See also: [configuration.md](configuration.md), [wiki/configuration.md](../../wiki/configuration.md), [dashboard/API.md](../../dashboard/API.md).

@@ -16,7 +16,7 @@ Returns current initialization state and config values.
 
 | Param | Default | Meaning |
 |-------|---------|---------|
-| `probe` | `0` | When `1`, ping each dispatch profile model (`hermes chat -q "say ok"`). Skipped by default for fast tab loads. |
+| `probe` | `0` | When `1`, run reachability probes on the slow path: (1) each **Hermes dispatch profile** via `hermes -p <profile> chat -q "say ok"`; (2) the **coding CLI** via `build_smoke_argv` / `smoke_test_coding_agent` (same contract as `scripts/coding_agent_invoke.sh smoke`). Skipped by default for fast tab loads. |
 | `git_fetch` | `0` | When `1`, run `git fetch origin` before computing `plugin_behind`. Skipped by default; uses a short-lived server cache or local `rev-list` only. |
 
 The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetch=1`** in the background. Returning to the tab in the same browser session reuses **sessionStorage** for the last full payload when probe results are younger than ~3 minutes.
@@ -78,7 +78,9 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
 | `plugin_update_available` | `true` when `plugin_behind > 0` |
 | `plugin_local_changes` | Porcelain dirty count in `plugin_install_path`; `null` when not checkable |
 
-`coding_agent_cli.model_reachable` is populated when `probe=1` (same slow path as Hermes profile model pings). Use `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` to populate the dashboard model picker.
+`profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
+
+Use `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` to populate the dashboard model picker. See `docs/reference/coding-agents.md` and `plugin/data/references/coding-agent-cli-invocation.md`.
 
 When `config_exists` is false, the dashboard shows the bootstrap form.
 

@@ -103,7 +103,7 @@ cronjob(action="remove", job_id="<id>")
 
 If failure rate exceeds 30% during execution:
 1. Check worker SOUL.md for corruption
-2. Verify agent binary works: `agent -p "echo ok" --output-format json`
+2. Verify agent binary works: `bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke`
 3. Review card body format — are `Files:` lines present?
 4. Check for environment leaks (wrong paths, stale configs)
 5. Apply fixes, reset intervention counter, resume

@@ -6,6 +6,6 @@ True parallel dispatch across profiles needs **separate provider capacity per ro
 | --- | --- | --- |
 | Orchestrator | high | Planning, audit, reconcile |
 | Worker | medium | Supervision, verification |
-| Headless coding agent | low / off | Invoked via `agent -p` in card body |
+| Headless coding agent | low / off | Configured via `coding_agent_binary` / `KANBAN_CODING_AGENT`; card body carries the prompt only — dispatch via `coding_agent_invoke.sh` |
 
 See [wiki/provider-strategy.md](../../wiki/provider-strategy.md) for capacity planning detail.

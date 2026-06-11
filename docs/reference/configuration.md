@@ -49,7 +49,7 @@ See [wiki/troubleshooting.md](../../wiki/troubleshooting.md) if `working_branch`
 | `trigger_branch` | `${trigger_branch}` | unset — protected deploy branch; E009 when set |
 | `bundle_version` | — | Pin public release tag (documentation) |
 | `coding_agent_binary` | `${coding_agent_binary}` | `agent` (set during init; see [coding agents](coding-agents.md)) |
-| `coding_agent_model` | — (runtime: `KANBAN_CODING_AGENT_MODEL` in `.env`) | `auto` — CLI default; or a tool-specific ID (Cursor: `agent --list-models`) |
+| `coding_agent_model` | — (runtime: `KANBAN_CODING_AGENT_MODEL` in `.env`) | `auto` — CLI default; or a tool-specific ID (Cursor: `agent --list-models`). Worker dispatch: `scripts/coding_agent_invoke.sh` — see `plugin/data/references/coding-agent-cli-invocation.md` |
 | `preflight_profiles` | — | `kanban-advanced-worker,kanban-advanced-orchestrator` |
 | `plan_memory_path` | `${plan_memory_path}` | `.hermes/kanban/memory` |
 | `feature_branch_prefix` | — | `kanban/` |

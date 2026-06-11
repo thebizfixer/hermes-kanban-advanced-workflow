@@ -13,4 +13,4 @@ The workflow uses two agent profiles with a strict separation of concerns.
 orient → memory (fast path) → fast-sanity → handoff → monitor → verify (eval chain) → complete
 ```
 
-The worker is a supervisor, not an implementer. It reads the card, checks the preflight cache (< 30s if fresh), extracts the `agent -p` block, spawns the coding agent, monitors progress, runs the evaluation chain, and closes the task.
+The worker is a supervisor, not an implementer. It reads the card, checks the preflight cache (< 30s if fresh), extracts the fenced `agent` prompt block, smokes and dispatches the configured coding CLI via `scripts/coding_agent_invoke.sh`, monitors progress, runs the evaluation chain, and closes the task. See [coding agents](coding-agents.md).

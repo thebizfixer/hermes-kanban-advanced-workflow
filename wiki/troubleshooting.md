@@ -45,7 +45,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> -
 
 **Fix:** Edit the card body to include the missing field (`Files:`, `agent -p` block, or `Mode:`). Re-run card policy.
 
-### "Evaluation chain DENY" (E001-E006)
+### "Evaluation chain DENY" (E001-E006, E018, E020)
 
 **Symptom:** Worker completed agent run but task blocked with `E00x`.
 
@@ -56,6 +56,31 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> -
 - E004: Commit message mismatch. Amend commit or update `Commit:` line.
 - E005: Token log missing. Run `scripts/token_tracker.py` manually.
 - E006: Zero output. Check workspace type (must be `worktree`, not `scratch`).
+- E018: Token log missing exact agent attribution. Capture coding-agent stdout and log with `source=agent`.
+- E020: Agent output not captured or smoke failed. See **Coding agent smoke failed** below.
+
+### "Coding agent smoke failed" / E020 / `Workspace Trust Required`
+
+**Symptom:** Worker blocks at Step 3 or E020. Dashboard **Coding Agent** dot may still be green. Cursor stderr shows `Workspace Trust Required`, or smoke exits non-zero from the worktree.
+
+**Root causes:**
+
+1. **Worktree trust** — Dashboard smoke runs from project root; workers smoke from each card worktree. Cursor headless calls need `-p --output-format json --trust`. `worktree_setup.sh` pre-provisions trust files; the invoke script still passes `--trust` every time.
+2. **Wrong binary or model** — `KANBAN_CODING_AGENT` / `KANBAN_CODING_AGENT_MODEL` out of sync with `kanban-config.yaml` or `.env`. Re-run dashboard **Save** or fix `.env`.
+3. **OAuth / API key** — Cursor uses `~/.config/cursor/auth.json`, not `CURSOR_API_KEY`. Grok needs `GROK_API_KEY`.
+
+**Fix:**
+
+```bash
+cd <worktree-path>
+export KANBAN_CODING_AGENT=agent   # or your binary
+export KANBAN_CODING_AGENT_MODEL=auto
+bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke
+```
+
+Per-binary flags: `plugin/data/references/coding-agent-cli-invocation.md`. Do **not** grep worker logs for `[unauthenticated]` — that is the Cursor indexing service, not the agent.
+
+**Prevention:** Step 3 uses `coding_agent_invoke.sh smoke` after `worktree_setup.sh`. Preflight cache (< 30 min) can skip smoke on Step 2 fast path — if auth changed, delete `.hermes/kanban/preflight_cache.json` or wait for expiry.
 
 ### "Gateway not running" (G001)
 

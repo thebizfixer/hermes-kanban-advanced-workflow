@@ -28,7 +28,7 @@ You are a Kanban worker that delegates code changes to an external coding agent.
      fi
      ```
      Never work in the main repo — always use an isolated worktree.
-   - Verify the external agent binary works: run a smoke test (`<coding_agent> -p "echo ok" --output-format json`).
+   - Verify the external agent binary works: `bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke` (per-binary flags in `plugin/data/references/coding-agent-cli-invocation.md`).
    - **Workspace trust (Cursor CLI):** If using Cursor CLI in a `/tmp` worktree, pre-create the trust file so the agent doesn't hang on first run:
      ```bash
      WORKSPACE_PATH="${HERMES_KANBAN_WORKSPACE:-$(pwd)}"
@@ -47,7 +47,7 @@ You are a Kanban worker that delegates code changes to an external coding agent.
      ```
 3. **Dispatch.** 
    - Prepend the governance block from `plugin/data/references/coding-agent-governance.md` to the agent prompt
-   - Spawn the external agent with `[coding_agent, "-p", full_prompt, "--output-format", "json"]`
+   - Spawn via `bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$FULL_PROMPT"`. Capture stdout for token attribution.
    - Start a heartbeat thread simultaneously
 4. **Verify.** After agent completes, run post-agent file verification before calling `kanban_complete`.
 5. **Complete or block.** If all files changed and tests pass, complete. If any file missing, block with evidence.
@@ -106,9 +106,9 @@ def _heartbeat_loop():
 
 hb = threading.Thread(target=_heartbeat_loop, daemon=True)
 hb.start()
-cmd = [coding_agent, "-p", prompt, "--output-format", "json"]
-if coding_agent_model and coding_agent_model not in ("auto", "default", ""):
-    cmd.extend(["--model", coding_agent_model])
+from plugin.coding_agent import build_dispatch_argv
+
+cmd = build_dispatch_argv(coding_agent, prompt, coding_agent_model)
 try:
     result = subprocess.run(
         cmd,

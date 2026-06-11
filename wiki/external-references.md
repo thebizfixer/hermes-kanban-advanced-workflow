@@ -54,18 +54,18 @@ Design patterns for deterministic adjudication — DAL, error registry, lattice 
 
 ## Coding agents
 
-The workflow delegates code generation to external CLIs. Setup for each:
+The workflow delegates code generation to external CLIs. **SSOT for headless flags:** `plugin/data/references/coding-agent-cli-invocation.md` and [coding agents](../docs/reference/coding-agents.md). Workers and dashboard smoke tests share `plugin/coding_agent.py` / `scripts/coding_agent_invoke.sh`.
 
-| Agent | Install | Docs | Headless |
+| Agent | Install | Docs | Headless (summary) |
 |-------|---------|------|----------|
-| Cursor CLI (`agent`) | `curl https://cursor.com/install -fsS \| bash` | Cursor documentation | `agent -p "..."` |
-| Claude Code (`claude`) | `npm i -g @anthropic-ai/claude-code` | Anthropic docs | `claude -p "..."` |
-| OpenAI Codex (`codex`) | `pip install openai-codex` | https://github.com/openai/codex | `codex exec "..."` |
-| Grok CLI (`grok`) | `npm i -g grok-dev` | https://github.com/superagent-ai/grok-cli | `grok -p "..."` |
+| Cursor CLI (`agent`) | `curl https://cursor.com/install -fsS \| bash` | Cursor documentation | `agent -p "..." --output-format json --trust` |
+| Claude Code (`claude`) | `npm i -g @anthropic-ai/claude-code` | Anthropic docs | `claude -p "..." --output-format json --dangerously-skip-permissions` |
+| OpenAI Codex (`codex`) | `pip install openai-codex` | https://github.com/openai/codex | `codex exec --json -a never "..."` |
+| Grok CLI (`grok`) | `npm i -g grok-dev` | https://github.com/superagent-ai/grok-cli | `grok --prompt "..." --format json` |
 | Aider (`aider`) | `pip install aider-install` | https://github.com/Aider-AI/aider | `aider --message "..." --yes-always` |
-| Gemini CLI (`gemini`) | `npm i -g @google/gemini-cli` | https://github.com/google-gemini/gemini-cli | `gemini -p "..."` |
+| Gemini CLI (`gemini`) | `npm i -g @google/gemini-cli` | https://github.com/google-gemini/gemini-cli | `gemini --yolo --output-format json "..."` |
 
-**When to refer:** Agent installation, authentication, model selection, headless invocation syntax. These are not kanban-advanced concerns — each agent has its own docs.
+**When to refer:** Agent installation, authentication, model selection, headless invocation syntax. Dashboard **Coding Agent** reachability is a project-root smoke; workers re-smoke from each card worktree (Cursor needs `--trust` there even when the dashboard dot is green).
 
 ## Hermes Agent provider configuration
 

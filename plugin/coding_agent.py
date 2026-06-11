@@ -19,12 +19,13 @@ SMOKE_TIMEOUT_SECONDS = 90
 class CodingAgentAdapter:
     binary: str
     display_name: str
-    invocation: str  # print | exec | message
+    invocation: str  # print | exec | message | grok | gemini
     model_flag: str | None
     list_models_argv: tuple[str, ...] | None
     default_models: tuple[tuple[str, str], ...]
     extra_smoke_argv: tuple[str, ...] = ()
     exec_argv: tuple[str, ...] = ()  # e.g. ("exec",) for codex
+    dispatch_argv: tuple[str, ...] = ()  # extra flags for dispatch (e.g. codex sandbox)
 
 
 ADAPTERS: dict[str, CodingAgentAdapter] = {
@@ -49,7 +50,11 @@ ADAPTERS: dict[str, CodingAgentAdapter] = {
             ("opus", "Opus (latest alias)"),
             ("haiku", "Haiku (latest alias)"),
         ),
-        extra_smoke_argv=("--dangerously-skip-permissions",),
+        extra_smoke_argv=(
+            "--output-format",
+            "json",
+            "--dangerously-skip-permissions",
+        ),
     ),
     "codex": CodingAgentAdapter(
         binary="codex",
@@ -63,17 +68,19 @@ ADAPTERS: dict[str, CodingAgentAdapter] = {
             ("gpt-4.1", "gpt-4.1"),
         ),
         exec_argv=("exec",),
-        extra_smoke_argv=("-a", "never"),
+        extra_smoke_argv=("--json", "-a", "never"),
+        dispatch_argv=("--sandbox", "workspace-write"),
     ),
     "grok": CodingAgentAdapter(
         binary="grok",
         display_name="grok-cli",
-        invocation="print",
+        invocation="grok",
         model_flag="--model",
         list_models_argv=None,
         default_models=(
             (CODING_AGENT_MODEL_AUTO, "Default (CLI auto)"),
         ),
+        extra_smoke_argv=("--format", "json"),
     ),
     "aider": CodingAgentAdapter(
         binary="aider",
@@ -89,7 +96,7 @@ ADAPTERS: dict[str, CodingAgentAdapter] = {
     "gemini": CodingAgentAdapter(
         binary="gemini",
         display_name="Gemini CLI",
-        invocation="print",
+        invocation="gemini",
         model_flag="--model",
         list_models_argv=None,
         default_models=(
@@ -97,6 +104,7 @@ ADAPTERS: dict[str, CodingAgentAdapter] = {
             ("gemini-2.5-pro", "gemini-2.5-pro"),
             ("gemini-2.5-flash", "gemini-2.5-flash"),
         ),
+        extra_smoke_argv=("--yolo", "--output-format", "json"),
     ),
 }
 
@@ -221,20 +229,79 @@ def list_models_for_binary(
     }
 
 
-def build_smoke_argv(binary: str, model: str | None) -> list[str]:
+def _build_headless_argv(
+    binary: str,
+    prompt: str,
+    model: str | None,
+    *,
+    mode: str = "smoke",
+    json_output: bool = True,
+) -> list[str]:
     adapter = resolve_adapter(binary)
     cmd = [binary]
     if adapter.invocation == "exec":
         cmd.extend(adapter.exec_argv)
-        cmd.append(SMOKE_PROMPT)
+        cmd.extend(adapter.extra_smoke_argv)
+        if mode == "dispatch":
+            cmd.extend(adapter.dispatch_argv)
+        cmd.append(prompt)
     elif adapter.invocation == "message":
-        cmd.extend(["--message", SMOKE_PROMPT])
+        cmd.extend(["--message", prompt])
+        extra = list(adapter.extra_smoke_argv)
+        if mode == "dispatch":
+            extra = [flag for flag in extra if flag != "--no-git"]
+        cmd.extend(extra)
+    elif adapter.invocation == "grok":
+        cmd.extend(["--prompt", prompt])
+        if json_output:
+            cmd.extend(adapter.extra_smoke_argv)
+    elif adapter.invocation == "gemini":
+        cmd.extend([*adapter.extra_smoke_argv, prompt])
     else:
-        cmd.extend(["-p", SMOKE_PROMPT])
-    cmd.extend(adapter.extra_smoke_argv)
+        cmd.extend(["-p", prompt])
+        if json_output:
+            cmd.extend(adapter.extra_smoke_argv)
+        elif binary == "agent":
+            cmd.extend(("--trust",))
     if adapter.model_flag and not is_auto_model(model):
         cmd.extend([adapter.model_flag, normalize_coding_agent_model(model)])
     return cmd
+
+
+def build_smoke_argv(
+    binary: str, model: str | None, *, json_output: bool = True
+) -> list[str]:
+    return _build_headless_argv(
+        binary,
+        SMOKE_PROMPT,
+        model,
+        mode="smoke",
+        json_output=json_output,
+    )
+
+
+def build_dispatch_argv(binary: str, prompt: str, model: str | None) -> list[str]:
+    return _build_headless_argv(
+        binary,
+        prompt,
+        model,
+        mode="dispatch",
+        json_output=True,
+    )
+
+
+def _agent_smoke_json_unsupported(stdout: str, stderr: str) -> bool:
+    combined = f"{stdout}\n{stderr}".lower()
+    return any(
+        token in combined
+        for token in (
+            "output-format",
+            "unknown option",
+            "unrecognized",
+            "not supported",
+            "invalid option",
+        )
+    )
 
 
 def _interpret_smoke_result(
@@ -243,9 +310,20 @@ def _interpret_smoke_result(
     returncode: int,
     stdout: str,
     stderr: str,
+    json_attempt: bool = False,
 ) -> bool | None:
     combined = f"{stdout}\n{stderr}".lower()
-    if binary == "agent":
+    auth_fail_tokens = (
+        "unauthorized",
+        "authentication",
+        "not logged in",
+        "api key",
+        "invalid model",
+        "model not found",
+        "unknown model",
+        "workspace trust required",
+    )
+    if binary in {"agent", "claude"} and json_attempt:
         text = (stdout or "").strip()
         if text:
             try:
@@ -254,37 +332,12 @@ def _interpret_smoke_result(
                     return not bool(payload.get("is_error"))
             except json.JSONDecodeError:
                 pass
-        if returncode == 0 and "ok" in combined:
-            return True
-        if any(
-            token in combined
-            for token in (
-                "unauthorized",
-                "authentication",
-                "not logged in",
-                "api key",
-                "invalid model",
-                "model not found",
-                "unknown model",
-            )
-        ):
-            return False
-        return None
-
     if returncode == 0:
-        return True
-    if any(
-        token in combined
-        for token in (
-            "unauthorized",
-            "authentication",
-            "not logged in",
-            "api key",
-            "invalid model",
-            "model not found",
-            "unknown model",
-        )
-    ):
+        if binary in {"aider", "codex", "grok", "gemini"}:
+            return True
+        if (stdout or "").strip():
+            return True
+    if any(token in combined for token in auth_fail_tokens):
         return False
     return None
 
@@ -302,15 +355,37 @@ def smoke_test_coding_agent(
     if adapter.binary not in ADAPTERS and not shutil.which(binary):
         return None
     try:
-        result = _run_binary_command(
-            build_smoke_argv(binary, model), run, timeout=timeout
-        )
-        return _interpret_smoke_result(
+        json_argv = build_smoke_argv(binary, model, json_output=True)
+        result = _run_binary_command(json_argv, run, timeout=timeout)
+        returncode = getattr(result, "returncode", 1)
+        stdout = getattr(result, "stdout", "") or ""
+        stderr = getattr(result, "stderr", "") or ""
+        json_attempt = binary in {"agent", "claude"} and "--output-format" in json_argv
+        interpreted = _interpret_smoke_result(
             binary,
-            returncode=getattr(result, "returncode", 1),
-            stdout=getattr(result, "stdout", "") or "",
-            stderr=getattr(result, "stderr", "") or "",
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
+            json_attempt=json_attempt,
         )
+        if interpreted is not None:
+            return interpreted
+        if binary == "agent" and (
+            _agent_smoke_json_unsupported(stdout, stderr) or returncode != 0
+        ):
+            plain = _run_binary_command(
+                build_smoke_argv(binary, model, json_output=False),
+                run,
+                timeout=timeout,
+            )
+            return _interpret_smoke_result(
+                binary,
+                returncode=getattr(plain, "returncode", 1),
+                stdout=getattr(plain, "stdout", "") or "",
+                stderr=getattr(plain, "stderr", "") or "",
+                json_attempt=False,
+            )
+        return interpreted
     except Exception:
         return None
 

@@ -71,7 +71,7 @@ Set during init (step 1c). Supported agents:
 | `aider` | Aider | `pip install aider-install` |
 | `gemini` | Gemini CLI | `npm i -g @google/gemini-cli` |
 
-The worker reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from `.env`, extracts the prompt from the card body, and builds `[binary, "-p", prompt, …]` adding `--model` only when the model is not `auto`. To change binary or model: dashboard **Save**, edit `.env` / `kanban-config.yaml`, or re-run init (preserves existing model unless you override interactively).
+The worker reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from `.env`, extracts the prompt from the card body's fenced `agent` block, and dispatches via `scripts/coding_agent_invoke.sh` (per-binary headless flags — see [coding agents](../docs/reference/coding-agents.md) and `plugin/data/references/coding-agent-cli-invocation.md`). To change binary or model: dashboard **Save**, edit `.env` / `kanban-config.yaml`, or re-run init (preserves existing model unless you override interactively).
 
 5. **Verify dispatch profiles on disk** (see [[bootstrap#verify-on-disk-after-bootstrap]]):
    ```bash

@@ -91,6 +91,17 @@ bash scripts/worktree_setup.sh \
 
 Atomic worktree lifecycle: prune stale entries → create/reuse worktree → cross-platform workspace trust → install pre-push and pre-commit hooks. Reads `working_branch` and `trigger_branch` from config (no hardcoded fallbacks). Outputs `WORKTREE_PATH=<path>` on stdout.
 
+### `coding_agent_invoke.sh`
+
+```bash
+bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke
+bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$FULL_PROMPT"
+```
+
+Headless smoke and dispatch for the configured coding CLI. Reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from the environment. Per-binary flags (Cursor `--trust`, Codex `--sandbox workspace-write`, Grok `--format json`, etc.) are documented in `plugin/data/references/coding-agent-cli-invocation.md`. Python equivalent: `build_smoke_argv` / `build_dispatch_argv` in `plugin/coding_agent.py` (used by dashboard **Save** / init smoke).
+
+Workers run **smoke** from the worktree in Step 3 and **dispatch** in Step 4 after building `FULL_PROMPT`.
+
 ### `install_pre_push_hook.sh` / `install_pre_commit_hook.sh`
 
 Called by `worktree_setup.sh`. Pre-push blocks pushes to branches other than the card worktree branch (`wt/<task_id>`). Pre-commit enforces the `Files:` boundary via `.kanban-scope` written by the worker before agent spawn.

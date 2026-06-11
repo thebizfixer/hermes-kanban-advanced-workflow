@@ -35,12 +35,12 @@ Canonical source: `plugin/data/registry/error-codes.yaml`
 | E017 | error | Net line changes > 3× estimate | Block and escalate — scope explosion |
 | E018 | error | Token log not exact (task_id, source=agent, non-zero) | Capture agent stdout, extract usage, log with source="agent" |
 | E019 | error | Destructive git op (--theirs, --ours, reset --hard) | Resolve conflicts per-hunk; never overwrite entire files |
-| E020 | error | Agent output not captured/parseable | Ensure `--output-format json` and stdout redirected |
+| E020 | error | Agent output not captured/parseable | Use `scripts/coding_agent_invoke.sh dispatch`; for Cursor pass `-p --output-format json --trust` |
 
 ## Pitfall Narratives
 
 ### [unauthenticated] in worker.log is cosmetic
-The Cursor background indexing service logs `[unauthenticated] Error` during normal operation. Workers that grep worker.log for `unauthenticated` will false-positive block on every card. Use `agent -p "echo hello" --output-format json` (check `is_error`) as the sole auth verification.
+The Cursor background indexing service logs `[unauthenticated] Error` during normal operation. Workers that grep worker.log for `unauthenticated` will false-positive block on every card. Auth smoke: `bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke`. Cursor failures with `Workspace Trust Required` mean `--trust` was omitted — not missing JSON support.
 
 ### CURSOR_API_KEY is a decoy env var
 Cursor CLI authenticates via OAuth token in `~/.config/cursor/auth.json`, not the env var. Setting `CURSOR_API_KEY` has no effect.

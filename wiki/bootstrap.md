@@ -20,7 +20,7 @@ Bootstrap and init are the **same operation** from two entry points:
 3. **Model config** — copy default model/provider into dispatch profiles when missing.
 4. **Orchestrator `max_turns`** — set to 180 (dashboard/CLI) when below threshold.
 5. **Coding agent binary** (step 1c) — pick headless CLI on PATH → `coding_agent_binary` + `KANBAN_CODING_AGENT`.
-6. **Coding agent model** (step 1c-ii) — pick `auto` or a CLI model ID → `coding_agent_model` + `KANBAN_CODING_AGENT_MODEL`. Cursor: `agent --list-models`. Runs smoke (`say ok`) when binary is on PATH.
+6. **Coding agent model** (step 1c-ii) — pick `auto` or a CLI model ID → `coding_agent_model` + `KANBAN_CODING_AGENT_MODEL`. Cursor: `agent --list-models`. Runs smoke via `build_smoke_argv` when binary is on PATH (same flags as `scripts/coding_agent_invoke.sh smoke`). Workers re-smoke from each worktree at card flight.
 7. **Config overlay** — write `.hermes/kanban-overrides/kanban-config.yaml` (preserves existing branches and coding-agent model on re-init unless overridden).
 8. **Materialize shared skills** — copy all 11 plugin skills to `$HERMES_HOME/skills/kanban-advanced/` (discoverable from any profile via `<available_skills>`).
 9. **Reconcile dispatch profiles** — SOUL.md, role-only profile skills, verification (see [Profile reconciliation](#profile-reconciliation)).

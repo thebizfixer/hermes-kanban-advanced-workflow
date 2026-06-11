@@ -17,7 +17,7 @@ metadata:
 > Your entire job is:
 > 1. Read the card.
 > 2. Extract the `agent -p` block from the card body.
-> 3. Run `agent -p "<extracted prompt>" --output-format json` as a subprocess.
+> 3. Run `scripts/coding_agent_invoke.sh dispatch "<extracted prompt>"` (binary-aware headless flags from `KANBAN_CODING_AGENT`).
 > 4. Wait for it to complete.
 > 5. Verify the output via the evaluation chain.
 > 6. Complete or block the card.
@@ -156,59 +156,33 @@ if [ "$WORKTREE_BASE" != "$INTEGRATION_HEAD" ]; then
 fi
 ```
 
-- **Cursor CLI auth verification (mandatory, replaces log-grep):** Do NOT check for `[unauthenticated]` in worker logs — this is the background indexing service (cosmetic, not blocking). Do NOT rely on `agent status` alone — it shows OAuth state but not execution capability. The ONLY reliable auth check is:
+- **Coding-agent smoke (mandatory, replaces log-grep):** Do NOT check for `[unauthenticated]` in worker logs — this is the Cursor background indexing service (cosmetic, not blocking). Do NOT rely on `agent status` alone — it shows OAuth state but not execution capability. Verify the configured binary can run a one-line prompt from the worktree:
 
 ```bash
-agent -p "echo hello" --output-format json 2>&1 | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-if d.get('is_error'):
-    sys.exit(1)
-print('agent auth: OK')
-"
+INVOKE=hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh
+if bash "$INVOKE" smoke >/dev/null 2>&1; then
+  echo "[worker] coding-agent smoke: OK (${KANBAN_CODING_AGENT:-agent})"
+else
+  echo "[worker] coding-agent smoke failed — block card (E020)"
+  exit 1
+fi
 ```
 
-If this exits 0, the agent is functional regardless of log noise. Block only if `is_error: true`. The Cursor CLI ignores `CURSOR_API_KEY` — it authenticates via OAuth token in `~/.config/cursor/auth.json`. `[unauthenticated]` in worker logs is the indexing service, not the agent.
+Per-binary flags are in `plugin/data/references/coding-agent-cli-invocation.md`. **Cursor (`agent`):** use `-p --output-format json --trust`. Exit 1 with `Workspace Trust Required` means `--trust` was omitted — not missing JSON support. The Cursor CLI ignores `CURSOR_API_KEY`; it authenticates via OAuth in `~/.config/cursor/auth.json`.
 
-- **Workspace trust:** `worktree_setup.sh` pre-trusts the worktree using a cross-platform hash (Windows drive-letter paths: strip colon, replace `\` and `/` with `-`; Unix paths: strip leading `/`, replace `/` with `-`). Verify: `agent -p "echo hello" --output-format json` from the worktree should exit cleanly.
+- **Workspace trust:** `worktree_setup.sh` pre-trusts the worktree using a cross-platform hash (Windows drive-letter paths: strip colon, replace `\` and `/` with `-`; Unix paths: strip leading `/`, replace `/` with `-`). Still pass `--trust` on every Cursor headless call.
 
 ### Step 4 — Handoff to coding agent
+
+Do NOT construct the prompt from scratch. Extract the fenced `agent` block from the card body, prepend governance + memory brief, then dispatch via the shared invoke script. Start the heartbeat thread before the agent call.
+
+**Coding agent governance block (mandatory):** Prepend `references/coding-agent-governance.md` before the extracted prompt. The governance block is enforced post-hoc by the evaluation chain (E001–E006), but prompt-level guardrails reduce remediation burden.
 
 ```bash
 # The card body contains:
 # ```agent
 # agent -p "Implement WS3 per plan §Phase 1, Workstream 3. ..."
 # ```
-# Capture agent stdout for token extraction (mandatory):
-CODING_AGENT="${KANBAN_CODING_AGENT:-agent}"
-CODING_MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
-if [ "$CODING_MODEL" = "auto" ] || [ "$CODING_MODEL" = "default" ] || [ -z "$CODING_MODEL" ]; then
-  AGENT_OUTPUT=$("$CODING_AGENT" -p "$FULL_PROMPT" --output-format json 2>&1)
-else
-  AGENT_OUTPUT=$("$CODING_AGENT" -p "$FULL_PROMPT" --model "$CODING_MODEL" --output-format json 2>&1)
-fi
-echo "$AGENT_OUTPUT" > "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/agent_output_${HERMES_KANBAN_TASK}.json"
-
-# Extract token data for exact reporting:
-if echo "$AGENT_OUTPUT" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-if not d.get('is_error'):
-    usage = d.get('usage', {})
-    print(usage.get('inputTokens', 0))
-    print(usage.get('outputTokens', 0))
-" 2>/dev/null; then
-    echo "[worker] Agent output captured for token extraction"
-fi
-```
-
-> **Model selection belongs to the profile, not the card body.** Do NOT add `--model` or `--output-format` flags. The profile's `config.yaml` determines the model. The worker reads `model.default` from the profile config. See § Provider/model fallback chain.
-
-Do NOT construct the prompt. Do NOT re-read the body to build arguments. Extract and execute. Start the heartbeat thread before the agent call.
-
-**Coding agent governance block (mandatory):** Before executing the agent, prepend the governance instructions from `references/coding-agent-governance.md` to the prompt. This injects the `Files:` boundary, issue-reporting protocol, verification requirements, and prohibited-actions list directly into the agent's task. The governance block is enforced post-hoc by the evaluation chain (E001–E006), but prompt-level guardrails reduce the remediation burden — without them, every agent run produces scope violations that the worker must revert.
-
-```bash
 GOVERNANCE=$(cat hermes-kanban-advanced-workflow/plugin/data/references/coding-agent-governance.md 2>/dev/null)
 if [ -z "$GOVERNANCE" ]; then
   GOVERNANCE="## Governance
@@ -219,7 +193,7 @@ modify configs, or touch files outside the Files: list.
 fi
 AGENT_PROMPT="$(extract_agent_block_from_body)"
 
-# Step 4 preamble — inject prior context before agent -p (last 5 completed_cards)
+# Step 4 preamble — inject prior context (last 5 completed_cards)
 memory_file=".hermes/kanban/memory/${PLAN_ID}.json"
 brief=""
 if [ -f "$memory_file" ]; then
@@ -243,16 +217,25 @@ FULL_PROMPT="$GOVERNANCE
 ---
 
 ${brief}${AGENT_PROMPT}"
-CODING_AGENT="${KANBAN_CODING_AGENT:-agent}"
-CODING_MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
-if [ "$CODING_MODEL" = "auto" ] || [ "$CODING_MODEL" = "default" ] || [ -z "$CODING_MODEL" ]; then
-  "$CODING_AGENT" -p "$FULL_PROMPT"
-else
-  "$CODING_AGENT" -p "$FULL_PROMPT" --model "$CODING_MODEL"
+
+INVOKE=hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh
+AGENT_OUTPUT=$(bash "$INVOKE" dispatch "$FULL_PROMPT" 2>&1)
+echo "$AGENT_OUTPUT" > "${KANBAN_TEMP:-${TMPDIR:-/tmp}}/agent_output_${HERMES_KANBAN_TASK}.json"
+
+# Extract token data when the CLI returns JSON (Cursor / Claude):
+if echo "$AGENT_OUTPUT" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+if not d.get('is_error'):
+    usage = d.get('usage', {})
+    print(usage.get('inputTokens', 0))
+    print(usage.get('outputTokens', 0))
+" 2>/dev/null; then
+    echo "[worker] Agent output captured for token extraction"
 fi
 ```
 
-> **Model injection (config, not card body):** `KANBAN_CODING_AGENT_MODEL` comes from `kanban-config.yaml` / `.env` (dashboard **Save** or init). Do **not** put `--model` in the card body's fenced block — card body policy P005 blocks that. The worker injects the configured model at dispatch time.
+> **Model injection (config, not card body):** `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` come from `kanban-config.yaml` / `.env` (dashboard **Save** or init). Do **not** put `--model`, `--output-format`, or `--trust` in the card body's fenced block — P005 blocks model overrides in the card; the invoke script injects headless flags at dispatch time. Hermes profile `model.default` governs **Hermes** sessions only, not the external coding agent.
 
 ### Step 5 — Monitor
 
@@ -531,9 +514,13 @@ def _heartbeat_loop():
 
 hb = threading.Thread(target=_heartbeat_loop, daemon=True)
 hb.start()
+from plugin.coding_agent import build_dispatch_argv
+
+coding_agent = os.environ.get("KANBAN_CODING_AGENT", "agent")
+coding_model = os.environ.get("KANBAN_CODING_AGENT_MODEL", "auto")
 try:
     result = subprocess.run(
-        ["agent", "-p", prompt, "--model", "<model-name>", "--output-format", "json"],
+        build_dispatch_argv(coding_agent, prompt, coding_model),
         capture_output=True, text=True, timeout=900, cwd=workspace
     )
 finally:
@@ -550,9 +537,11 @@ finally:
 - Push only to your assigned worktree branch — never to `${working_branch}` (E009 applies when `trigger_branch` is set in config).
 - Use `git add -A` — use `git add <specific files>` to avoid staging unrelated changes.
 
-## Provider/model fallback chain
+## Provider/model fallback chain (Hermes sessions only)
 
-The worker uses the profile's configured model from `config.yaml` (not hardcoded in the card body — see P005_MODEL_OVERRIDES_PROFILE). When the configured provider fails, follow the same SOP as Hermes Agent:
+This section applies to **Hermes** worker/orchestrator turns (`hermes chat`, heartbeats, eval tooling) — **not** the external coding CLI. Coding-agent binary and model come from `KANBAN_CODING_AGENT` / `KANBAN_CODING_AGENT_MODEL` and `coding_agent_invoke.sh` (see Step 4).
+
+For Hermes sessions, the profile's configured model from `config.yaml` applies (not hardcoded in the card body — see P005_MODEL_OVERRIDES_PROFILE). When the configured provider fails, follow the same SOP as Hermes Agent:
 
 1. **Primary:** Use the profile's `model.default` and `model.provider` from `config.yaml`.
 2. **Profile fallbacks:** If the primary provider fails (HTTP 429, connection error, timeout), try `fallback_providers` configured in the profile's `config.yaml`. Retry once per fallback provider before escalating.
@@ -584,7 +573,7 @@ Workers waste 5–8 minutes per task running identical pre-flight checks. Use th
 - `git reset --hard` destroys plan files — restore with `git checkout ${working_branch} -- .agent/plans/`.
 - Agent `-p` is for code generation only — pipeline execution uses terminal commands.
 - Never call `kanban_complete` directly — always run the evaluation chain (E001–E020).
-- Cursor `[unauthenticated]` in logs is cosmetic — use `agent -p "echo hello" --output-format json` for auth.
+- Cursor `[unauthenticated]` in logs is cosmetic — use Step 3 `coding_agent_invoke.sh smoke` for auth.
 - `CURSOR_API_KEY` is a decoy env var — Cursor CLI uses OAuth in `~/.config/cursor/auth.json`.
 - Pre-create `.workspace-trusted` before spawning agent in `/tmp` worktrees.
 - Salvage iteration-limit cards before re-dispatching — check the worktree for commits.
