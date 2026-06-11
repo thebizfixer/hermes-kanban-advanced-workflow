@@ -50,7 +50,62 @@
       });
     });
   }
-  function apiStatus() { return apiFetch("/api/plugins/kanban-advanced/status"); }
+  var STATUS_SESSION_KEY = "kanban-advanced-status-v1";
+  var STATUS_PROBE_MAX_AGE_MS = 3 * 60 * 1000;
+
+  function readSessionStatus() {
+    try {
+      var raw = sessionStorage.getItem(STATUS_SESSION_KEY);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || !parsed.data) return null;
+      return parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeSessionStatus(data, opts) {
+    opts = opts || {};
+    try {
+      var prev = readSessionStatus();
+      sessionStorage.setItem(STATUS_SESSION_KEY, JSON.stringify({
+        data: data,
+        at: Date.now(),
+        probedAt: opts.probed ? Date.now() : (opts.keepProbedAt || (prev && prev.probedAt) || 0)
+      }));
+    } catch (e) {}
+  }
+
+  function invalidateSessionStatus() {
+    try { sessionStorage.removeItem(STATUS_SESSION_KEY); } catch (e) {}
+  }
+
+  function mergeStatusFields(base, extra) {
+    if (!extra) return base;
+    if (!base) return extra;
+    var merged = Object.assign({}, base, extra);
+    ["plugin_up_to_date", "plugin_behind", "plugin_update_available", "plugin_local_changes"].forEach(function (key) {
+      if (extra[key] == null && base[key] != null) merged[key] = base[key];
+    });
+    if (base.profiles && extra.profiles) {
+      merged.profiles = Object.assign({}, base.profiles);
+      Object.keys(extra.profiles).forEach(function (k) {
+        var prev = base.profiles[k] || {};
+        var next = extra.profiles[k] || {};
+        merged.profiles[k] = Object.assign({}, prev, next);
+        if (next.model_reachable == null && prev.model_reachable != null) {
+          merged.profiles[k].model_reachable = prev.model_reachable;
+        }
+      });
+    }
+    return merged;
+  }
+
+  function apiStatus(query) {
+    var q = query ? ("?" + query) : "";
+    return apiFetch("/api/plugins/kanban-advanced/status" + q);
+  }
   function apiInit(data) { return apiFetch("/api/plugins/kanban-advanced/init", { method: "POST", body: JSON.stringify(data) }); }
   function apiSave(data) { return apiFetch("/api/plugins/kanban-advanced/save", { method: "POST", body: JSON.stringify(data) }); }
   function apiPluginUpdate() { return apiFetch("/api/plugins/kanban-advanced/update", { method: "POST" }); }
@@ -81,8 +136,13 @@
   }
 
   // ── Main page ──
+  function hydrateStatusFromSession() {
+    var cached = readSessionStatus();
+    return cached && cached.data ? cached.data : null;
+  }
+
   function KanbanAdvancedPage() {
-    var _useState = useState(null), status = _useState[0], setStatus = _useState[1];
+    var _useState = useState(hydrateStatusFromSession), status = _useState[0], setStatus = _useState[1];
     var _useState2 = useState(false), loading = _useState2[0], setLoading = _useState2[1];
     var _useState3 = useState(""), workingBranch = _useState3[0], setWorkingBranch = _useState3[1];
     var _useState3b = useState(""), triggerBranch = _useState3b[0], setTriggerBranch = _useState3b[1];
@@ -101,25 +161,63 @@
     // selectedModel is {provider: string, model: string} | null
     var _useState15 = useState(""), modelQuery = _useState15[0], setModelQuery = _useState15[1];
     var _useState16 = useState(false), pluginUpdating = _useState16[0], setPluginUpdating = _useState16[1];
+    var _useState17 = useState(false), statusProbing = _useState17[0], setStatusProbing = _useState17[1];
 
-    function loadStatus() {
+    function applyStatusToForm(s) {
+      if (!s || s.error) return;
+      if (s.config_exists) setInitialized(true);
+      if (s.working_branch) setWorkingBranch(s.working_branch);
+      else if (s.default_working_branch) setWorkingBranch(s.default_working_branch);
+      if (s.trigger_branch) setTriggerBranch(s.trigger_branch);
+      else setTriggerBranch("");
+      if (s.coding_agent) {
+        var found = CODING_AGENTS.some(function (a) { return a.value === s.coding_agent; });
+        if (found) setCodingAgent(s.coding_agent);
+        else { setCodingAgent("__custom__"); setCustomAgent(s.coding_agent); }
+      }
+      if (s.max_turns) setMaxTurns(s.max_turns);
+      if (s.policy_profile) setPolicyProfile(s.policy_profile);
+    }
+
+    function loadStatus(opts) {
+      opts = opts || {};
+      var cached = opts.skipCache ? null : readSessionStatus();
+      var probeFresh = cached && cached.probedAt
+        && (Date.now() - cached.probedAt < STATUS_PROBE_MAX_AGE_MS);
+      var needProbe = opts.full !== false && (opts.forceFull || !probeFresh);
+
+      setLoading(true);
       return apiStatus().then(function (s) {
-        setStatus(s);
-        if (s.config_exists) setInitialized(true);
-        if (s.working_branch) setWorkingBranch(s.working_branch);
-        else if (s.default_working_branch) setWorkingBranch(s.default_working_branch);
-        if (s.trigger_branch) setTriggerBranch(s.trigger_branch);
-        else setTriggerBranch("");
-        if (s.coding_agent) {
-          var found = CODING_AGENTS.some(function (a) { return a.value === s.coding_agent; });
-          if (found) setCodingAgent(s.coding_agent);
-          else { setCodingAgent("__custom__"); setCustomAgent(s.coding_agent); }
-        }
-        if (s.max_turns) setMaxTurns(s.max_turns);
-        if (s.policy_profile) setPolicyProfile(s.policy_profile);
+        var merged = cached && cached.data ? mergeStatusFields(cached.data, s) : s;
+        setStatus(merged);
+        applyStatusToForm(merged);
+        writeSessionStatus(merged, { keepProbedAt: probeFresh ? cached.probedAt : 0 });
+        setLoading(false);
+
+        if (!needProbe) return merged;
+
+        setStatusProbing(true);
+        return apiStatus("probe=1&git_fetch=1").then(function (full) {
+          var complete = mergeStatusFields(merged, full);
+          setStatus(complete);
+          applyStatusToForm(complete);
+          writeSessionStatus(complete, { probed: true });
+          setStatusProbing(false);
+          return complete;
+        }).catch(function () {
+          setStatusProbing(false);
+          return merged;
+        });
       }).catch(function (e) {
+        setLoading(false);
+        setStatusProbing(false);
         setStatus({ error: e.message || "API unreachable" });
       });
+    }
+
+    function reloadStatus() {
+      invalidateSessionStatus();
+      return loadStatus({ skipCache: true, forceFull: true });
     }
 
     useEffect(function () { loadStatus(); }, []);
@@ -167,7 +265,7 @@
           if (r.success) setInitialized(true);
         }
         setBootstrapping(false);
-        loadStatus();
+        reloadStatus();
       }).catch(function (e) {
         addLines(["ERROR: " + e.message], "line-err");
         setBootstrapping(false);
@@ -182,7 +280,7 @@
       apiSave(data).then(function (r) {
         if (r.output) addLines(r.output);
         setBootstrapping(false);
-        loadStatus();
+        reloadStatus();
       }).catch(function (e) {
         addLines(["ERROR: " + e.message], "line-err");
         setBootstrapping(false);
@@ -206,7 +304,7 @@
         }
         // Keep "Updating…" until the status refresh settles so the button
         // never flickers back to "Update Plugin" mid-transition.
-        return loadStatus();
+        return reloadStatus();
       }).then(function () {
         setPluginUpdating(false);
       }).catch(function (e) {
@@ -245,7 +343,7 @@
       }).then(function () {
         setEditingProfile(null);
         setChangingModel(false);
-        loadStatus();
+        reloadStatus();
       }).catch(function (e) {
         setChangingModel(false);
         addLines(["ERROR setting model: " + e.message], "line-err");
@@ -268,6 +366,10 @@
         dotColor = "#eab308";
         labelText = "auth stale (" + (info.model || "?") + ")";
         labelColor = "#eab308";
+      } else if (statusProbing) {
+        dotColor = "#94a3b8";
+        labelText = "checking (" + (info.model || "?") + ")";
+        labelColor = "#94a3b8";
       } else {
         dotColor = "#eab308";
         labelText = "configured (" + (info.model || "?") + ")";
@@ -281,7 +383,7 @@
 
     var statusInitialized = status && status.config_exists;
     var statusError = status && status.error;
-    var statusLoading = status === null;
+    var statusLoading = status === null && loading;
 
     // ── Loading state ──
     if (statusLoading) {

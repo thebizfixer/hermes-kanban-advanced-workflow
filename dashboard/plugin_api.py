@@ -11,7 +11,9 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
+from threading import Lock
 
 from fastapi import APIRouter, Request
 
@@ -50,6 +52,35 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 HERMES_BIN = os.environ.get("HERMES_BIN", "hermes")
+
+_status_cache: dict[str, tuple[float, object]] = {}
+_status_cache_lock = Lock()
+_TTL_GIT_BEHIND = 300.0
+_TTL_MODEL_PROBE = 180.0
+
+
+def _cache_get(key: str, ttl: float):
+    with _status_cache_lock:
+        entry = _status_cache.get(key)
+        if entry and (time.monotonic() - entry[0]) < ttl:
+            return entry[1]
+    return None
+
+
+def _cache_set(key: str, value: object) -> None:
+    with _status_cache_lock:
+        _status_cache[key] = (time.monotonic(), value)
+
+
+def _invalidate_status_cache() -> None:
+    with _status_cache_lock:
+        _status_cache.clear()
+
+
+def _parse_bool_query(value: str | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.lower() not in ("0", "false", "no", "")
 
 
 def _hermes_subprocess_env(hermes_home: Path | str) -> dict[str, str]:
@@ -119,8 +150,29 @@ def _dispatch_profile_list(project_root: Path | None = None) -> list[str]:
     return [worker, orchestrator]
 
 
-def _check_profiles(project_root: Path | None = None) -> dict:
+def _profile_config_show(profile: str, *, cached: str | None = None) -> str:
+    if cached is not None:
+        return cached
+    try:
+        r = _run([HERMES_BIN, "-p", profile, "config", "show"])
+        return r.stdout
+    except Exception:
+        return ""
+
+
+def _max_turns_from_config_show(stdout: str) -> int:
+    mt = re.search(r"Max turns:\s*(\d+)", stdout)
+    return int(mt.group(1)) if mt else 90
+
+
+def _check_profiles(
+    project_root: Path | None = None,
+    *,
+    probe_models: bool = False,
+    config_show_cache: dict[str, str] | None = None,
+) -> dict:
     result = {}
+    config_show_cache = config_show_cache or {}
     try:
         r = _run([HERMES_BIN, "profile", "list"])
         profiles_output = r.stdout
@@ -136,20 +188,25 @@ def _check_profiles(project_root: Path | None = None) -> dict:
             "model_reachable": None,
         }
         if info["exists"]:
-            try:
-                r = _run([HERMES_BIN, "-p", profile, "config", "show"])
-                m = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", r.stdout)
-                if m and m.group(1) and m.group(1) != "None":
-                    info["has_model"] = True
-                    info["model"] = m.group(1)
-                p = re.search(r"'provider':\s*'([^']+)'", r.stdout)
-                if p:
-                    info["provider"] = p.group(1)
-            except Exception:
-                pass
+            stdout = _profile_config_show(
+                profile, cached=config_show_cache.get(profile)
+            )
+            m = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", stdout)
+            if m and m.group(1) and m.group(1) != "None":
+                info["has_model"] = True
+                info["model"] = m.group(1)
+            p = re.search(r"'provider':\s*'([^']+)'", stdout)
+            if p:
+                info["provider"] = p.group(1)
 
-            if info["has_model"]:
-                info["model_reachable"] = _check_model_reachable(profile)
+            if info["has_model"] and probe_models:
+                cache_key = f"model_reachable:{profile}"
+                cached = _cache_get(cache_key, _TTL_MODEL_PROBE)
+                if cached is not None:
+                    info["model_reachable"] = cached
+                else:
+                    info["model_reachable"] = _check_model_reachable(profile)
+                    _cache_set(cache_key, info["model_reachable"])
 
         result[profile] = info
     return result
@@ -165,16 +222,17 @@ def _check_gateway() -> dict:
         return {"running": False, "outdated": False}
 
 
-def _get_max_turns(project_root: Path | None = None) -> int:
+def _get_max_turns(
+    project_root: Path | None = None,
+    *,
+    orchestrator_config_show: str | None = None,
+) -> int:
+    if orchestrator_config_show is not None:
+        return _max_turns_from_config_show(orchestrator_config_show)
     _, orchestrator_profile, _ = resolve_dispatch_profiles(
         read_overlay_config(overlay_path(project_root or resolve_project_root()))
     )
-    try:
-        r = _run([HERMES_BIN, "-p", orchestrator_profile, "config", "show"])
-        mt = re.search(r"Max turns:\s*(\d+)", r.stdout)
-        return int(mt.group(1)) if mt else 90
-    except Exception:
-        return 90
+    return _max_turns_from_config_show(_profile_config_show(orchestrator_profile))
 
 
 def _resolve_git_executable() -> str | None:
@@ -231,9 +289,19 @@ def _git_resolve_upstream(install_dir: Path, git_exe: str) -> str | None:
     return None
 
 
-def _git_behind_count(install_dir: Path, git_exe: str) -> int | None:
-    """Commits the checkout is behind its upstream (after best-effort fetch)."""
-    _git_fetch_origin(install_dir, git_exe)
+def _git_behind_count(
+    install_dir: Path, git_exe: str, *, fetch: bool = True
+) -> int | None:
+    """Commits the checkout is behind its upstream."""
+    cache_key = f"git_behind:{install_dir}"
+    if not fetch:
+        cached = _cache_get(cache_key, _TTL_GIT_BEHIND)
+        if cached is not None:
+            return cached  # type: ignore[return-value]
+
+    if fetch:
+        _git_fetch_origin(install_dir, git_exe)
+
     upstream = _git_resolve_upstream(install_dir, git_exe)
     if not upstream:
         return None
@@ -244,7 +312,9 @@ def _git_behind_count(install_dir: Path, git_exe: str) -> int | None:
             cwd=str(install_dir),
         )
         if r.returncode == 0 and r.stdout.strip().isdigit():
-            return int(r.stdout.strip())
+            behind = int(r.stdout.strip())
+            _cache_set(cache_key, behind)
+            return behind
     except Exception:
         pass
     return None
@@ -353,7 +423,7 @@ def _materialize_plugin_assets(plugin_root: Path, hermes_home: Path) -> list[str
     return lines
 
 
-def _check_plugin_git_status() -> dict:
+def _check_plugin_git_status(*, fetch: bool = True) -> dict:
     """Whether the installed plugin git checkout has upstream commits to pull."""
     hermes_home = resolve_hermes_home()
     install_dir = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
@@ -376,7 +446,7 @@ def _check_plugin_git_status() -> dict:
 
     base["plugin_local_changes"] = _git_local_change_count(install_dir, git_exe)
 
-    behind = _git_behind_count(install_dir, git_exe)
+    behind = _git_behind_count(install_dir, git_exe, fetch=fetch)
     if behind is None:
         return base
 
@@ -386,9 +456,7 @@ def _check_plugin_git_status() -> dict:
     return base
 
 
-@router.get("/status")
-async def status():
-    """GET /api/plugins/kanban-advanced/status"""
+def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
     project_root = resolve_project_root()
     config = _read_config(project_root)
     env = _read_env(project_root)
@@ -396,27 +464,52 @@ async def status():
 
     coding_agent = resolve_coding_agent(project_root, env=env)
 
-    detected_branch = detect_default_working_branch(project_root) or "main"
+    configured_branch = config.get("working_branch")
+    if configured_branch:
+        detected_branch = configured_branch
+    else:
+        detected_branch = detect_default_working_branch(project_root) or "main"
+
+    worker_profile, orchestrator_profile = resolve_dispatch_profiles(config)
+    orch_config_show = _profile_config_show(orchestrator_profile)
 
     return {
         "config_exists": config_exists,
         "project_root": str(project_root),
         "config_path": str(overlay_path(project_root)) if config_exists else "",
-        "working_branch": config.get("working_branch") or detected_branch,
+        "working_branch": configured_branch or detected_branch,
         "default_working_branch": detected_branch,
         "trigger_branch": config.get("trigger_branch", ""),
         "coding_agent": coding_agent,
         "coding_agent_binary": coding_agent,
         "policy_profile": resolve_policy_profile(project_root, env=env),
-        "max_turns": _get_max_turns(project_root),
-        "profiles": _check_profiles(project_root),
+        "max_turns": _get_max_turns(
+            project_root, orchestrator_config_show=orch_config_show
+        ),
+        "profiles": _check_profiles(
+            project_root,
+            probe_models=probe,
+            config_show_cache={orchestrator_profile: orch_config_show},
+        ),
         "dispatch_profiles": {
-            "worker": resolve_dispatch_profiles(config)[0],
-            "orchestrator": resolve_dispatch_profiles(config)[1],
+            "worker": worker_profile,
+            "orchestrator": orchestrator_profile,
         },
         "gateway": _check_gateway(),
-        **_check_plugin_git_status(),
+        "status_checks": {
+            "probe": probe,
+            "git_fetch": git_fetch,
+        },
+        **_check_plugin_git_status(fetch=git_fetch),
     }
+
+
+@router.get("/status")
+async def status(request: Request):
+    """GET /api/plugins/kanban-advanced/status"""
+    probe = _parse_bool_query(request.query_params.get("probe"))
+    git_fetch = _parse_bool_query(request.query_params.get("git_fetch"))
+    return _build_status(probe=probe, git_fetch=git_fetch)
 
 
 @router.post("/init")
@@ -629,6 +722,7 @@ async def init(request: Request):
         output.append("   !  Gateway not running")
 
     output.append("OK kanban-advanced is ready!")
+    _invalidate_status_cache()
     return {"success": True, "output": output}
 
 
@@ -725,6 +819,7 @@ async def save(request: Request):
     )
 
     output.append("OK Settings saved")
+    _invalidate_status_cache()
     return {"success": True, "output": output}
 
 
@@ -755,6 +850,7 @@ async def update_plugin():
 
     if behind_before == 0:
         output.append("   OK Already up to date")
+        _invalidate_status_cache()
         return {"success": True, "unchanged": True, "output": output}
 
     try:
@@ -791,4 +887,5 @@ async def update_plugin():
         )
 
     output.append("OK Plugin updated")
+    _invalidate_status_cache()
     return {"success": True, "unchanged": False, "output": output}

@@ -12,6 +12,15 @@ All endpoints return JSON.
 
 Returns current initialization state and config values.
 
+**Query parameters (optional):**
+
+| Param | Default | Meaning |
+|-------|---------|---------|
+| `probe` | `0` | When `1`, ping each dispatch profile model (`hermes chat -q "say ok"`). Skipped by default for fast tab loads. |
+| `git_fetch` | `0` | When `1`, run `git fetch origin` before computing `plugin_behind`. Skipped by default; uses a short-lived server cache or local `rev-list` only. |
+
+The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetch=1`** in the background. Returning to the tab in the same browser session reuses **sessionStorage** for the last full payload when probe results are younger than ~3 minutes.
+
 **Response:**
 ```json
 {
@@ -33,6 +42,10 @@ Returns current initialization state and config values.
     "running": true,
     "outdated": false
   },
+  "status_checks": {
+    "probe": false,
+    "git_fetch": false
+  },
   "hermes_home": "/home/user/.hermes-state/sentimentary",
   "plugin_install_path": "/home/user/.hermes-state/sentimentary/plugins/kanban-advanced",
   "plugin_can_update": true,
@@ -44,7 +57,7 @@ Returns current initialization state and config values.
 
 **Path resolution:** `hermes_home` follows `$HERMES_HOME` (or `$HERMES_STATE_DIR`, then platform defaults — same as `scripts/lib/hermes_home.sh` and Hermes `get_hermes_home()`). `plugin_install_path` is `$HERMES_HOME/plugins/kanban-advanced` when that directory exists; otherwise the running plugin checkout.
 
-**Plugin update fields** (checked on every tab load via `git fetch` + `rev-list` against upstream):
+**Plugin update fields** (full check uses `git fetch` + `rev-list` when `git_fetch=1`; fast loads use cache or local `rev-list` only):
 
 | Field | Meaning |
 |-------|---------|
