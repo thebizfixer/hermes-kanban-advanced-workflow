@@ -555,7 +555,7 @@ async def init(request: Request):
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
 
-    worker_profile, orchestrator_profile, _ = dispatch_profile_names(
+    worker_profile, orchestrator_profile = dispatch_profile_names(
         read_overlay_config(config_file)
     )
     profile_check = run_provision_profile_check(project_root, PLUGIN_ROOT / "scripts", _run)
@@ -698,7 +698,7 @@ async def save(request: Request):
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
 
-    worker_profile, orchestrator_profile, _ = dispatch_profile_names(config)
+    worker_profile, orchestrator_profile = dispatch_profile_names(config)
     seed_dispatch_profile_skills(
         hermes_home,
         skills_src,

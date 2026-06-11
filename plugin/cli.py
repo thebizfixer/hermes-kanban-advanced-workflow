@@ -455,7 +455,7 @@ def _handle_init(args) -> int:
     # Named profiles run with their OWN HERMES_HOME. `profile create --clone`
     # copies the default profile's entire skill tree (stale built-in kanban-*).
     # Check for drift, then wipe and seed only role-specific plugin skills.
-    worker_profile, orchestrator_profile, _ = dispatch_profile_names(
+    worker_profile, orchestrator_profile = dispatch_profile_names(
         read_overlay_config(config_file)
     )
     print("2b. Checking profile skill isolation (provision --profiles-only --check)...")

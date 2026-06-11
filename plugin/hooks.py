@@ -45,7 +45,7 @@ def on_session_start(**kwargs: Any) -> None:
     try:
         profile = _get_profile(**kwargs)
 
-        if profile == "orchestrator":
+        if profile in ("orchestrator", "kanban-advanced-orchestrator"):
             skill_hint = (
                 "[kanban-advanced] Orchestrator profile detected. "
                 "Load kanban-advanced:kanban-orchestrator for the full "
@@ -65,8 +65,8 @@ def on_session_start(**kwargs: Any) -> None:
                 "For full workflow load kanban-advanced:kanban-advanced. "
                 "Execute/decompose needs orchestrator: prefer the board-mediated "
                 "handoff — `python3 scripts/kanban_handoff.py --plan <plan.md>` "
-                "(dispatcher runs the orchestrator). Manual `hermes -p orchestrator "
-                "chat` is the no-gateway fallback (see profile-switching.md). "
+                "(dispatcher runs kanban-advanced-orchestrator). Manual: "
+                "`hermes -p kanban-advanced-orchestrator chat` (no-gateway fallback). "
                 "Trigger phrases: 'plan this out', 'harden the plan', "
                 "'optimize for kanban', 'execute the plan', "
                 "'do a sanity check'."
