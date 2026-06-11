@@ -345,7 +345,7 @@
     }
 
     var pluginUpdateDisabled = !status || !status.plugin_can_update || status.plugin_up_to_date === true
-      || status.plugin_update_available !== true || pluginUpdating || bootstrapping;
+      || pluginUpdating || bootstrapping;
 
     // ── Model selector ──
     function openModelPicker(profileName) {
@@ -486,28 +486,28 @@
             !statusError ? React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
               "Bootstrap to run hermes kanban-advanced init with the following parameters. Save any parameter changes to plugin configuration after editing any field."
             ) : null
-          ),
-          React.createElement("div", { className: "flex items-center gap-2 shrink-0" },
-            React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping || pluginUpdating, size: "sm" },
-              bootstrapping ? "Running…" : "Bootstrap"
-            ),
-            initialized ? React.createElement(Button, { variant: "outline", size: "sm", onClick: runSave, disabled: bootstrapping || pluginUpdating },
-              "Save"
-            ) : null,
-            status && status.plugin_can_update ? React.createElement(Button, {
-              variant: "outline",
-              size: "sm",
-              onClick: runPluginUpdate,
-              disabled: pluginUpdateDisabled
-            },
-              pluginUpdating
-                ? React.createElement("span", { className: "flex items-center gap-1.5" },
-                    React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
-                    "Updating…"
-                  )
-                : "Update Plugin"
-            ) : null
           )
+        ),
+        React.createElement("div", { className: "flex flex-wrap items-center gap-2 px-6 pb-4 -mt-1" },
+          React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping || pluginUpdating, size: "sm" },
+            bootstrapping ? "Running…" : "Bootstrap"
+          ),
+          statusInitialized ? React.createElement(Button, { variant: "outline", size: "sm", onClick: runSave, disabled: bootstrapping || pluginUpdating },
+            "Save"
+          ) : null,
+          status && status.plugin_can_update ? React.createElement(Button, {
+            variant: "outline",
+            size: "sm",
+            onClick: runPluginUpdate,
+            disabled: pluginUpdateDisabled
+          },
+            pluginUpdating
+              ? React.createElement("span", { className: "flex items-center gap-1.5" },
+                  React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
+                  "Updating…"
+                )
+              : "Update Plugin"
+          ) : null
         )
       ),
 
@@ -657,68 +657,19 @@
                 React.createElement(Label, { className: "text-xs" }, "Custom binary name"),
                 React.createElement(Input, { value: customAgent, onChange: function (e) { setCustomAgent(e.target.value); }, placeholder: "e.g. my-agent", className: "h-9" })
               ) : null,
-              React.createElement("div", {
-                className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors",
-                onClick: openCodingAgentModelPicker
-              },
-                React.createElement("div", { className: "min-w-0" },
-                  React.createElement("span", { className: "text-sm block" }, "Model"),
-                  React.createElement("span", { className: "text-[11px] text-muted-foreground font-mono truncate block" }, codingAgentModel || "auto")
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Model"),
+                React.createElement("div", {
+                  className: "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm cursor-pointer hover:bg-accent/5 transition-colors",
+                  onClick: openCodingAgentModelPicker
+                },
+                  React.createElement("span", { className: "font-mono truncate" }, codingAgentModel || "auto"),
+                  codingAgentBadge(status && status.coding_agent_cli, codingAgentModel)
                 ),
-                codingAgentBadge(status && status.coding_agent_cli, codingAgentModel)
-              ),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Click model to change. Use auto for the CLI default. Save or Bootstrap to apply.")
-            )
-          ),
-          editingCodingAgentModel ? React.createElement("div", {
-            className: "fixed inset-0 z-[100] flex items-center justify-center bg-background/85 backdrop-blur-sm p-4",
-            onClick: function (e) { if (e.target === e.currentTarget) setEditingCodingAgentModel(false); }
-          },
-            React.createElement("div", {
-              className: "relative w-full max-w-md border border-border bg-card shadow-2xl flex flex-col overflow-hidden max-h-[80vh]",
-              onClick: function (e) { e.stopPropagation(); }
-            },
-              React.createElement("header", { className: "border-b border-border px-4 py-3" },
-                React.createElement("h3", { className: "text-sm font-semibold" }, "Coding agent model"),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground font-mono mt-0.5" }, resolvedCodingBinary())
-              ),
-              React.createElement("div", { className: "p-3 border-b border-border" },
-                React.createElement(Input, {
-                  value: codingAgentModelQuery,
-                  onChange: function (e) { setCodingAgentModelQuery(e.target.value); },
-                  placeholder: "Filter models…",
-                  className: "h-8 text-xs"
-                })
-              ),
-              React.createElement("div", { className: "flex-1 overflow-y-auto min-h-0" },
-                !codingAgentModelOptions ? React.createElement("p", { className: "p-4 text-xs text-muted-foreground" }, "Loading models…")
-                  : (codingAgentModelOptions.models || []).filter(function (m) {
-                      var q = (codingAgentModelQuery || "").toLowerCase();
-                      if (!q) return true;
-                      return (m.id || "").toLowerCase().indexOf(q) >= 0 || (m.label || "").toLowerCase().indexOf(q) >= 0;
-                    }).map(function (m) {
-                      var isSel = pendingCodingAgentModel === m.id;
-                      var isCurrent = codingAgentModel === m.id;
-                      return React.createElement("div", {
-                        key: m.id,
-                        className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (isSel ? " bg-accent/10" : ""),
-                        onClick: function () { setPendingCodingAgentModel(m.id); }
-                      },
-                        React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, isSel ? "✓" : ""),
-                        React.createElement("span", { className: "flex-1 truncate font-mono" }, m.label || m.id),
-                        isCurrent ? React.createElement("span", { className: "text-[10px] text-primary shrink-0" }, "current") : null
-                      );
-                    })
-              ),
-              React.createElement("footer", { className: "border-t border-border p-3 flex items-center justify-between gap-2" },
-                React.createElement("span", { className: "text-[11px] text-muted-foreground font-mono truncate" }, pendingCodingAgentModel || "auto"),
-                React.createElement("div", { className: "flex items-center gap-1.5" },
-                  React.createElement(Button, { variant: "outline", size: "sm", onClick: function () { setEditingCodingAgentModel(false); } }, "Cancel"),
-                  React.createElement(Button, { size: "sm", disabled: !pendingCodingAgentModel, onClick: applyCodingAgentModelChoice }, "Select")
-                )
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Click to change model. Use auto for the CLI default. Save or Bootstrap to apply.")
               )
             )
-          ) : null,
+          ),
 
           // Governance + orchestrator tuning
           React.createElement(Card, null,
@@ -748,6 +699,56 @@
           )
         )
       ),
+
+      editingCodingAgentModel ? React.createElement("div", {
+        className: "fixed inset-0 z-[100] flex items-center justify-center bg-background/85 backdrop-blur-sm p-4",
+        onClick: function (e) { if (e.target === e.currentTarget) setEditingCodingAgentModel(false); }
+      },
+        React.createElement("div", {
+          className: "relative w-full max-w-md border border-border bg-card shadow-2xl flex flex-col overflow-hidden max-h-[80vh]",
+          onClick: function (e) { e.stopPropagation(); }
+        },
+          React.createElement("header", { className: "border-b border-border px-4 py-3" },
+            React.createElement("h3", { className: "text-sm font-semibold" }, "Coding agent model"),
+            React.createElement("p", { className: "text-[11px] text-muted-foreground font-mono mt-0.5" }, resolvedCodingBinary())
+          ),
+          React.createElement("div", { className: "p-3 border-b border-border" },
+            React.createElement(Input, {
+              value: codingAgentModelQuery,
+              onChange: function (e) { setCodingAgentModelQuery(e.target.value); },
+              placeholder: "Filter models…",
+              className: "h-8 text-xs"
+            })
+          ),
+          React.createElement("div", { className: "flex-1 overflow-y-auto min-h-0" },
+            !codingAgentModelOptions ? React.createElement("p", { className: "p-4 text-xs text-muted-foreground" }, "Loading models…")
+              : (codingAgentModelOptions.models || []).filter(function (m) {
+                  var q = (codingAgentModelQuery || "").toLowerCase();
+                  if (!q) return true;
+                  return (m.id || "").toLowerCase().indexOf(q) >= 0 || (m.label || "").toLowerCase().indexOf(q) >= 0;
+                }).map(function (m) {
+                  var isSel = pendingCodingAgentModel === m.id;
+                  var isCurrent = codingAgentModel === m.id;
+                  return React.createElement("div", {
+                    key: m.id,
+                    className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (isSel ? " bg-accent/10" : ""),
+                    onClick: function () { setPendingCodingAgentModel(m.id); }
+                  },
+                    React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, isSel ? "✓" : ""),
+                    React.createElement("span", { className: "flex-1 truncate font-mono" }, m.label || m.id),
+                    isCurrent ? React.createElement("span", { className: "text-[10px] text-primary shrink-0" }, "current") : null
+                  );
+                })
+          ),
+          React.createElement("footer", { className: "border-t border-border p-3 flex items-center justify-between gap-2" },
+            React.createElement("span", { className: "text-[11px] text-muted-foreground font-mono truncate" }, pendingCodingAgentModel || "auto"),
+            React.createElement("div", { className: "flex items-center gap-1.5" },
+              React.createElement(Button, { variant: "outline", size: "sm", onClick: function () { setEditingCodingAgentModel(false); } }, "Cancel"),
+              React.createElement(Button, { size: "sm", disabled: !pendingCodingAgentModel, onClick: applyCodingAgentModelChoice }, "Select")
+            )
+          )
+        )
+      ) : null,
 
       // ── Console output ──
       consoleLines.length > 0 ? React.createElement(Card, { className: "bg-black/50" },
