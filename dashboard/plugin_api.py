@@ -44,6 +44,7 @@ from plugin.config_overlay import (  # noqa: E402
     sync_project_env,
 )
 from plugin.coding_agent_env import ensure_coding_agent_runtime_env  # noqa: E402
+from plugin.script_materialize import materialize_hermes_scripts  # noqa: E402
 from plugin.coding_agent import (  # noqa: E402
     SMOKE_TIMEOUT_SECONDS,
     check_coding_agent_cli,
@@ -432,21 +433,9 @@ def _materialize_plugin_assets(plugin_root: Path, hermes_home: Path) -> list[str
                 count += 1
         lines.append(f"   OK {count} skills -> {skills_dst}")
 
-    scripts_src = plugin_root / "scripts"
-    scripts_dst = hermes_home / "scripts"
-    scripts_dst.mkdir(parents=True, exist_ok=True)
-    for script_name in [
-        "auto_unblock.sh",
-        "board_keeper.sh",
-        "token_tracker.py",
-        "coding_agent_invoke.sh",
-    ]:
-        src = scripts_src / script_name
-        dst = scripts_dst / script_name
-        if src.exists():
-            dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-            dst.chmod(0o755)
-            lines.append(f"   OK {script_name} -> {dst}")
+    lines.extend(
+        materialize_hermes_scripts(plugin_root / "scripts", hermes_home / "scripts")
+    )
     return lines
 
 
@@ -761,22 +750,7 @@ async def init(request: Request):
             "error": "Profile reconciliation/verification failed",
         }
 
-    # Provision scripts
-    scripts_src = plugin_root / "scripts"
-    scripts_dst = hermes_home / "scripts"
-    scripts_dst.mkdir(parents=True, exist_ok=True)
-    for script_name in [
-        "auto_unblock.sh",
-        "board_keeper.sh",
-        "token_tracker.py",
-        "coding_agent_invoke.sh",
-    ]:
-        src = scripts_src / script_name
-        dst = scripts_dst / script_name
-        if src.exists():
-            dst.write_text(src.read_text())
-            dst.chmod(0o755)
-            output.append(f"   OK {script_name} -> {dst}")
+    output.extend(materialize_hermes_scripts(plugin_root / "scripts", hermes_home / "scripts"))
 
     sync_project_env(
         project_root,

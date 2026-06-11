@@ -53,6 +53,7 @@ from .profile_bootstrap import (
     ensure_dispatch_profiles,
     reconcile_dispatch_profiles,
 )
+from .script_materialize import materialize_hermes_scripts
 
 logger = logging.getLogger(__name__)
 
@@ -487,20 +488,15 @@ def _handle_init(args) -> int:
         print("   X Profile reconciliation failed — see issues above.")
         return 1
 
-    # ── 3. Cron scripts + token tracker ───────────────────────────────
+    # ── 3. Cron scripts + token tracker + coding-agent invoke helpers ─
     print("3. Provisioning cron scripts + token tracker...")
     cron_dir = hermes_home / "scripts"
-    cron_dir.mkdir(parents=True, exist_ok=True)
-    for script_name in ["auto_unblock.sh", "board_keeper.sh", "token_tracker.py"]:
-        src = SCRIPTS_DIR / script_name
-        dst = cron_dir / script_name
-        if src.exists():
-            dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
-            dst.chmod(0o755)
-            print(f"   OK {script_name} -> {dst}")
-        else:
-            print(f"   X {script_name} not found at {src}")
-            return 1
+    script_lines = materialize_hermes_scripts(SCRIPTS_DIR, cron_dir)
+    if not script_lines:
+        print(f"   X No scripts materialized from {SCRIPTS_DIR}")
+        return 1
+    for line in script_lines:
+        print(line)
 
     # ── 4. Env ───────────────────────────────────────────────────────
     print("4. Setting project .env (plugins, coding agent, governance profile)...")

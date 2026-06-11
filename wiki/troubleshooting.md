@@ -65,6 +65,8 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> -
 
 **Root cause:** Bootstrap or **Update Plugin** was run while cards were in flight, or only the git checkout was updated without rematerializing skills/scripts. Workers load profile skills from disk — stale copies persist until reprovisioned.
 
+**Also check `scripts/lib/`:** `coding_agent_invoke.sh` sources `$HERMES_HOME/scripts/lib/coding_agent_env.sh`. Older plugin versions materialized the top-level invoke script but skipped `lib/`, causing `No such file or directory` when workers fell back to `$HERMES_HOME/scripts/coding_agent_invoke.sh`. **Update Plugin**, `hermes kanban-advanced init`, or `provision.sh` now sync `lib/coding_agent_env.sh` alongside the invoke script.
+
 **Fix (reset provisioning — pause dispatch first):**
 
 ```bash

@@ -338,6 +338,29 @@ for script in auto_unblock.sh board_keeper.sh coding_agent_invoke.sh; do
         esac
     fi
 done
+
+# coding_agent_invoke.sh sources $HERMES_HOME/scripts/lib/coding_agent_env.sh
+LIB_SCRIPTS_DIR="${CRON_SCRIPTS_DIR}/lib"
+mkdir -p "$LIB_SCRIPTS_DIR"
+for libscript in coding_agent_env.sh; do
+    if [ -f "${BUNDLE_PATH}/scripts/lib/${libscript}" ]; then
+        case "$MODE" in
+            apply)
+                cp "${BUNDLE_PATH}/scripts/lib/${libscript}" "${LIB_SCRIPTS_DIR}/${libscript}"
+                echo "[provision] Synced lib script: lib/${libscript} → ${LIB_SCRIPTS_DIR}/"
+                ;;
+            check|dry-run)
+                if [[ ! -f "${LIB_SCRIPTS_DIR}/${libscript}" ]]; then
+                    echo "[provision] MISSING lib script: ${LIB_SCRIPTS_DIR}/${libscript}"
+                    DRIFT_FILES+=("${LIB_SCRIPTS_DIR}/${libscript}")
+                elif [ "$(hash_file "${BUNDLE_PATH}/scripts/lib/${libscript}")" != "$(hash_file "${LIB_SCRIPTS_DIR}/${libscript}")" ]; then
+                    echo "[provision] DRIFT lib script: ${LIB_SCRIPTS_DIR}/${libscript}"
+                    DRIFT_FILES+=("${LIB_SCRIPTS_DIR}/${libscript}")
+                fi
+                ;;
+        esac
+    fi
+done
 write_manifest
 
 # ── Sync prompts (orchestrator SOUL.md, worker instructions) ──────────
