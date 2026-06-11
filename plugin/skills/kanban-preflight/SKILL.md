@@ -113,6 +113,8 @@ free -m | awk '/^Mem:/ {print "available:", $7, "MB"}'
 
 **Typical fixes:** Copy `.env.example` → `.env` and fill values; for WSL users with `.env` on the Windows side, source it directly before running preflight: `set -a && source /mnt/<drive>/Projects/<project>/.env && set +a`. The `source` command reads env vars safely even from DrvFS paths (no filesystem operations are performed — only variable exports). Do NOT clone or symlink the Windows `.env` into the WSL filesystem. For cloud deploys use Secret Manager mounts — never commit real secrets.
 
+**Card worktrees:** Preflight reads main-repo `.env`. Workers run in `/tmp/wt-*` worktrees — if coding agents or tests need `.env` on disk there, the operator must add `.env` to `.worktreeinclude` (not done by init). See `references/operator-provisioning.md`.
+
 ---
 
 ### 3. API reachability (`api_reachability`)

@@ -75,7 +75,9 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 - Coding agent env: `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL` — worker dispatch via `scripts/coding_agent_invoke.sh` (or `build_dispatch_argv` in `plugin/coding_agent.py`); card bodies must not use `--model` / `--output-format` / `--trust` (P005)
 - Auth gate (any binary): `scripts/check_coding_agent_cli.py` — preflight `coding_agent_cli_reachability` + `pre_dispatch_gate.sh`; separate from Hermes profile `model_reachability`; requires `HOME` in gateway worker env (`scripts/lib/coding_agent_env.sh`, `.env` via init/Save)
 - Coding-agent auth SSOT: `plugin/data/references/coding-agent-auth.md` (bootstrap vs gate table; agent triage when user reports auth trouble)
+- Operator provisioning SSOT: `plugin/data/references/operator-provisioning.md` (plugin vs operator layers; `.env`/`.worktreeinclude`/deps by workload)
 - Agent auth playbook: `AGENTS.md` § When a user has coding-binary auth trouble
+- Agent provisioning playbook: `AGENTS.md` § When a user needs help provisioning beyond bootstrap
 - SSOT headless flags: `plugin/data/references/coding-agent-cli-invocation.md`; user reference: `docs/reference/coding-agents.md`
 - Dashboard: Hermes profile dots (`profiles.*.model_reachable`) ≠ coding CLI dot (`coding_agent_cli.model_reachable`); both probed when `probe=1`
 - Dashboard API: `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` for model picker

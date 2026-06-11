@@ -26,7 +26,8 @@ Bootstrap and init are the **same operation** from two entry points:
 9. **Reconcile dispatch profiles** — SOUL.md, role-only profile skills, verification (see [Profile reconciliation](#profile-reconciliation)).
 10. **Cron scripts** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`.
 11. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE`, and **`HOME=`** (for coding-agent credential paths) in project `.env`.
-12. **Gateway check** — report running/stopped.
+12. **`.worktreeinclude`** — repo-root file listing gitignored paths copied into each card worktree by `worktree_setup.sh` (`.hermes/scripts/`, `kanban-overrides/`, plugin invoke helpers when using project-local `.hermes`). Commit this file after init.
+13. **Gateway check** — report running/stopped.
 
 Init **fails loudly** if profile reconciliation/verification does not pass (dashboard returns `"error": "Profile reconciliation/verification failed"`).
 
@@ -59,6 +60,21 @@ Bootstrap **tests** the configured headless CLI once; it does **not** fully prov
 4. After fix: `rm -f .hermes/kanban/preflight_cache.json`, `hermes gateway restart`, re-run preflight.
 
 Full symptom matrix: [troubleshooting.md](troubleshooting.md) (coding-agent sections).
+
+---
+
+## Operator provisioning (beyond plugin init)
+
+Init provisions **kanban infrastructure** — not your application runtime. See [`plugin/data/references/operator-provisioning.md`](../plugin/data/references/operator-provisioning.md) (SSOT).
+
+| Init provides | Operator must add (typical) |
+| --- | --- |
+| `.worktreeinclude` kanban paths (overlay, memory, invoke scripts) | **`.env`** in `.worktreeinclude` when cards/tests read secrets from cwd |
+| `KANBAN_CODING_AGENT*`, `HOME`, policy profile in main `.env` | Vendor API keys, `MONGODB_URI`, `SECRET_KEY`, `required_secrets` vars |
+| Advisory coding-agent smoke | OAuth login on gateway host **or** API keys in `.env` |
+| Materialized scripts under `$HERMES_HOME` | **`.venv/`**, **`node_modules/`** in `.worktreeinclude` if worktree tests need them |
+
+**Agent:** Interview the user about coding agent binary, auth model, and whether worktree cards run `pytest` / `npm test` / DB-backed tests — then recommend `.env` and `.worktreeinclude` lines they add themselves. Commit `.worktreeinclude` after init.
 
 ---
 

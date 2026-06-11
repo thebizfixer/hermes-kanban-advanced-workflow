@@ -45,6 +45,7 @@ from plugin.config_overlay import (  # noqa: E402
 )
 from plugin.coding_agent_env import ensure_coding_agent_runtime_env  # noqa: E402
 from plugin.script_materialize import materialize_hermes_scripts  # noqa: E402
+from plugin.worktree_provision import ensure_worktreeinclude  # noqa: E402
 from plugin.coding_agent import (  # noqa: E402
     SMOKE_TIMEOUT_SECONDS,
     check_coding_agent_cli,
@@ -751,6 +752,7 @@ async def init(request: Request):
         }
 
     output.extend(materialize_hermes_scripts(plugin_root / "scripts", hermes_home / "scripts"))
+    output.extend(ensure_worktreeinclude(project_root, hermes_home))
 
     sync_project_env(
         project_root,
@@ -944,6 +946,7 @@ async def update_plugin():
     project_root = resolve_project_root()
     hermes_home = resolve_hermes_home(project_root)
     output.extend(_materialize_plugin_assets(install_dir, hermes_home))
+    output.extend(ensure_worktreeinclude(project_root, hermes_home))
 
     # Reconcile dispatch profiles so a code pull also fixes profile state:
     # rename legacy worker/orchestrator → kanban-advanced-*, reseed role-only

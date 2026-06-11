@@ -52,6 +52,12 @@ Bootstrap writes `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, and `HOME` 
 
 **Agent routing:** user auth trouble → [`plugin/data/references/coding-agent-auth.md`](../../plugin/data/references/coding-agent-auth.md) § *Agent: user reports coding-binary auth trouble*.
 
+## Operator provisioning (worktrees and `.env`)
+
+Init materializes kanban invoke scripts and merges **kanban-only** paths into `.worktreeinclude`. It does **not** copy application `.env`, `.venv/`, or `node_modules/` into card worktrees. Add those yourself when cards run tests or API-key agents that read cwd `.env`.
+
+**Agent routing:** help user provision beyond bootstrap → [`plugin/data/references/operator-provisioning.md`](../../plugin/data/references/operator-provisioning.md).
+
 ## Auth gate (preflight / pre-dispatch)
 
 Before decomposition, `preflight.sh` runs `coding_agent_cli_reachability` and `pre_dispatch_gate.sh` runs `check_coding_agent_cli.py`. Both smoke the **configured** binary from `coding_agent_binary` / `KANBAN_CODING_AGENT` — not hardcoded to Cursor.

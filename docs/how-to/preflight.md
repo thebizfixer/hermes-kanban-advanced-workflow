@@ -21,4 +21,6 @@ Bootstrap runs the same smoke **advisory** only — init can succeed when this c
 
 Skip knobs: `references/preflight-env-knobs.md` (in plugin data). Auth SSOT: `plugin/data/references/coding-agent-auth.md`.
 
+Preflight sources **main repo** `.env` for `required_secrets` (from `kanban-config.yaml`). Card worktrees need the same vars only if you add `.env` to `.worktreeinclude` — see [operator-provisioning.md](../../plugin/data/references/operator-provisioning.md).
+
 For agent-facing detail, load the `kanban-advanced:kanban-preflight` skill.

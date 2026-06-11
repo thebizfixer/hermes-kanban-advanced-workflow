@@ -19,6 +19,8 @@ Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.j
 
 Full bootstrap behavior: [wiki/bootstrap.md](../../wiki/bootstrap.md).
 
+**Operator provisioning:** Init writes kanban keys to `.env` and kanban paths to `.worktreeinclude` only. Application secrets, `.env` in worktrees, and runtime deps (`.venv/`, `node_modules/`) are operator responsibility — [operator-provisioning.md](../../plugin/data/references/operator-provisioning.md).
+
 ## Project root (dashboard)
 
 The settings API resolves the repo that owns the overlay. Override when the gateway cwd is ambiguous:

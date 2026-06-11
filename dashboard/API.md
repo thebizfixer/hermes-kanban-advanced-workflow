@@ -82,6 +82,8 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
 
 **Bootstrap limitation:** Init/Save smoke is **advisory** — HTTP 200 / successful init can return with `! coding CLI auth/model check failed` in `output`. Bootstrap writes `KANBAN_CODING_AGENT*` and `HOME` to `.env` but **does not** add vendor API keys. **Preflight** and **pre-dispatch gate** block decomposition when headless auth fails. See `plugin/data/references/coding-agent-auth.md`.
 
+**Operator provisioning:** Init merges kanban paths into `.worktreeinclude` only — not application `.env`, `.venv/`, or `node_modules/`. See `plugin/data/references/operator-provisioning.md`.
+
 Use `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` to populate the dashboard model picker. See `docs/reference/coding-agents.md` and `plugin/data/references/coding-agent-cli-invocation.md`.
 
 When `config_exists` is false, the dashboard shows the bootstrap form.

@@ -22,5 +22,7 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 | Coding agent smoke failed / E020 (dashboard green, worker blocks) | Worktree smoke: `coding_agent_invoke.sh smoke`; Cursor needs `--trust` in worktree — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
 | Cursor `agent status` OK but smoke fails / `[escalation:coding_agent:auth]` | Often missing `HOME` in gateway workers, not stale OAuth — see [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
 | Bootstrap passed but preflight blocks on coding agent | Bootstrap smoke is **advisory** — add API keys or vendor login, run `check_coding_agent_cli.py` — [coding-agent auth](../../plugin/data/references/coding-agent-auth.md) |
+| Tests pass locally but fail in card worktree | Add `.env` / `.venv/` / `node_modules/` to `.worktreeinclude` — [operator provisioning](../../plugin/data/references/operator-provisioning.md) |
+| `required_secrets` preflight fails | Fill vars in main repo `.env`; mirror to worktree if coding agent runs those tests |
 
 Full symptom list: [wiki/troubleshooting.md](../../wiki/troubleshooting.md).

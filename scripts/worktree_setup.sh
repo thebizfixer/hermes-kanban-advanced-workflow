@@ -10,6 +10,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/kanban_config.sh
 source "$SCRIPT_DIR/lib/kanban_config.sh"
+# shellcheck source=lib/worktree_include.sh
+source "$SCRIPT_DIR/lib/worktree_include.sh"
 
 TASK_ID=""
 REPO_ROOT=""
@@ -66,6 +68,9 @@ if [ "$REUSE" = false ]; then
         git worktree add -b "$ALLOWED_BRANCH" "$WORKTREE_PATH" HEAD
     fi
 fi
+
+# 3b. Copy gitignored kanban paths (.worktreeinclude) into the worktree
+sync_worktree_include "$REPO_ROOT" "$WORKTREE_PATH"
 
 # 4. Pre-trust workspace (cross-platform hash)
 if [[ "$WORKTREE_PATH" =~ ^[A-Za-z]: ]]; then

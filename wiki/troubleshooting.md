@@ -67,6 +67,8 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> -
 
 **Also check `scripts/lib/`:** `coding_agent_invoke.sh` sources `$HERMES_HOME/scripts/lib/coding_agent_env.sh`. Older plugin versions materialized the top-level invoke script but skipped `lib/`, causing `No such file or directory` when workers fell back to `$HERMES_HOME/scripts/coding_agent_invoke.sh`. **Update Plugin**, `hermes kanban-advanced init`, or `provision.sh` now sync `lib/coding_agent_env.sh` alongside the invoke script.
 
+**Worktree provisioning (`.worktreeinclude`):** Card worktrees under `/tmp/wt-*` only contain tracked git files. Init merges **kanban** paths into `.worktreeinclude` (overlay, memory, invoke scripts). **Application** paths (`.env`, `.venv/`, `node_modules/`) are **operator responsibility** — add them yourself based on what cards run. See [operator-provisioning.md](../plugin/data/references/operator-provisioning.md). Symptom: worker resolves `bundle_path` from overlay yaml but `coding_agent_invoke.sh` or `kanban-config.yaml` is missing inside the worktree → exit 127. Fix: re-run **Bootstrap** / `hermes kanban-advanced init`, commit `.worktreeinclude`, **Update Plugin**, restart gateway.
+
 **Fix (reset provisioning — pause dispatch first):**
 
 ```bash

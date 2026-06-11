@@ -58,6 +58,21 @@ PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_
 
 SSOT: [`plugin/data/references/coding-agent-auth.md`](../../plugin/data/references/coding-agent-auth.md). Agent playbook: [`AGENTS.md`](../../AGENTS.md) § *When a user has coding-binary auth trouble*.
 
+### Operator provisioning (what you add yourself)
+
+Bootstrap does **not** set up your application for card worktrees. Based on what you plan to run through kanban:
+
+| Your plan | You typically add |
+| --- | --- |
+| OAuth coding agent (Cursor), no cwd `.env` tests | Gateway login + `HOME` (init writes) — often no extra `.worktreeinclude` lines |
+| API-key coding agent (Codex, Grok, …) | Keys in `.env`; add **`.env`** to `.worktreeinclude` |
+| `pytest` / DB / API integration tests in worktrees | App secrets in `.env`; **`.env`** + often **`.venv/`** in `.worktreeinclude` |
+| Frontend tests | **`.env`** + **`node_modules/`** (or your install policy) |
+
+Init merges kanban paths into `.worktreeinclude` and **preserves** lines you add (e.g. `.env`). Commit the file after bootstrap.
+
+Full decision guide: [`operator-provisioning.md`](../../plugin/data/references/operator-provisioning.md). Agent help: [`AGENTS.md`](../../AGENTS.md) § *When a user needs help provisioning beyond bootstrap*.
+
 ### Dispatch profiles (created by init)
 
 | Role | Profile name |
@@ -83,7 +98,8 @@ Agent reference: [wiki/bootstrap.md](../../wiki/bootstrap.md)
 1. **Config overlay** — `.hermes/kanban-overrides/kanban-config.yaml`
 2. **Shared skill materialization** — all 11 skills → `$HERMES_HOME/skills/kanban-advanced/`
 3. **Cron scripts** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`
-4. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE` in `.env`
+4. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE`, `HOME` in `.env` (kanban keys only — not app secrets)
+5. **`.worktreeinclude`** — kanban gitignored paths for card worktrees (overlay, invoke scripts); **you** add `.env` / `.venv/` as needed
 
 Configure **Hermes dispatch profile** models (orchestrator / worker) separately from the **coding CLI** model — see [wiki/configuration.md](../../wiki/configuration.md) and [coding agents](../reference/coding-agents.md).
 

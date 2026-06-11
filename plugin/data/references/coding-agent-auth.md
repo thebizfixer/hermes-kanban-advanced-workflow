@@ -64,6 +64,14 @@ Many CLIs store OAuth or API session files under `$HOME`. Hermes gateway units w
 
 After changing `HOME` or credentials: delete `.hermes/kanban/preflight_cache.json` and re-run preflight.
 
+## Worktree provisioning (`.worktreeinclude`)
+
+Card worktrees are plain `git worktree add` checkouts — they do **not** include gitignored `.hermes/` files unless copied. Init writes **`.worktreeinclude`** at the repo root; `worktree_setup.sh` copies listed paths (scripts, `kanban-overrides`, plugin invoke `lib/`) into each worktree before the worker smoke test.
+
+If smoke works at project root but fails in the worktree with exit 127 on `coding_agent_invoke.sh`, re-run init / **Update Plugin** and confirm `.worktreeinclude` is committed.
+
+**Application `.env` / venvs:** The plugin does not add `.env` or `.venv/` to `.worktreeinclude`. See [operator-provisioning.md](operator-provisioning.md) for what operators must supply based on what they run through kanban.
+
 ## Per-binary auth (verified against vendor docs)
 
 | Binary | Headless auth | Credential location / env | CI / automation best practice |

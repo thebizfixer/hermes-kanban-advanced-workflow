@@ -24,6 +24,7 @@ Load the relevant wiki page for detailed instructions:
 | Something is broken | `wiki/troubleshooting.md` |
 | Coding agent auth / smoke failed (bootstrap passed, workers block) | `plugin/data/references/coding-agent-auth.md` → then `wiki/troubleshooting.md` |
 | Bootstrap limitations (advisory smoke vs blocking gate) | `wiki/bootstrap.md` § Coding-agent auth during bootstrap |
+| What must the operator provision (.env, worktree, deps)? | `plugin/data/references/operator-provisioning.md` |
 | How do I handle rate limits? | `wiki/provider-strategy.md` |
 | What's the DMAIC mapping? | `wiki/six-sigma-mapping.md` |
 | Where are upstream docs? | `wiki/external-references.md` |
@@ -47,6 +48,17 @@ Bootstrap smoke is **advisory** — init can succeed with `! coding CLI auth/mod
 5. After any auth fix: `rm -f .hermes/kanban/preflight_cache.json` and re-run `preflight.sh` / `pre_dispatch_gate.sh`.
 
 Do **not** tell the user bootstrap alone proves workers can dispatch the coding agent.
+
+## When a user needs help provisioning beyond bootstrap
+
+Init covers **kanban infrastructure only** (profiles, overlay, materialized scripts, kanban `.worktreeinclude` paths). It does **not** add application `.env`, API keys, venvs, or `node_modules`.
+
+1. Load `plugin/data/references/operator-provisioning.md` (SSOT).
+2. Ask what they will run through kanban: coding agent binary, auth model, tests (`pytest`/`npm`), DB/API deps, `required_secrets` in overlay.
+3. Recommend **main `.env`** entries and **`.worktreeinclude`** lines they must add themselves.
+4. Re-run init/Update Plugin if kanban paths are missing; commit `.worktreeinclude`.
+
+Do **not** assume bootstrap copied `.env` into worktrees — the plugin never adds `.env` to `.worktreeinclude` by default.
 
 ## Key commands
 

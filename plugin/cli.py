@@ -54,6 +54,7 @@ from .profile_bootstrap import (
     reconcile_dispatch_profiles,
 )
 from .script_materialize import materialize_hermes_scripts
+from .worktree_provision import ensure_worktreeinclude
 
 logger = logging.getLogger(__name__)
 
@@ -496,6 +497,10 @@ def _handle_init(args) -> int:
         print(f"   X No scripts materialized from {SCRIPTS_DIR}")
         return 1
     for line in script_lines:
+        print(line)
+
+    print("3b. Ensuring .worktreeinclude for card worktrees...")
+    for line in ensure_worktreeinclude(project_root, hermes_home):
         print(line)
 
     # ── 4. Env ───────────────────────────────────────────────────────
