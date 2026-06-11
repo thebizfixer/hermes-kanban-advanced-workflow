@@ -15,7 +15,9 @@ Schema: [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.j
 
 ## Re-init
 
-`hermes kanban-advanced init` and dashboard **Bootstrap** refresh skills and cron scripts. When `kanban-config.yaml` already exists, branch settings are kept unless you pass explicit overrides. Use dashboard **Save** (not Bootstrap) to persist parameter edits after changing form fields. **Working branch** defaults from git upstream / `origin/HEAD` / local `HEAD`. **Trigger branch** is optional — when unset, E009 deploy-branch rules are disabled.
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh dispatch profiles (SOUL.md, role-only skills, verification), shared materialized skills, and cron scripts. When `kanban-config.yaml` already exists, branch settings are kept unless you pass explicit overrides. Use dashboard **Save** (not Bootstrap) to persist parameter edits after changing form fields. **Working branch** defaults from git upstream / `origin/HEAD` / local `HEAD`. **Trigger branch** is optional — when unset, E009 deploy-branch rules are disabled.
+
+Full bootstrap behavior: [wiki/bootstrap.md](../../wiki/bootstrap.md).
 
 ## Project root (dashboard)
 
@@ -47,7 +49,7 @@ See [wiki/troubleshooting.md](../../wiki/troubleshooting.md) if `working_branch`
 | `trigger_branch` | `${trigger_branch}` | unset — protected deploy branch; E009 when set |
 | `bundle_version` | — | Pin public release tag (documentation) |
 | `coding_agent_binary` | `${coding_agent_binary}` | `agent` (set during init; see [coding agents](coding-agents.md)) |
-| `preflight_profiles` | — | `worker,orchestrator` |
+| `preflight_profiles` | — | `kanban-advanced-worker,kanban-advanced-orchestrator` |
 | `plan_memory_path` | `${plan_memory_path}` | `.hermes/kanban/memory` |
 | `feature_branch_prefix` | — | `kanban/` |
 | `required_secrets` | — | project-specific |
@@ -62,6 +64,6 @@ See [wiki/troubleshooting.md](../../wiki/troubleshooting.md) if `working_branch`
 
 ## Profiles
 
-Each assignee profile needs `config.yaml` with `model.default` and `model.provider`. Preflight validates profiles listed in `preflight_profiles`.
+Default dispatch profile names: `kanban-advanced-orchestrator`, `kanban-advanced-worker`. Init creates them with `--no-skills`, installs plugin SOUL prompts, and seeds role-only profile skills. Each assignee profile needs `config.yaml` with `model.default` and `model.provider`. Preflight validates profiles listed in `preflight_profiles`.
 
-See [wiki/configuration.md](../../wiki/configuration.md) for agent-facing detail including thinking levels and Hermes v0.15.x kanban config keys.
+See [wiki/bootstrap.md](../../wiki/bootstrap.md) for init/profile detail and [wiki/configuration.md](../../wiki/configuration.md) for thinking levels and Hermes v0.15.x kanban config keys.

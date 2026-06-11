@@ -64,7 +64,9 @@ Use `project_root` to confirm the API resolved the correct repo (especially afte
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
 
-**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch`, `trigger_branch`, and `policy_profile` are **preserved from the file** unless the request body includes overrides. First-time bootstrap uses form values. To change settings on an initialized project, edit fields and click **Save** (not Bootstrap — Bootstrap re-runs profile creation and materialization). **Save** persists form values to `kanban-config.yaml` and `.env`. To update the plugin package itself, use **Pull** from the Hermes plugin view.
+**Dispatch profiles:** Creates `kanban-advanced-orchestrator` and `kanban-advanced-worker` via `hermes profile create --no-skills`, installs `SOUL.md` from plugin prompts, seeds role-only profile skills (2 / 9), writes `.no-bundled-skills`, and verifies. Logs `HERMES_HOME:` and resolved profile paths in `output`. See `wiki/bootstrap.md`.
+
+**Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch`, `trigger_branch`, and `policy_profile` are **preserved from the file** unless the request body includes overrides. First-time bootstrap uses form values. Bootstrap re-runs profile reconciliation (safe for fixing skill/SOUL drift). To change settings on an initialized project, edit fields and click **Save**. **Save** persists form values and also reconciles profiles. To update the plugin package itself, use **Update Plugin** on the tab.
 
 **Request:**
 ```json
@@ -84,11 +86,14 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 {
   "success": true,
   "output": [
-    "   OK worker",
-    "   OK orchestrator",
-    "   OK worker: model configured",
-    "   OK orchestrator: model configured",
-    "   OK orchestrator: max_turns = 180",
+    "   HERMES_HOME: /path/to/.hermes",
+    "   OK kanban-advanced-worker",
+    "   OK kanban-advanced-orchestrator",
+    "   OK kanban-advanced-worker: model configured",
+    "   OK kanban-advanced-orchestrator: max_turns = 180",
+    "   OK kanban-advanced-worker: SOUL.md <- worker.md (.../profiles/kanban-advanced-worker)",
+    "   OK kanban-advanced-worker: 2 skills seeded [...] (.../profiles/kanban-advanced-worker)",
+    "   OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)",
     "   OK 'agent' found on PATH",
     "   coding_agent_binary: agent",
     "   OK /path/to/kanban-config.yaml",
@@ -113,7 +118,7 @@ Saves settings in an already-initialized config (dashboard button: **Save**). Wr
 
 ## `POST /api/plugins/kanban-advanced/update`
 
-Git-pull the plugin install checkout and refresh materialized skills/scripts under `$HERMES_HOME`.
+Git-pull the plugin install checkout, refresh materialized skills/scripts under `$HERMES_HOME`, and **reconcile dispatch profiles** (SOUL, role-only skills, verification).
 
 **Request:** Empty body.
 

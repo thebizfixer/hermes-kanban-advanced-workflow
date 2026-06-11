@@ -25,22 +25,9 @@ hermes plugins list
 
 ---
 
-## Create profiles
-
-The workflow uses two dispatch profiles: `kanban-advanced-orchestrator` and `kanban-advanced-worker`. Init creates them (or renames legacy `orchestrator`/`worker`):
-
-Init (below) creates these profiles or renames legacy `orchestrator`/`worker` when present.
-
-Configure each profile with a model and provider. At minimum, the worker profile needs access to a coding agent CLI.
-
-```bash
-hermes -p kanban-advanced-worker config set model.default <your-model>
-hermes -p kanban-advanced-worker config set model.provider <your-provider>
-```
-
----
-
 ## Bootstrap your project
+
+Bootstrap creates dispatch profiles, config, and scripts in one step. You do **not** need to create profiles manually.
 
 ```bash
 cd your-project
@@ -49,12 +36,36 @@ hermes kanban-advanced init --project-root . --working-branch <branch-name>
 
 Replace `<branch-name>` with your integration branch (e.g. `main`).
 
-What init provisions:
+**Dashboard alternative:** Hermes dashboard → **Kanban-Advanced** tab → **Bootstrap** (same operation as CLI init).
+
+### Dispatch profiles (created by init)
+
+| Role | Profile name |
+| --- | --- |
+| Orchestrator | `kanban-advanced-orchestrator` |
+| Worker | `kanban-advanced-worker` |
+
+Init:
+
+- Creates profiles with `hermes profile create <name> --no-skills` (no Hermes bundled skills)
+- Copies model/auth `config.yaml` / `.env` from default
+- Installs `SOUL.md` from `plugin/data/prompts/orchestrator.md` and `worker.md`
+- Seeds **role-only** skills into each profile's `skills/` directory (2 worker / 9 orchestrator)
+- Writes `.no-bundled-skills` to prevent `hermes update` from re-injecting default skills
+- Verifies the end state (fails if verification does not pass)
+
+Legacy profiles named `orchestrator` / `worker` are renamed automatically.
+
+Agent reference: [wiki/bootstrap.md](../../wiki/bootstrap.md)
+
+### What init also provisions
 
 1. **Config overlay** — `.hermes/kanban-overrides/kanban-config.yaml`
-2. **Cron scripts** — `auto_unblock.sh` and `board_keeper.sh` to `$HERMES_HOME/scripts/`
-3. **Skill bundle** — `kanban-advanced.yaml` to `$HERMES_HOME/skill-bundles/` (fallback for non-plugin sessions)
+2. **Shared skill materialization** — all 11 skills → `$HERMES_HOME/skills/kanban-advanced/`
+3. **Cron scripts** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`
 4. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true` in `.env`
+
+Configure model thinking per role after bootstrap if desired — see [wiki/configuration.md](../../wiki/configuration.md).
 
 ---
 
@@ -64,8 +75,13 @@ What init provisions:
 # CLI commands available
 hermes kanban-advanced --help
 
-# Skills load (in a Hermes session)
-# Use: skill_view("kanban-advanced:kanban-planning")
+# Dispatch profile skill counts
+hermes profile show kanban-advanced-worker | grep Skills:      # expect 2
+hermes profile show kanban-advanced-orchestrator | grep Skills:  # expect 9
+
+# SOUL prompts
+head -1 "$(hermes profile show kanban-advanced-worker | awk '/^Path:/ {print $2}')/SOUL.md"
+# # Worker Prompt
 ```
 
 ---
@@ -86,8 +102,10 @@ Follow the [tutorial](../tutorial/kanban-advanced-tutorial.md) for a guided walk
 |---------|----------|
 | Plugin doesn't appear in `hermes plugins list` | Restart Hermes. The plugin loader runs at startup. |
 | `hermes kanban-advanced: command not found` | The CLI group is `kanban-advanced`, not `kanban`. |
-| Init fails with "profile not found" | Run `hermes kanban-advanced init` and accept profile create/rename prompts |
+| Init fails with "profile not found" | Re-run init; accept profile create prompts or use `--force` |
+| Profiles have 90+ skills after bootstrap | Wrong `HERMES_HOME` or stale plugin — see [wiki/bootstrap.md](../../wiki/bootstrap.md) |
+| "Profile reconciliation/verification failed" | Read bootstrap output issues; Update Plugin + restart gateway |
 | "Project-local plugins are disabled" | Init sets `HERMES_ENABLE_PROJECT_PLUGINS=true` in `.env`. Source it or restart. |
-| Cron scripts don't run | Verify they exist at `$HERMES_HOME/scripts/`. Re-run `hermes kanban-advanced init`. |
+| Cron scripts don't run | Verify they exist at `$HERMES_HOME/scripts/`. Re-run init. |
 
-For more help, see [troubleshooting.md](troubleshooting.md).
+For more help, see [troubleshooting.md](troubleshooting.md) and [wiki/bootstrap.md](../../wiki/bootstrap.md).

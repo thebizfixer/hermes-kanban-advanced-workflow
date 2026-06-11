@@ -32,37 +32,9 @@ Restart Hermes.
 
 ---
 
-## Step 2: Create profiles
+## Step 2: Bootstrap your project
 
-**You run:**
-
-```bash
-hermes kanban-advanced init
-# creates kanban-advanced-orchestrator + kanban-advanced-worker
-# (renames legacy worker/orchestrator when present)
-```
-
-Expected output:
-
-```
-Created profile 'orchestrator' (cloned from default)
-Created profile 'worker' (cloned from default)
-```
-
-Configure the worker:
-
-```bash
-hermes config set model.default <your-model> --profile worker
-hermes config set model.provider <your-provider> --profile worker
-```
-
-**Agent says:**
-
-> "Create two profiles — orchestrator and worker. The orchestrator plans and audits. The worker supervises coding agents. After creating them, configure your worker with a model. What model and provider do you use?"
-
----
-
-## Step 3: Bootstrap your project
+Bootstrap creates dispatch profiles, config, scripts, and verifies profile SOUL/skills in one step. You do **not** create profiles manually.
 
 **You run:**
 
@@ -71,15 +43,36 @@ cd your-project
 hermes kanban-advanced init --project-root . --working-branch main
 ```
 
-Replace `main` with your integration branch. Expected output shows six OK checks.
+Replace `main` with your integration branch.
+
+Expected output (abbreviated):
+
+```text
+HERMES_HOME: /path/to/your-project/.hermes
+OK Created 'kanban-advanced-worker' (no default skills)
+OK Created 'kanban-advanced-orchestrator' (no default skills)
+OK kanban-advanced-worker: SOUL.md <- worker.md (.../profiles/kanban-advanced-worker)
+OK kanban-advanced-worker: 2 skills seeded [...]
+OK kanban-advanced-orchestrator: 9 skills seeded [...]
+OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)
+```
+
+Init copies model config from your default profile when missing. To set explicitly:
+
+```bash
+hermes -p kanban-advanced-worker config set model.default <your-model>
+hermes -p kanban-advanced-worker config set model.provider <your-provider>
+```
 
 **Agent says:**
 
-> "Navigate to your project and run the init command. What's your integration branch? You should see six checkmarks — profiles, config, cron scripts, skill bundle, env, and gateway."
+> "Navigate to your project and run init (or use dashboard **Bootstrap**). What's your integration branch? You should see `HERMES_HOME`, profile creation with `no default skills`, SOUL/skills seeded, and `Profiles verified`. If `hermes profile show` reports 90+ skills, something went wrong — see wiki/bootstrap.md."
+
+Full reference: [wiki/bootstrap.md](../../wiki/bootstrap.md)
 
 ---
 
-## Step 4: Choose your plan
+## Step 3: Choose your plan
 
 Setup is done. Now you need something to execute. The agent will offer three paths.
 
@@ -185,7 +178,7 @@ Switch to the orchestrator profile (new session — Hermes has no in-chat profil
 
 ```bash
 hermes profile list
-hermes -p orchestrator chat
+hermes -p kanban-advanced-orchestrator chat
 ```
 
 **You say:**
@@ -198,7 +191,7 @@ When the orchestrator prompts for review, you can accept or iterate. Say "Revise
 
 **Agent says:**
 
-> "Start an orchestrator session (`hermes -p orchestrator chat`), then say: 'Harden the plan at `.agent/plans/kanban-health.plan.md`'. The orchestrator will verify everything against your codebase and add any missing test coverage. When it prompts for review, you can accept or ask for changes — say 'Revise the test plan to include integration tests' if something's missing. This loop can run as many times as you want. When you're happy, we'll move to Optimize."
+> "Start an orchestrator session (`hermes -p kanban-advanced-orchestrator chat`), then say: 'Harden the plan at `.agent/plans/kanban-health.plan.md`'. The orchestrator will verify everything against your codebase and add any missing test coverage. When it prompts for review, you can accept or ask for changes — say 'Revise the test plan to include integration tests' if something's missing. This loop can run as many times as you want. When you're happy, we'll move to Optimize."
 
 ---
 

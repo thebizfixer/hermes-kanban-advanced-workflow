@@ -17,7 +17,8 @@ feature_branch_prefix: "kanban/"
 
 # ---------------------------------------------------------------------------
 # Agent profiles
-# Names must match Hermes profiles created by: hermes profile create <name>
+# Names must match dispatch profiles created by: hermes kanban-advanced init
+# (uses hermes profile create <name> --no-skills — not --clone)
 # orchestrator_profile → ${orchestrator_profile} in skill files
 # worker_profile       → ${worker_profile} in skill files
 # ---------------------------------------------------------------------------

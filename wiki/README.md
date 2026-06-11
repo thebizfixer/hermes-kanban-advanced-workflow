@@ -4,7 +4,8 @@
 
 | Page | What it covers |
 |------|---------------|
-| [setup.md](setup.md) | Agent setup guide — install plugin, create profiles, bootstrap project |
+| [setup.md](setup.md) | Agent setup guide — install plugin, bootstrap project |
+| [bootstrap.md](bootstrap.md) | **Init / Bootstrap** — dispatch profiles, SOUL.md, skill isolation, `HERMES_HOME`, verification |
 | [configuration.md](configuration.md) | Config reference — overlay variables, profiles, thinking levels, policy profiles |
 | [governance.md](governance.md) | Governance model — four gates, evaluation chain, attestation, recovery |
 | [decomposition-workflow.md](decomposition-workflow.md) | **Why** block-on-create, gate card, `auto_decompose=false` — agent FAQ for decomposition |

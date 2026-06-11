@@ -21,7 +21,7 @@ cd your-project
 hermes kanban-advanced init --project-root . --working-branch <branch-name>
 ```
 
-Two steps. Restart Hermes and you're ready. The init walks you through profile creation, model config, and everything else. Replace `<branch-name>` with your integration branch (e.g. `main`).
+Two steps. Restart Hermes and you're ready. Init creates `kanban-advanced-orchestrator` and `kanban-advanced-worker`, installs plugin SOUL prompts, seeds role-only profile skills, and verifies the result. Replace `<branch-name>` with your integration branch (e.g. `main`). Details: [wiki/bootstrap.md](wiki/bootstrap.md).
 
 > **Agent-driven setup?** Hand this repo link to your agent and say "set this up." See [AGENTS.md](AGENTS.md) and [llms.txt](llms.txt).
 
@@ -52,30 +52,41 @@ Vanilla `hermes kanban` gives you a task board. This plugin adds deterministic g
 ```mermaid
 flowchart LR
     subgraph PLAN["Planning (interactive)"]
+        direction TB
         DRAFT["Draft<br/>'Plan this out'"] --> SANITY["Sanity check<br/>'Do a sanity check'"]
         SANITY --> HARDEN["Harden<br/>'Harden the plan'"]
         HARDEN -->|"Revise section X"| HARDEN
     end
 
-    PLAN --> OPT["Optimize<br/>'Optimize for Kanban'"]
+    OPT["Optimize<br/>'Optimize for Kanban'"]
 
-    OPT --> PRE["Preflight"]
-    PRE --> ATT["Attest"]
-    ATT --> DEC["Decompose"]
+    EXE["Execute<br/>'Execute the plan'"]
 
-    DEC --> EXE["Execute<br/>'Execute the plan'"]
-    EXE --> VER["Verify<br/>eval chain"]
+    subgraph GATE["Preflight → dispatch"]
+        direction TB
+        PRE["Preflight"] --> ATT["Attest"] --> DEC["Decompose"]
+    end
 
-    VER --> AUD["Audit"]
-    AUD --> REC["Reconcile"]
-    REC --> CLN["Cleanup"]
-    CLN --> PM["Postmortem"]
+    subgraph OPS["During execution"]
+        direction TB
+        MON["Monitor"] --> PAUSE["Pause / Reset"] --> RCV["Recover"] --> VER["Verify<br/>eval chain"]
+    end
 
-    MON["Monitor"] -.-> EXE
-    MON -.-> VER
-    RCV["Recover"] -.-> EXE
-    RCV -.-> VER
-    PAUSE["Pause / Reset"] -.-> EXE
+    subgraph CLOSE["Closeout"]
+        direction TB
+        AUD["Audit"] --> REC["Reconcile"] --> CLN["Cleanup"]
+    end
+
+    PM["Postmortem"]
+
+    PLAN --> OPT --> EXE --> PRE
+    DEC --> VER
+    VER --> AUD
+    CLN --> PM
+
+    MON -.-> DEC
+    PAUSE -.-> DEC
+    RCV -.-> DEC
 ```
 
 The workflow moves through trigger phrases. You say them — the agent advances. Between stages, the agent waits for you.

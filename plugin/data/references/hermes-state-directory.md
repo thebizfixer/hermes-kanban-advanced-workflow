@@ -55,12 +55,26 @@ hermes profile list
 test -f "$HERMES_HOME/kanban.db" && echo "kanban.db present"
 ```
 
-## Profiles: what to copy
+## Dispatch profiles (kanban-advanced)
+
+Init manages two dispatch profiles under `$HERMES_HOME/profiles/`:
+
+| Profile | SOUL source | Profile-local skills |
+| --- | --- | ---: |
+| `kanban-advanced-orchestrator` | `plugin/data/prompts/orchestrator.md` | 9 orchestrator skills |
+| `kanban-advanced-worker` | `plugin/data/prompts/worker.md` | 2 worker skills |
+
+Each dispatch profile also has `.no-bundled-skills` (opts out of Hermes bundled skill sync on `hermes update`).
+
+**Do not** use `hermes profile create --clone` for these — init uses `--no-skills`. Full detail: `wiki/bootstrap.md`.
+
+## Profiles: what to copy (manual migration)
 
 | Item | Copy? |
 | --- | --- |
-| `SOUL.md` | Yes |
-| `profile.yaml` | Yes |
+| `config.yaml`, `.env` | Yes (init copies from default automatically) |
+| `SOUL.md` | Installed by init from plugin prompts — do not copy from default |
+| `skills/` | Seeded by init — do not copy from default |
 | `sessions/`, `cache/` | No (large; regenerated) |
 
 `hermes_home_hint` in `kanban-config.yaml` is documentation for operators only — it is not substituted into skills.

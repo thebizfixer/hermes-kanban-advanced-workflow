@@ -219,15 +219,20 @@ On native Windows CMD/PowerShell, use the same `git` commands with your resolved
 
 After pull, restart the gateway so materialized skills/scripts refresh.
 
+### Dispatch profiles still have default Hermes skills or wrong SOUL.md
+
+**Symptom:** After bootstrap, `hermes profile show kanban-advanced-worker` reports Skills: 90+; profile `skills/` contains `devops`, `github`, etc.; `SOUL.md` is generic, not `# Worker Prompt` / `# Orchestrator Prompt`.
+
+**Fix:** See [[bootstrap#troubleshooting]] — usually re-run bootstrap after **Update Plugin**, or `HERMES_HOME` mismatch between init and the path you inspect on disk. Delete dispatch profiles (`hermes profile delete <name> -y`) and bootstrap again.
+
 ### Agent asked to switch to orchestrator but user doesn't know how
 
 Hermes **cannot switch profiles inside an active chat**. `/profile` only shows the current profile ([Slash Commands Reference](https://hermes-agent.nousresearch.com/docs/reference/slash-commands)). Profile switching is a **new session** ([Profiles guide](https://hermes-agent.nousresearch.com/docs/user-guide/profiles)).
 
 ```bash
 hermes profile list          # * marks active; discover real names
-hermes -p orchestrator chat  # new orchestrator session (all platforms)
-# or: orchestrator chat      # if profile alias exists
-# or: hermes profile use orchestrator && hermes chat
+hermes -p kanban-advanced-orchestrator chat  # new orchestrator session (all platforms)
+# or: kanban-advanced-orchestrator chat      # if profile alias exists
 ```
 
 Then repeat **execute the plan**. Plugin reference: `plugin/data/references/profile-switching.md`.
@@ -242,6 +247,7 @@ See `plugin/data/registry/error-codes.yaml` for all 36 codes with severity, reco
 - **Rate limits / provider setup:** See [[provider-strategy]]
 - **Governance concepts:** See [[governance]]
 - **Setup problems:** See [[setup]]
+- **Init / bootstrap / dispatch profiles:** See [[bootstrap]]
 - **Config questions:** See [[configuration]]
 - **Interaction model / trigger phrases:** See the [README Interaction Model](../README.md#interaction-model)
 - **KPI questions:** See the [README Agent KPIs](../README.md#agent-kpis)

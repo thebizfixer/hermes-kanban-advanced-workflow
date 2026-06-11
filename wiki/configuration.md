@@ -25,7 +25,10 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `trigger_branch` | Protected branch agents must not push to (E009 when set) | unset — leave blank to disable |
 | `policy_profile` | Governance enforcement in `kanban-config.yaml` (`advisory` \| `balanced` \| `strict`) | `balanced` |
 | `KANBAN_POLICY_PROFILE` | Runtime mirror of `policy_profile` (written to `.env` at init) | `balanced` |
-| `PREFLIGHT_PROFILES` | Profiles to validate in preflight §5 | `worker,orchestrator` |
+| `worker_profile` | Hermes profile for implementation cards | `kanban-advanced-worker` |
+| `orchestrator_profile` | Hermes profile for gate/audit/orchestration cards | `kanban-advanced-orchestrator` |
+| `preflight_profiles` | Profiles validated in preflight §5 | `kanban-advanced-worker,kanban-advanced-orchestrator` |
+| `PREFLIGHT_PROFILES` | Env override for preflight §5 (legacy) | same as `preflight_profiles` |
 | `PREFLIGHT_MEMORY_MIN_MB` | Blocking memory floor | `1024` |
 | `PREFLIGHT_MEMORY_WARN_MB` | Degraded memory threshold | `2048` |
 | `PREFLIGHT_SKIP_API` | Skip API health check | unset |
@@ -43,7 +46,7 @@ To change the coding agent: edit `.env`, use dashboard **Save**, or re-run `herm
 
 ## Re-init and branch preservation
 
-`hermes kanban-advanced init` and dashboard **Bootstrap** refresh profiles, materialized skills, and cron scripts. They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh dispatch profiles (SOUL.md, role-only skills, verification), materialized shared skills, and cron scripts. See [[bootstrap]]. They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
 
 ```bash
 hermes kanban-advanced init --project-root .                    # keeps existing branches
@@ -93,19 +96,21 @@ Set the reasoning effort per profile based on its role:
 
 | Profile | Thinking | Rationale |
 |---------|----------|-----------|
-| **orchestrator** | `high` | Plans, audits, reconciles — needs depth over speed |
-| **worker** | `medium` | Supervises agents, runs eval chain — balance of speed and accuracy |
+| **kanban-advanced-orchestrator** | `high` | Plans, audits, reconciles — needs depth over speed |
+| **kanban-advanced-worker** | `medium` | Supervises agents, runs eval chain — balance of speed and accuracy |
 | **Coding agent** | `low` / off | Code generation — speed over depth; the worker verifies output |
+
+Dispatch profiles are created by init with `--no-skills` (no Hermes bundled skills). SOUL and role skills: [[bootstrap]].
 
 Configure in each profile's `config.yaml`:
 ```yaml
-# orchestrator profile
+# kanban-advanced-orchestrator
 model:
   default: <model-name>
   provider: <provider-name>
   thinking: high
 
-# worker profile
+# kanban-advanced-worker
 model:
   default: <model-name>
   provider: <provider-name>

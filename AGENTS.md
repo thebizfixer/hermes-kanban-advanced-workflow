@@ -15,6 +15,7 @@ Load the relevant wiki page for detailed instructions:
 | Question | Load |
 |----------|------|
 | How do I set this up? | `wiki/setup.md` |
+| How does init / bootstrap work? (profiles, SOUL, skills) | `wiki/bootstrap.md` |
 | How do I configure it? | `wiki/configuration.md` |
 | How does governance work? | `wiki/governance.md` |
 | Why block-on-create / decomposition workflow? | `wiki/decomposition-workflow.md` |
@@ -29,6 +30,7 @@ Load the relevant wiki page for detailed instructions:
 
 ## Key commands
 
+- `hermes kanban-advanced init` — bootstrap project (dispatch profiles, config, cron scripts)
 - `hermes kanban-advanced decompose --plan <file>` — create cards from a plan
 - `hermes kanban-advanced list` — board status
 - `hermes kanban-advanced validate` — pre-dispatch validation

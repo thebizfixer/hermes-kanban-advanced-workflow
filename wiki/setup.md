@@ -21,36 +21,33 @@
    # Should show: kanban-advanced  v1.0.0
    ```
 
-3. **Create profiles:**
+3. **Bootstrap your project** (creates dispatch profiles automatically):
    ```bash
-   `hermes kanban-advanced init` creates (or renames legacy `worker`/`orchestrator` to)
-   `kanban-advanced-orchestrator` and `kanban-advanced-worker` automatically.
+   cd your-project
+   hermes kanban-advanced init --project-root . --working-branch <branch-name>
    ```
-   Configure thinking effort per role (see [[configuration]]):
-   - **orchestrator** → `thinking: high` (planning, auditing, reconciling)
-   - **worker** → `thinking: medium` (supervision, eval chain)
+   Init creates `kanban-advanced-orchestrator` and `kanban-advanced-worker` (or renames legacy `orchestrator`/`worker`), installs plugin **SOUL.md** prompts, seeds **role-only** profile skills (no Hermes bundled skills), and verifies the result. Full detail: [[bootstrap]].
+
+   This also provisions config overlay, cron scripts, and environment settings. During init, you'll be asked which **coding agent binary** you use (Cursor CLI `agent`, Claude Code `claude`, OpenAI Codex `codex`, etc.). The choice is written to `.hermes/kanban-overrides/kanban-config.yaml` (`coding_agent_binary`) and `.env` (`KANBAN_CODING_AGENT`). Workers read this to dispatch the right binary. See [[configuration]] for what the overlay contains.
+
+   **Re-init after `hermes update`:** Safe to run again — existing `working_branch` / `trigger_branch` are preserved unless you pass `--working-branch`. Bootstrap re-seeds dispatch profile SOUL/skills and re-verifies. To change the integration branch later, edit the overlay or use dashboard **Save** (not Bootstrap). If the dashboard shows the wrong branch, set `KANBAN_PROJECT_ROOT` to your app repo — see [[troubleshooting]].
+
+4. **Configure thinking effort per role** (optional, after bootstrap — see [[configuration]]):
+   - **kanban-advanced-orchestrator** → `thinking: high` (planning, auditing, reconciling)
+   - **kanban-advanced-worker** → `thinking: medium` (supervision, eval chain)
    - **Coding agent** → `thinking: low` or off (code generation, speed over depth)
    ```bash
-   hermes config set model.thinking high --profile orchestrator
-   hermes config set model.thinking medium --profile worker
+   hermes config set model.thinking high --profile kanban-advanced-orchestrator
+   hermes config set model.thinking medium --profile kanban-advanced-worker
    ```
-   Verify each profile has a valid `config.yaml` with a `model:` block:
+   Verify each dispatch profile has a valid `config.yaml` with a `model:` block:
    ```bash
-   for p in orchestrator worker; do
+   for p in kanban-advanced-orchestrator kanban-advanced-worker; do
      DIR=$(hermes profile show "$p" 2>/dev/null | grep "Path:" | awk '{print $2}')
      [ -f "$DIR/config.yaml" ] && grep -q "default:" "$DIR/config.yaml" \
        && echo "OK: $p" || echo "FAIL: $p needs config.yaml with model.default"
    done
    ```
-
-4. **Bootstrap your project:**
-   ```bash
-   cd your-project
-   hermes kanban-advanced init --project-root . --working-branch <branch-name>
-   ```
-   This provisions config overlay, cron scripts, and environment settings. During init, you'll be asked which **coding agent binary** you use (Cursor CLI `agent`, Claude Code `claude`, OpenAI Codex `codex`, etc.). The choice is written to `.hermes/kanban-overrides/kanban-config.yaml` (`coding_agent_binary`) and `.env` (`KANBAN_CODING_AGENT`). Workers read this to dispatch the right binary. See [[configuration]] for what the overlay contains.
-
-   **Re-init after `hermes update`:** Safe to run again — existing `working_branch` / `trigger_branch` are preserved unless you pass `--working-branch`. To change the integration branch later, edit the overlay or use dashboard **Save** (not Bootstrap). If the dashboard shows the wrong branch, set `KANBAN_PROJECT_ROOT` to your app repo — see [[troubleshooting]].
 
 ### Skill namespace
 
@@ -76,13 +73,20 @@ Set during init (step 1c). Supported agents:
 
 The worker reads `KANBAN_CODING_AGENT` from the environment (set in `.env`) and dispatches the coding agent with `[coding_agent, "-p", prompt, ...]`. To change later, edit `.env` or re-run `hermes kanban-advanced init`.
 
-5. **Verify everything:**
+5. **Verify dispatch profiles on disk** (see [[bootstrap#verify-on-disk-after-bootstrap]]):
+   ```bash
+   hermes profile show kanban-advanced-worker | grep Skills:
+   hermes profile show kanban-advanced-orchestrator | grep Skills:
+   # Expect: Skills: 2  and  Skills: 9
+   ```
+
+6. **Verify environment:**
    ```bash
    hermes kanban-advanced preflight <plan-id>
    ```
    Fix any failures before proceeding. See [[troubleshooting]] for common issues.
 
-6. **Tell the user:** "Setup complete. Create a plan with the orchestrator (`orchestrator` profile), then run `hermes kanban-advanced decompose --plan <file>`. See the README for the full lifecycle."
+7. **Tell the user:** "Setup complete. Create a plan with the orchestrator (`kanban-advanced-orchestrator` profile), then run `hermes kanban-advanced decompose --plan <file>`. See the README for the full lifecycle."
 
 ## Fresh Hermes install
 
@@ -97,9 +101,12 @@ If Hermes Agent isn't installed yet:
 Hermes Agent runs natively on Windows 10/11 — no WSL required. The installer provisions **PortableGit** (a self-contained Git-for-Windows with `bash.exe` and the full POSIX toolchain).
 
 Hermes state directories on native Windows:
-- **Data:** `%USERPROFILE%\.hermes` (config, profiles, skills, memory)
+- **Data:** `%LOCALAPPDATA%\hermes` (config, profiles, skills, memory) — primary on Hermes Desktop
+- **Legacy:** `%USERPROFILE%\.hermes` (some installs)
 - **Install:** `%LOCALAPPDATA%\hermes\hermes-agent`
 - **Git:** `%LOCALAPPDATA%\hermes\git` (PortableGit)
+
+Init resolves `HERMES_HOME` automatically; see [[bootstrap#hermes_home-resolution]].
 
 See the [Windows Native Guide](https://hermes-agent.nousresearch.com/docs/user-guide/windows-native) for full details.
 
@@ -131,7 +138,7 @@ Cross-mount paths cause silent write corruption. Preflight check 0 catches this 
 ## After setup: first plan
 
 The user should:
-1. Draft a plan with the orchestrator (`orchestrator` profile) — provide a goal, let the orchestrator write it
+1. Draft a plan with the orchestrator (`kanban-advanced-orchestrator` profile) — provide a goal, let the orchestrator write it
 2. The orchestrator runs preflight → attestation → decomposition
 3. Workers execute, evaluation chain verifies, orchestrator audits
 
@@ -139,4 +146,4 @@ The user should:
 
 **KPIs are automatic.** The agent surfaces success rate, intervention rate, token burn, and failure-mode distribution at the reconciliation checkpoint. See the [README Agent KPIs](../README.md#agent-kpis).
 
-On session start, the `on_session_start` hook fires: on the orchestrator profile it hints to load `kanban-advanced:kanban-orchestrator`; on other profiles it hints about trigger phrases and the bridge skill. All 11 skills are also materialized to `$HERMES_HOME/skills/kanban-advanced/` during init, making them discoverable via the system prompt's `<available_skills>` index.
+On session start, the `on_session_start` hook fires: on `kanban-advanced-orchestrator` it hints to load `kanban-advanced:kanban-orchestrator`; on other profiles it hints about trigger phrases and the bridge skill. All 11 skills are materialized to `$HERMES_HOME/skills/kanban-advanced/` during init (shared index); dispatch profiles additionally get role-only copies under their profile `skills/` dirs — see [[bootstrap#two-skill-locations-do-not-confuse]].

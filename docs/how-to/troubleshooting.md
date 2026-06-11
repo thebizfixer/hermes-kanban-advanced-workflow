@@ -16,6 +16,7 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 | torn-extend / dispatch stuck | `hermes gateway restart`; see `references/sqlite-kanban-db-recovery.md` |
 | Plugin not loading | `hermes plugins list`; restart Hermes after install |
 | Working branch reset to `main` after `hermes update` | Restore in `kanban-config.yaml` or dashboard **Save**; set `KANBAN_PROJECT_ROOT`; re-init now preserves branches — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
+| Profiles have default Hermes skills after bootstrap | [wiki/bootstrap.md](../../wiki/bootstrap.md) — `HERMES_HOME` mismatch or re-bootstrap after Update Plugin |
 | Plugin update / `git pull`: local changes would be overwritten | Install dir is upstream mirror only — **Update Plugin** auto-resets; or `git reset --hard HEAD && git clean -fd` in `plugin_install_path` — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
 | Cross-mount / dual clone | `docs/examples/cross-mount-filesystems.md` |
 
