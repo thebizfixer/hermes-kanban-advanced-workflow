@@ -588,20 +588,23 @@
                 !modelOptions ? React.createElement("div", { className: "p-4 text-xs text-muted-foreground" }, "Loading…")
                 : modelOptions.error ? React.createElement("div", { className: "p-4 text-xs text-red-400" }, "Could not load")
                 : (modelOptions.providers || []).map(function (prov) {
-                    var provName = prov.name || prov;
+                    var provId = prov.id || prov.slug || (typeof prov === "string" ? prov : "");
+                    var provLabel = prov.name || provId || prov;
                     var provModels = prov.models || [];
                     if (!provModels.length) return null;
-                    return React.createElement("div", { key: provName || prov },
-                      React.createElement("div", { className: "px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/30" }, provName),
+                    return React.createElement("div", { key: provId || provLabel },
+                      React.createElement("div", { className: "px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/30" }, provLabel),
                       provModels.map(function (m) {
                         var modelId = typeof m === "string" ? m : m.id || m.name;
                         var modelLabel = typeof m === "string" ? m : m.name || m.id;
-                        var isCurrent = status && status.profiles && status.profiles[editingProfile] && status.profiles[editingProfile].model === modelId;
-                        var isSel = selectedModel && selectedModel.model === modelId && selectedModel.provider === provName;
+                        var profileInfo = status && status.profiles && status.profiles[editingProfile];
+                        var isCurrent = profileInfo && profileInfo.model === modelId
+                          && (!profileInfo.provider || profileInfo.provider === provId);
+                        var isSel = selectedModel && selectedModel.model === modelId && selectedModel.provider === provId;
                         return React.createElement("div", {
                           key: modelId,
                           className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (isSel ? " bg-accent/10" : ""),
-                          onClick: function () { setSelectedModel({ provider: provName, model: modelId }); }
+                          onClick: function () { setSelectedModel({ provider: provId, model: modelId }); }
                         },
                           React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, isSel ? "✓" : ""),
                           React.createElement("span", { className: "flex-1 truncate font-mono" }, modelLabel),

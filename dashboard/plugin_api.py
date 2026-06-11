@@ -48,6 +48,11 @@ from plugin.coding_agent import (  # noqa: E402
     model_display_label,
     normalize_coding_agent_model,
 )
+from plugin.hermes_model_config import (  # noqa: E402
+    copy_active_model_to_profile,
+    read_model_config_from_config_show,
+    profile_has_model_config,
+)
 from plugin.profile_bootstrap import (  # noqa: E402
     dispatch_profile_names,
     ensure_dispatch_profiles,
@@ -198,13 +203,12 @@ def _check_profiles(
             stdout = _profile_config_show(
                 profile, cached=config_show_cache.get(profile)
             )
-            m = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", stdout)
-            if m and m.group(1) and m.group(1) != "None":
+            model_cfg = read_model_config_from_config_show(stdout)
+            if profile_has_model_config(model_cfg):
                 info["has_model"] = True
-                info["model"] = m.group(1)
-            p = re.search(r"'provider':\s*'([^']+)'", stdout)
-            if p:
-                info["provider"] = p.group(1)
+                info["model"] = model_cfg.get("default", "")
+            if model_cfg.get("provider"):
+                info["provider"] = model_cfg["provider"]
 
             if info["has_model"] and probe_models:
                 cache_key = f"model_reachable:{profile}"
@@ -662,16 +666,13 @@ async def init(request: Request):
         else:
             output.append(f"   !  {profile}: no model configured — copy from current profile")
             try:
-                r = _run([HERMES_BIN, "config", "show"], env=init_env)
-                dm = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", r.stdout)
-                dp = re.search(r"'provider':\s*'([^']+)'", r.stdout)
-                du = re.search(r"'base_url':\s*'([^']*)'", r.stdout)
-                if dm and dp:
-                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.default", dm.group(1)], env=init_env)
-                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.provider", dp.group(1)], env=init_env)
-                    if du and du.group(1):
-                        _run([HERMES_BIN, "-p", profile, "config", "set", "model.base_url", du.group(1)], env=init_env)
+                copied = copy_active_model_to_profile(
+                    _run, HERMES_BIN, profile, env=init_env
+                )
+                if copied:
                     output.append(f"   OK {profile} configured")
+                else:
+                    output.append(f"   !  Skipped: active profile has no model in config.yaml")
             except Exception as e:
                 output.append(f"   !  Skipped: {e}")
 

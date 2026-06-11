@@ -41,6 +41,12 @@ from .config_overlay import (
     resolve_coding_agent_model,
 )
 from .coding_agent import interactive_pick_model
+from .hermes_model_config import (
+    copy_active_model_to_profile,
+    profile_has_model_config,
+    read_active_model_config,
+    read_model_config_from_config_show,
+)
 from .profile_bootstrap import (
     dispatch_profile_names,
     ensure_dispatch_profiles,
@@ -272,31 +278,21 @@ def _handle_init(args) -> int:
     # ── 1a. Model config ─────────────────────────────────────────────
     print()
     print("1a. Checking profile model config...")
-    # Sniff the current profile's model as a suggestion
-    try:
-        r = _run([HERMES_BIN, "config", "show"])
-        default_model = ""
-        default_provider = ""
-        default_url = ""
-        m = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", r.stdout)
-        if m:
-            default_model = m.group(1)
-        m = re.search(r"'provider':\s*'([^']+)'", r.stdout)
-        if m:
-            default_provider = m.group(1)
-        m = re.search(r"'base_url':\s*'([^']*)'", r.stdout)
-        if m:
-            default_url = m.group(1)
-        suggestion = f"{default_provider}/{default_model}" if default_provider and default_model else "none found"
-    except Exception:
-        default_model = default_provider = default_url = ""
-        suggestion = "unknown"
+    active_model = read_active_model_config(_run, HERMES_BIN)
+    default_model = active_model.get("default", "")
+    default_provider = active_model.get("provider", "")
+    suggestion = (
+        f"{default_provider}/{default_model}"
+        if default_provider and default_model
+        else (default_model or "none found")
+    )
 
     for profile in dispatch_profiles:
         try:
             r = _run([HERMES_BIN, "-p", profile, "config", "show"])
-            pm = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", r.stdout)
-            has_model = bool(pm and pm.group(1) and pm.group(1) != "None")
+            has_model = profile_has_model_config(
+                read_model_config_from_config_show(r.stdout)
+            )
         except Exception:
             has_model = False
         if has_model:
@@ -304,11 +300,10 @@ def _handle_init(args) -> int:
         else:
             print(f"   !  {profile}: no model configured")
             print(f"      Current profile uses: {suggestion}")
-            if default_model and default_provider and _yn(f"   Copy current model config to {profile}?"):
-                _run([HERMES_BIN, "-p", profile, "config", "set", "model.default", default_model])
-                _run([HERMES_BIN, "-p", profile, "config", "set", "model.provider", default_provider])
-                if default_url:
-                    _run([HERMES_BIN, "-p", profile, "config", "set", "model.base_url", default_url])
+            if profile_has_model_config(active_model) and _yn(
+                f"   Copy current model config to {profile}?"
+            ):
+                copy_active_model_to_profile(_run, HERMES_BIN, profile)
                 print(f"   OK {profile} configured (copied from current profile)")
             elif _yn(f"   Launch interactive model picker for {profile}?"):
                 print(f"   Run this in another terminal, then press Enter here to continue:")
