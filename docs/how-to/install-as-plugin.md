@@ -40,6 +40,24 @@ Replace `<branch-name>` with your integration branch (e.g. `main`).
 
 CLI init step **1c** asks for the binary; step **1c-ii** asks for the model (`auto` or an ID — Cursor: live list from `agent --list-models`). Both are smoke-tested when the binary is on PATH.
 
+### Coding-agent auth (before you execute)
+
+Bootstrap smoke is **advisory** — init can succeed even when headless auth is not ready yet (`! coding CLI auth/model check failed` in the log).
+
+| Bootstrap provides | You must provide separately |
+| --- | --- |
+| `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `HOME=` in `.env` | Vendor API keys in `.env` **or** login on the gateway host (`agent login`, `claude login`, `codex login`, …) |
+
+**Blocking checks** run at preflight and pre-dispatch — not during bootstrap. Before your first execute:
+
+```bash
+# After adding keys or running vendor login
+grep -E '^(KANBAN_CODING_AGENT|HOME)=' .env
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+```
+
+SSOT: [`plugin/data/references/coding-agent-auth.md`](../../plugin/data/references/coding-agent-auth.md). Agent playbook: [`AGENTS.md`](../../AGENTS.md) § *When a user has coding-binary auth trouble*.
+
 ### Dispatch profiles (created by init)
 
 | Role | Profile name |
@@ -107,6 +125,7 @@ Follow the [tutorial](../tutorial/kanban-advanced-tutorial.md) for a guided walk
 | Init fails with "profile not found" | Re-run init; accept profile create prompts or use `--force` |
 | Profiles have 90+ skills after bootstrap | Wrong `HERMES_HOME` or stale plugin — see [wiki/bootstrap.md](../../wiki/bootstrap.md) |
 | "Profile reconciliation/verification failed" | Read bootstrap output issues; Update Plugin + restart gateway |
+| Bootstrap OK but execute fails on coding agent | Bootstrap does not block on auth — run `check_coding_agent_cli.py`, fix keys/OAuth/`HOME` — [coding-agent auth](../../plugin/data/references/coding-agent-auth.md) |
 | "Project-local plugins are disabled" | Init sets `HERMES_ENABLE_PROJECT_PLUGINS=true` in `.env`. Source it or restart. |
 | Cron scripts don't run | Verify they exist at `$HERMES_HOME/scripts/`. Re-run init. |
 

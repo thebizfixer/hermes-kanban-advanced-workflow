@@ -269,6 +269,12 @@ check_coding_agent_cli_reachability() {
     return
   fi
 
+  if [[ -z "${HOME:-}" ]]; then
+    record_check "coding_agent_cli_reachability" "fail" "blocking" \
+      "HOME is unset — coding-agent CLIs cannot load OAuth (set HOME in .env or gateway systemd unit)"
+    return
+  fi
+
   out="$(cd "$REPO_ROOT" && PYTHONPATH="$REPO_ROOT" python3 "$SCRIPT_DIR/check_coding_agent_cli.py" --timeout "$probe_timeout" 2>&1)" \
     || rc=$?
 

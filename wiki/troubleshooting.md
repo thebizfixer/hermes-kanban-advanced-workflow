@@ -89,6 +89,30 @@ grep -E 'coding_agent_invoke|terminal\(\)' \
 
 Also confirm the worker profile loads **plugin** skills (`kanban-worker` from `$HERMES_HOME/skills/kanban-advanced/`), not the built-in `devops/kanban-worker` copy. `hermes profile show kanban-advanced-worker | grep Skills:` should list only role skills (count 2), with content from the materialized plugin tree.
 
+### Bootstrap passed but coding-agent auth fails at execute
+
+**Symptom:** User says init or dashboard **Bootstrap** succeeded, but preflight, `pre_dispatch_gate.sh`, or workers block with `[escalation:coding_agent:auth]` or `coding_agent_cli_reachability` failure.
+
+**Root cause:** Bootstrap runs **advisory** smoke — it logs `! coding CLI auth/model check failed` but does not fail init. Bootstrap also does **not** write vendor API keys (`GROK_API_KEY`, `ANTHROPIC_API_KEY`, …). Decomposition requires preflight/gate smoke to pass.
+
+**Fix:**
+
+```bash
+# 1. Confirm binary + HOME
+grep -E '^(KANBAN_CODING_AGENT|HOME)=' .env
+
+# 2. Add missing API key OR run vendor login on gateway host (agent login, claude login, …)
+
+# 3. Blocking smoke (same as gate)
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+
+# 4. Invalidate stale preflight cache
+rm -f .hermes/kanban/preflight_cache.json
+hermes gateway restart
+```
+
+SSOT: `plugin/data/references/coding-agent-auth.md`. Agent playbook: `AGENTS.md` § *When a user has coding-binary auth trouble*.
+
 ### "Coding agent smoke failed" / E020 / `Workspace Trust Required`
 
 **Symptom:** Worker blocks at Step 3 or E020. Dashboard **Coding Agent** dot may still be green. Cursor stderr shows `Workspace Trust Required`, or smoke exits non-zero from the worktree.
@@ -111,6 +135,25 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke
 Per-binary flags: `plugin/data/references/coding-agent-cli-invocation.md`. Do **not** grep worker logs for `[unauthenticated]` — that is the Cursor indexing service, not the agent.
 
 **Prevention:** Step 3 uses `coding_agent_invoke.sh smoke` after `worktree_setup.sh`. Preflight cache (< 30 min) can skip smoke on Step 2 fast path — if auth changed, delete `.hermes/kanban/preflight_cache.json` or wait for expiry.
+
+### `HOME: unbound variable` / false "OAuth required" (gateway workers)
+
+**Symptom:** Worker blocks with `[escalation:coding_agent:auth]` or smoke exit 1. Cursor stderr shows `HOME: unbound variable`. `agent status` may still report logged in when run from an interactive shell with `HOME` set.
+
+**Root cause:** Gateway systemd units with `SetLoginEnvironment=no` often do not pass `HOME` to worker processes. Cursor's `agent` wrapper uses `set -u` and reads `${HOME}/.config/cursor/auth.json` — without `HOME`, the binary crashes before OAuth is consulted.
+
+**Fix:**
+
+```bash
+# Persist HOME for the project (init/Save does this automatically on latest plugin)
+grep '^HOME=' .env || echo "HOME=$HOME" >> .env
+# Or in gateway unit: Environment="HOME=/home/youruser"
+hermes gateway restart
+rm -f .hermes/kanban/preflight_cache.json
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+```
+
+See `plugin/data/references/coding-agent-auth.md` for per-binary credential paths.
 
 ### Cursor OAuth expired (`agent status` OK, smoke fails)
 

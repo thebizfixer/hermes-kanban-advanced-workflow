@@ -172,6 +172,7 @@ INVOKE="$BUNDLE/scripts/coding_agent_invoke.sh"
 [ -x "$INVOKE" ] || INVOKE="${HERMES_HOME}/scripts/coding_agent_invoke.sh"
 
 # Smoke: allow up to 180s (cold Cursor start + JSON). Uses --trust for agent.
+# coding_agent_invoke.sh sources scripts/lib/coding_agent_env.sh (sets HOME if missing).
 cd "$WORKTREE_PATH"
 timeout 180 bash "$INVOKE" smoke
 ```

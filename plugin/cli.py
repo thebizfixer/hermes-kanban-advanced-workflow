@@ -32,6 +32,7 @@ from .config_overlay import (
     resolve_plugin_install_dir,
     resolve_plugin_skills_src,
     resolve_policy_profile,
+    sync_dispatch_runtime_env,
     sync_project_env,
     normalize_optional_branch,
     overlay_path,
@@ -512,6 +513,11 @@ def _handle_init(args) -> int:
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )
+    home_updates = sync_dispatch_runtime_env(project_root)
+    if home_updates.get("HOME"):
+        print(f"   OK HOME={home_updates['HOME']} (coding-agent credential paths)")
+    else:
+        print("   !  Could not resolve HOME — set HOME= in .env before gateway dispatch")
     print("   OK")
 
     # ── 5. Dispatcher config ─────────────────────────────────────────

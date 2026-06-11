@@ -133,6 +133,17 @@ Tip: use --model <id>
             )
         )
 
+    def test_home_unbound_is_auth_fail(self) -> None:
+        self.assertFalse(
+            _interpret_smoke_result(
+                "agent",
+                returncode=1,
+                stdout="",
+                stderr="line 18: HOME: unbound variable",
+                json_attempt=False,
+            )
+        )
+
     def test_authentication_required_is_auth_fail(self) -> None:
         self.assertFalse(
             _interpret_smoke_result(

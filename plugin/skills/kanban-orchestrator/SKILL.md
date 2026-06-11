@@ -219,7 +219,7 @@ bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 
 This runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py` — separate from Hermes profile model reachability) → attestation → card policy present → plan memory seeded → DB integrity. Fails on any blocking check with a specific error.
 
-**Coding-agent auth gate (blocking):** If `coding_agent_cli` or preflight `coding_agent_cli_reachability` fails, **do not decompose**. Cursor: `agent status` can lie when OAuth in `~/.config/cursor/auth.json` is expired — operator runs `agent login`, then Update Plugin → Bootstrap/provision → `hermes gateway restart` → delete `.hermes/kanban/preflight_cache.json` → re-run gate.
+**Coding-agent auth gate (blocking):** Bootstrap smoke is **advisory only** — init can succeed while auth is broken. If `coding_agent_cli` or preflight `coding_agent_cli_reachability` fails, **do not decompose**. Load `references/coding-agent-auth.md`. Common fixes: API key in `.env`, vendor login on gateway host, `HOME=` in `.env` or systemd. Cursor: `agent status` can lie when `HOME` is unset or OAuth in `~/.config/cursor/auth.json` is expired — operator runs `agent login` (or fixes `HOME`), `hermes gateway restart` → delete `.hermes/kanban/preflight_cache.json` → re-run gate. Bootstrap alone does not prove workers can dispatch the coding CLI.
 
 After the gate passes, proceed directly to the Standard process. Plans may sit for hours or days while the user thinks them over. After the plan is optimized:
 

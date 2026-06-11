@@ -22,6 +22,8 @@ Load the relevant wiki page for detailed instructions:
 | How does governance work? | `wiki/governance.md` |
 | Why block-on-create / decomposition workflow? | `wiki/decomposition-workflow.md` |
 | Something is broken | `wiki/troubleshooting.md` |
+| Coding agent auth / smoke failed (bootstrap passed, workers block) | `plugin/data/references/coding-agent-auth.md` → then `wiki/troubleshooting.md` |
+| Bootstrap limitations (advisory smoke vs blocking gate) | `wiki/bootstrap.md` § Coding-agent auth during bootstrap |
 | How do I handle rate limits? | `wiki/provider-strategy.md` |
 | What's the DMAIC mapping? | `wiki/six-sigma-mapping.md` |
 | Where are upstream docs? | `wiki/external-references.md` |
@@ -30,9 +32,25 @@ Load the relevant wiki page for detailed instructions:
 
 - Hermes Agent **≥ 0.16.0** (see `wiki/setup.md`)
 
+## When a user has coding-binary auth trouble
+
+Bootstrap smoke is **advisory** — init can succeed with `! coding CLI auth/model check failed`. **Preflight and pre-dispatch gate block decomposition.**
+
+1. Load `plugin/data/references/coding-agent-auth.md` (SSOT).
+2. Confirm they authenticated the **coding CLI** (API key in `.env` or vendor login on gateway host) — not only Hermes profile OAuth.
+3. Run:
+   ```bash
+   grep -E '^(KANBAN_CODING_AGENT|HOME)=' .env
+   PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+   ```
+4. If `HOME: unbound variable` — set `HOME=` in `.env` or gateway systemd; restart gateway.
+5. After any auth fix: `rm -f .hermes/kanban/preflight_cache.json` and re-run `preflight.sh` / `pre_dispatch_gate.sh`.
+
+Do **not** tell the user bootstrap alone proves workers can dispatch the coding agent.
+
 ## Key commands
 
-- `hermes kanban-advanced init` — bootstrap project (dispatch profiles, config, cron scripts)
+- `hermes kanban-advanced init` — bootstrap project (dispatch profiles, config, cron scripts; **advisory** coding-agent smoke only)
 - `hermes kanban-advanced decompose --plan <file>` — create cards from a plan
 - `hermes kanban-advanced list` — board status
 - `hermes kanban-advanced validate` — pre-dispatch validation

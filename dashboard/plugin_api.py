@@ -40,8 +40,10 @@ from plugin.config_overlay import (  # noqa: E402
     resolve_plugin_skills_src,
     resolve_policy_profile,
     resolve_project_root,
+    sync_dispatch_runtime_env,
     sync_project_env,
 )
+from plugin.coding_agent_env import ensure_coding_agent_runtime_env  # noqa: E402
 from plugin.coding_agent import (  # noqa: E402
     SMOKE_TIMEOUT_SECONDS,
     check_coding_agent_cli,
@@ -114,7 +116,8 @@ def _run_coding_agent_cli(
     cmd: list[str], timeout: int = SMOKE_TIMEOUT_SECONDS, cwd: str | None = None, env: dict | None = None
 ) -> subprocess.CompletedProcess:
     """Subprocess runner for coding-CLI smoke/list — longer timeout than generic _run."""
-    return _run(cmd, timeout=timeout, cwd=cwd, env=env)
+    runtime_env = ensure_coding_agent_runtime_env({**os.environ, **(env or {})})
+    return _run(cmd, timeout=timeout, cwd=cwd, env=runtime_env)
 
 
 def _read_config(project_root: Path) -> dict:
@@ -784,6 +787,11 @@ async def init(request: Request):
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )
+    home_updates = sync_dispatch_runtime_env(project_root)
+    if home_updates.get("HOME"):
+        output.append(f"   OK HOME={home_updates['HOME']} (coding-agent credentials)")
+    else:
+        output.append("   !  Could not resolve HOME — set HOME= in .env for gateway workers")
     output.append("   OK")
 
     # Kanban config — disable built-in auto-decomposer so triage cards are
@@ -877,6 +885,11 @@ async def save(request: Request):
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )
+    home_updates = sync_dispatch_runtime_env(project_root)
+    if home_updates.get("HOME"):
+        output.append(f"   OK HOME={home_updates['HOME']} (coding-agent credentials)")
+    else:
+        output.append("   !  Could not resolve HOME — set HOME= in .env for gateway workers")
     output.append("   OK Saved .env")
 
     current_turns = _get_max_turns(project_root)

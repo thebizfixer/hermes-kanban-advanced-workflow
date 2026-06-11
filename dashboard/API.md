@@ -80,6 +80,8 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
 
 `profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
 
+**Bootstrap limitation:** Init/Save smoke is **advisory** — HTTP 200 / successful init can return with `! coding CLI auth/model check failed` in `output`. Bootstrap writes `KANBAN_CODING_AGENT*` and `HOME` to `.env` but **does not** add vendor API keys. **Preflight** and **pre-dispatch gate** block decomposition when headless auth fails. See `plugin/data/references/coding-agent-auth.md`.
+
 Use `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` to populate the dashboard model picker. See `docs/reference/coding-agents.md` and `plugin/data/references/coding-agent-cli-invocation.md`.
 
 When `config_exists` is false, the dashboard shows the bootstrap form.

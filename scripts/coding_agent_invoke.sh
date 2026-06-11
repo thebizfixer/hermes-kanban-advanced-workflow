@@ -10,6 +10,11 @@
 #   KANBAN_CODING_AGENT_MODEL  (default: auto)
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/coding_agent_env.sh
+source "$SCRIPT_DIR/lib/coding_agent_env.sh"
+ensure_coding_agent_home
+
 MODE="${1:-smoke}"
 PROMPT="${2:-say ok}"
 BINARY="${KANBAN_CODING_AGENT:-agent}"

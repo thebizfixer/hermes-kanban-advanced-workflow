@@ -202,11 +202,13 @@ PYTHONPATH=. python3 ${bundle_path}/scripts/check_coding_agent_cli.py --full
 
 **Env knobs:** `PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT` (default `45`), `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` (audit-noted skip).
 
+**Runtime env:** `HOME` must be set for gateway workers (OAuth paths). Init/Save writes `HOME=` to `.env`; `coding_agent_invoke.sh` sources `scripts/lib/coding_agent_env.sh`. See `references/coding-agent-auth.md`.
+
 **Typical fixes (by binary):**
 
 | Binary | Fix |
 | --- | --- |
-| `agent` (Cursor) | `agent login` — `agent status` alone is not sufficient when OAuth is stale |
+| `agent` (Cursor) | Ensure `HOME` is set first; then `agent login` — `agent status` alone is not sufficient when OAuth is stale or `HOME` is missing |
 | `claude` | `claude login` or Anthropic API key |
 | `codex` | Codex/OpenAI login or `OPENAI_API_KEY` |
 | `grok` | `GROK_API_KEY` |

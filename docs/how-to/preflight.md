@@ -15,8 +15,10 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 
 Exit **0** = pass or degraded-only; **1** = blocking.
 
-Checks include filesystem coherence, kanban DB integrity, memory, secrets, API URL (from overlay), gateway, profiles, environment parity.
+Checks include filesystem coherence, kanban DB integrity, memory, secrets, API URL (from overlay), gateway, profiles, environment parity, and **`coding_agent_cli_reachability`** (headless smoke of the configured coding CLI).
 
-Skip knobs: `references/preflight-env-knobs.md` (in plugin data).
+Bootstrap runs the same smoke **advisory** only — init can succeed when this check would fail. Preflight is the first **blocking** enforcement before decomposition.
+
+Skip knobs: `references/preflight-env-knobs.md` (in plugin data). Auth SSOT: `plugin/data/references/coding-agent-auth.md`.
 
 For agent-facing detail, load the `kanban-advanced:kanban-preflight` skill.

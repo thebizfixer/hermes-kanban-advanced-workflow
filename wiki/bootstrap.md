@@ -25,10 +25,40 @@ Bootstrap and init are the **same operation** from two entry points:
 8. **Materialize shared skills** — copy all 11 plugin skills to `$HERMES_HOME/skills/kanban-advanced/` (discoverable from any profile via `<available_skills>`).
 9. **Reconcile dispatch profiles** — SOUL.md, role-only profile skills, verification (see [Profile reconciliation](#profile-reconciliation)).
 10. **Cron scripts** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`.
-11. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE` in project `.env`.
+11. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE`, and **`HOME=`** (for coding-agent credential paths) in project `.env`.
 12. **Gateway check** — report running/stopped.
 
 Init **fails loudly** if profile reconciliation/verification does not pass (dashboard returns `"error": "Profile reconciliation/verification failed"`).
+
+---
+
+## Coding-agent auth during bootstrap (limitations)
+
+Bootstrap **tests** the configured headless CLI once; it does **not** fully provision auth for you.
+
+| Bootstrap does | Bootstrap does **not** |
+| --- | --- |
+| Pick `coding_agent_binary` + model | Write `GROK_API_KEY`, `ANTHROPIC_API_KEY`, etc. to `.env` |
+| Run **advisory** smoke (`say ok` headless) when binary is on PATH | **Block** init if smoke fails — logs `! coding CLI auth/model check failed` instead |
+| Write `HOME=` to `.env` | Force gateway systemd to pass `HOME` (may need unit `Environment=`) |
+| Write `KANBAN_CODING_AGENT*` to `.env` | Replace **pre-dispatch** / preflight gate before decomposition |
+
+**Supported operator model:** API key in `.env` **or** OAuth/login on the gateway host (`agent login`, `claude login`, …). See [`plugin/data/references/coding-agent-auth.md`](../plugin/data/references/coding-agent-auth.md).
+
+**Blocking enforcement** happens later:
+
+1. `preflight.sh` → `coding_agent_cli_reachability`
+2. `pre_dispatch_gate.sh` → `check_coding_agent_cli.py`
+3. Worker Step 3 → `coding_agent_invoke.sh smoke` from each worktree
+
+### Agent: user says "bootstrap passed but workers can't auth"
+
+1. Explain bootstrap smoke is **advisory** — decomposition requires preflight/gate.
+2. Load `plugin/data/references/coding-agent-auth.md` and run `check_coding_agent_cli.py` (not only dashboard status).
+3. Check `HOME` in gateway worker env (`HOME: unbound variable` is a common false OAuth).
+4. After fix: `rm -f .hermes/kanban/preflight_cache.json`, `hermes gateway restart`, re-run preflight.
+
+Full symptom matrix: [troubleshooting.md](troubleshooting.md) (coding-agent sections).
 
 ---
 

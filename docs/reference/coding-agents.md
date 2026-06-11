@@ -39,9 +39,26 @@ Model flag when not `auto`: `--model <id>` (all supported binaries).
 
 Implementation: [`plugin/coding_agent.py`](../../plugin/coding_agent.py) (`build_smoke_argv`, `build_dispatch_argv`, `smoke_test_coding_agent`). Tests: [`tests/test_coding_agent.py`](../../tests/test_coding_agent.py).
 
+## Bootstrap vs blocking auth (read this first)
+
+| Stage | Smoke? | Blocks? |
+| --- | --- | --- |
+| `hermes kanban-advanced init` / dashboard **Bootstrap** | Yes — one advisory run | **No** — warns with `! coding CLI auth/model check failed` |
+| Dashboard **Save** | Yes — when probing | **No** |
+| Preflight + `pre_dispatch_gate.sh` | Yes — `check_coding_agent_cli.py` | **Yes** — decomposition blocked |
+| Worker Step 3 (worktree) | Yes — `coding_agent_invoke.sh smoke` | **Yes** — card blocked |
+
+Bootstrap writes `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, and `HOME` to `.env`. It does **not** add vendor API keys — you must put keys in `.env` or run vendor login (`agent login`, `claude login`, …) on the gateway host **before** execute.
+
+**Agent routing:** user auth trouble → [`plugin/data/references/coding-agent-auth.md`](../../plugin/data/references/coding-agent-auth.md) § *Agent: user reports coding-binary auth trouble*.
+
 ## Auth gate (preflight / pre-dispatch)
 
 Before decomposition, `preflight.sh` runs `coding_agent_cli_reachability` and `pre_dispatch_gate.sh` runs `check_coding_agent_cli.py`. Both smoke the **configured** binary from `coding_agent_binary` / `KANBAN_CODING_AGENT` — not hardcoded to Cursor.
+
+**Always set `HOME`:** Gateway workers without `HOME` cannot load OAuth files (Cursor, Claude, Codex). Init and dashboard **Save** write `HOME=` to `.env`; `coding_agent_invoke.sh` also sources `scripts/lib/coding_agent_env.sh`.
+
+Per-binary auth SSOT: [`plugin/data/references/coding-agent-auth.md`](../../plugin/data/references/coding-agent-auth.md).
 
 ```bash
 PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py

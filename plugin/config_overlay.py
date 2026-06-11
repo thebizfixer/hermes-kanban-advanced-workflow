@@ -308,6 +308,19 @@ def resolve_policy_profile(
     return DEFAULT_POLICY_PROFILE
 
 
+def sync_dispatch_runtime_env(
+    project_root: Path,
+    env: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Persist HOME (and related) so gateway workers can resolve CLI credentials."""
+    from plugin.coding_agent_env import dispatch_runtime_env_updates
+
+    updates = dispatch_runtime_env_updates(env)
+    if updates:
+        sync_project_env(project_root, updates)
+    return updates
+
+
 def sync_project_env(project_root: Path, updates: dict[str, str]) -> None:
     """Upsert KEY=value lines in project .env."""
     import re

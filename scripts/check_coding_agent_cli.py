@@ -5,13 +5,14 @@ Used by preflight.sh and pre_dispatch_gate.sh before decomposition.
 
 Exit codes:
   0 — smoke passed (headless execution works)
-  1 — binary on PATH but smoke failed (auth, trust, timeout, model)
+  1 — binary on PATH but prerequisites or smoke failed
   2 — binary not on PATH (caller may treat as skip/degraded)
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,18 +28,28 @@ from plugin.coding_agent import (  # noqa: E402
     describe_smoke_failure,
     smoke_test_coding_agent,
 )
+from plugin.coding_agent_env import (  # noqa: E402
+    audit_coding_agent_prerequisites,
+    describe_prerequisite_issues,
+    ensure_coding_agent_runtime_env,
+)
 from plugin.config_overlay import (  # noqa: E402
     resolve_coding_agent,
     resolve_coding_agent_model,
 )
 
 
-def _run(cmd: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+def _run(
+    cmd: list[str],
+    timeout: int,
+    env: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         timeout=timeout,
+        env=env,
     )
 
 
@@ -61,6 +72,11 @@ def main() -> int:
         help=f"Use full dashboard smoke timeout ({SMOKE_TIMEOUT_SECONDS}s)",
     )
     parser.add_argument(
+        "--prerequisites-only",
+        action="store_true",
+        help="Check HOME and credential prerequisites without running smoke",
+    )
+    parser.add_argument(
         "--binary",
         default=None,
         help="Override coding agent binary (default: config / env)",
@@ -72,7 +88,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    env = dict(**{k: v for k, v in __import__("os").environ.items()})
+    env = ensure_coding_agent_runtime_env(dict(os.environ))
     binary = resolve_coding_agent(REPO_ROOT, coding_agent=args.binary, env=env)
     model = resolve_coding_agent_model(REPO_ROOT, coding_agent_model=args.model, env=env)
     timeout = SMOKE_TIMEOUT_SECONDS if args.full else args.timeout
@@ -85,6 +101,21 @@ def main() -> int:
         )
         return 2
 
+    prereq_issues = audit_coding_agent_prerequisites(binary, env)
+    if prereq_issues:
+        print(
+            describe_prerequisite_issues(binary, prereq_issues),
+            file=sys.stderr,
+        )
+        if args.prerequisites_only:
+            return 1
+        # Continue to smoke — execution test is authoritative when files exist
+        # but HOME was just repaired in-process.
+
+    if args.prerequisites_only:
+        print(f"OK: {binary} prerequisites passed (HOME={env.get('HOME', '?')})")
+        return 0
+
     last_stdout = ""
     last_stderr = ""
     timed_out = False
@@ -92,7 +123,7 @@ def main() -> int:
     def run_capture(cmd: list[str], timeout: int = 90):
         nonlocal last_stdout, last_stderr, timed_out
         try:
-            result = _run(cmd, timeout)
+            result = _run(cmd, timeout, env)
             last_stdout = result.stdout or ""
             last_stderr = result.stderr or ""
             return result
@@ -108,8 +139,11 @@ def main() -> int:
         reachable = False
 
     if reachable is True:
-        print(f"OK: {binary} headless smoke passed (model={model})")
+        print(f"OK: {binary} headless smoke passed (model={model}, HOME={env.get('HOME', '?')})")
         return 0
+
+    if prereq_issues and not (last_stdout or last_stderr):
+        return 1
 
     detail = describe_smoke_failure(
         binary,

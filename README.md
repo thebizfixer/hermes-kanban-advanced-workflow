@@ -23,6 +23,8 @@ hermes kanban-advanced init --project-root . --working-branch <branch-name>
 
 Two steps. Restart Hermes and you're ready. Init creates `kanban-advanced-orchestrator` and `kanban-advanced-worker`, installs plugin SOUL prompts, seeds role-only profile skills, and verifies the result. Replace `<branch-name>` with your integration branch (e.g. `main`). Details: [wiki/bootstrap.md](wiki/bootstrap.md).
 
+> **Coding-agent auth:** Bootstrap runs an **advisory** smoke test and writes `HOME` + `KANBAN_CODING_AGENT*` to `.env`. It does **not** add API keys or block init on auth failure. You must supply keys in `.env` or run vendor login (`agent login`, `claude login`, …) on the gateway host. **Preflight** blocks decomposition if headless auth still fails. See [coding-agent auth](plugin/data/references/coding-agent-auth.md).
+
 > **Agent-driven setup?** Hand this repo link to your agent and say "set this up." See [AGENTS.md](AGENTS.md) and [llms.txt](llms.txt).
 
 ---
@@ -157,5 +159,7 @@ You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* 
 | Init fails on profiles | `hermes kanban-advanced init` (creates `kanban-advanced-orchestrator` + `kanban-advanced-worker`) |
 | Cron scripts missing | Re-run `hermes kanban-advanced init` (preserves existing branches) |
 | Working branch shows `main` after update | Set `KANBAN_PROJECT_ROOT`; use dashboard **Save** or edit `kanban-config.yaml` — [wiki/troubleshooting.md](wiki/troubleshooting.md) |
+| Bootstrap OK but coding agent fails at execute | Bootstrap smoke is advisory — run `check_coding_agent_cli.py`, fix keys/OAuth/`HOME` — [coding-agent auth](plugin/data/references/coding-agent-auth.md) |
+| `HOME: unbound variable` / false OAuth errors | Set `HOME=` in `.env` or gateway unit; restart gateway — [wiki/troubleshooting.md](wiki/troubleshooting.md) |
 
 Full guide: [docs/how-to/troubleshooting.md](docs/how-to/troubleshooting.md)

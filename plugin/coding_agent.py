@@ -11,6 +11,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from plugin.coding_agent_env import (
+    AUTH_PROFILES,
+    audit_coding_agent_prerequisites,
+    describe_prerequisite_issues,
+    ensure_coding_agent_runtime_env,
+    is_home_unbound_error,
+)
+
 CODING_AGENT_MODEL_AUTO = "auto"
 SMOKE_PROMPT = "say ok"
 SMOKE_TIMEOUT_SECONDS = 180
@@ -342,6 +350,8 @@ def _interpret_smoke_result(
             return True
         if (stdout or "").strip():
             return True
+    if is_home_unbound_error(stdout, stderr):
+        return False
     if any(token in combined for token in auth_fail_tokens):
         return False
     return None
@@ -383,6 +393,13 @@ def describe_smoke_failure(
     run: Callable[..., object] | None = None,
 ) -> str:
     combined = f"{stdout}\n{stderr}".lower()
+    if is_home_unbound_error(stdout, stderr):
+        return (
+            f"{binary}: HOME is unset in the worker/gateway environment — "
+            "coding CLIs cannot load OAuth credentials. Fix: set HOME in project "
+            ".env (init/Save), gateway systemd Environment=HOME=..., or source "
+            "scripts/lib/coding_agent_env.sh before smoke"
+        )
     if timed_out:
         base = (
             f"{binary}: smoke timed out — headless execution did not complete"
@@ -416,19 +433,18 @@ def describe_smoke_failure(
         tail = snippet[-1] if snippet else "no output"
         base = f"{binary}: smoke failed ({tail})"
 
-    if binary == "agent":
-        base += (
-            ". Cursor CLI uses OAuth (~/.config/cursor/auth.json), not "
-            "CURSOR_API_KEY"
-        )
-        if _cursor_status_suggests_logged_in(run):
+    profile = AUTH_PROFILES.get(binary)
+    if profile:
+        if profile.login_hint:
+            base += f". Fix: {profile.login_hint}"
+        if profile.notes:
+            base += f" ({profile.notes})"
+    if binary == "agent" and _cursor_status_suggests_logged_in(run):
+        if not is_home_unbound_error(stdout, stderr):
             base += (
-                "; agent status looks logged in but execution failed — "
-                "token likely expired. Fix: agent login (interactive refresh), "
-                "then delete .hermes/kanban/preflight_cache.json"
+                "; agent status looks logged in — if HOME is set, token may be "
+                "expired: agent login, then delete .hermes/kanban/preflight_cache.json"
             )
-        else:
-            base += ". Fix: agent login"
     return base
 
 
