@@ -37,8 +37,9 @@ Restart Hermes.
 **You run:**
 
 ```bash
-hermes profile create orchestrator --clone
-hermes profile create worker --clone
+hermes kanban-advanced init
+# creates kanban-advanced-orchestrator + kanban-advanced-worker
+# (renames legacy worker/orchestrator when present)
 ```
 
 Expected output:

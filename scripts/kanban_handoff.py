@@ -394,7 +394,9 @@ def main() -> int:
 
     project_root = _find_project_root(plan_path.parent)
     overlay = _read_overlay(project_root)
-    orchestrator_profile = overlay.get("orchestrator_profile", "orchestrator")
+    orchestrator_profile = overlay.get("orchestrator_profile", "kanban-advanced-orchestrator")
+    if orchestrator_profile == "orchestrator":
+        orchestrator_profile = "kanban-advanced-orchestrator"
     working_branch = overlay.get("working_branch", "main")
 
     # Run pre_dispatch_gate.sh now and stamp the result.  This lets the

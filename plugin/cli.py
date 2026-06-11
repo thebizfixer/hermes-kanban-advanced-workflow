@@ -18,13 +18,14 @@ Subcommands:
 import argparse
 import logging
 import re
-import shutil
 import subprocess
 import sys
 import os
 from pathlib import Path
 
 from .config_overlay import (
+    DEFAULT_ORCHESTRATOR_PROFILE,
+    DEFAULT_WORKER_PROFILE,
     build_overlay_yaml,
     normalize_policy_profile,
     resolve_policy_profile,
@@ -34,6 +35,12 @@ from .config_overlay import (
     read_overlay_config,
     resolve_branch_settings,
     resolve_coding_agent,
+)
+from .profile_bootstrap import (
+    dispatch_profile_names,
+    ensure_dispatch_profiles,
+    run_provision_profile_check,
+    seed_dispatch_profile_skills,
 )
 
 logger = logging.getLogger(__name__)
@@ -244,25 +251,16 @@ def _handle_init(args) -> int:
 
     # ── 1. Profiles ──────────────────────────────────────────────────
     print("1. Checking profiles...")
-    try:
-        profiles_output = _run([HERMES_BIN, "profile", "list"]).stdout
-    except Exception:
-        profiles_output = ""
-
-    for profile in ["worker", "orchestrator"]:
-        if profile not in profiles_output:
-            if _yn(f"   Profile '{profile}' not found. Create it now?"):
-                r = _run([HERMES_BIN, "profile", "create", profile, "--clone"])
-                if r.returncode == 0:
-                    print(f"   OK Created '{profile}'")
-                else:
-                    print(f"   X Failed to create '{profile}': {r.stderr.strip()}")
-                    return 1
-            else:
-                print(f"   X Profile '{profile}' is required. Run: hermes profile create {profile} --clone")
-                return 1
-        else:
-            print(f"   OK {profile}")
+    worker_profile, orchestrator_profile = dispatch_profile_names(existing_config)
+    dispatch_profiles = [worker_profile, orchestrator_profile]
+    if not ensure_dispatch_profiles(
+        _run,
+        HERMES_BIN,
+        force=force,
+        prompt_yes_no=_yn,
+        log=print,
+    ):
+        return 1
 
     # ── 1a. Model config ─────────────────────────────────────────────
     print()
@@ -287,7 +285,7 @@ def _handle_init(args) -> int:
         default_model = default_provider = default_url = ""
         suggestion = "unknown"
 
-    for profile in ["worker", "orchestrator"]:
+    for profile in dispatch_profiles:
         try:
             r = _run([HERMES_BIN, "-p", profile, "config", "show"])
             pm = re.search(r"Model:\s*\{[^}]*'default':\s*'([^']+)'", r.stdout)
@@ -318,23 +316,29 @@ def _handle_init(args) -> int:
 
     # ── 1b. Max turns ────────────────────────────────────────────────
     print()
-    print("1b. Checking orchestrator max_turns...")
+    print(f"1b. Checking {orchestrator_profile} max_turns...")
     try:
-        r = _run([HERMES_BIN, "-p", "orchestrator", "config", "show"])
+        r = _run([HERMES_BIN, "-p", orchestrator_profile, "config", "show"])
         # Hermes reads max_turns from agent.max_turns, not model.max_turns
         mt = re.search(r"Max turns:\s*(\d+)", r.stdout)
         max_turns = int(mt.group(1)) if mt else 90
     except Exception:
         max_turns = 90
     if max_turns >= 180:
-        print(f"   OK orchestrator: max_turns = {max_turns}")
+        print(f"   OK {orchestrator_profile}: max_turns = {max_turns}")
     else:
-        print(f"   !  orchestrator: max_turns = {max_turns} -- recommend 180 for complex plan decomposition")
+        print(
+            f"   !  {orchestrator_profile}: max_turns = {max_turns} "
+            "-- recommend 180 for complex plan decomposition"
+        )
         if _yn(f"   Set max_turns to 180?"):
-            _run([HERMES_BIN, "-p", "orchestrator", "config", "set", "agent.max_turns", "180"])
+            _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", "180"])
             print(f"   OK max_turns set to 180")
         else:
-            print(f"   !  Skipped. Fix later: hermes -p orchestrator config set agent.max_turns 180")
+            print(
+                f"   !  Skipped. Fix later: hermes -p {orchestrator_profile} "
+                "config set agent.max_turns 180"
+            )
 
     # ── 1c. Coding agent binary ──────────────────────────────────────
     print()
@@ -447,54 +451,34 @@ def _handle_init(args) -> int:
         print(f"   X Skills not found at {skills_src}")
         return 1
 
-    # ── 2b. Seed plugin skills into each dispatched profile ───────────
-    # Named profiles run with their OWN HERMES_HOME, so the dispatcher's
-    # `hermes -p <profile> --skills kanban-worker` resolves skills from
-    # <profile>/skills — NOT the shared home above. `profile create --clone`
-    # copies the default profile's entire skill tree in (including stale
-    # built-in devops/kanban-* skills that shadow the plugin versions).
-    # Wipe inherited skills and seed ONLY the skills relevant to that profile
-    # so each unqualified skill name resolves to the plugin copy by direct
-    # path, and neither profile is confused by the other's skills.
-    _PROFILE_SKILLS: dict[str, set[str]] = {
-        "worker": {
-            "kanban-worker",
-            "kanban-worker-governance",
-        },
-        "orchestrator": {
-            "kanban-advanced",
-            "kanban-cleanup",
-            "kanban-notify",
-            "kanban-orchestrator",
-            "kanban-orchestrator-governance",
-            "kanban-planning",
-            "kanban-postmortem",
-            "kanban-preflight",
-            "kanban-reconciliation",
-        },
-    }
-    print("2b. Seeding plugin skills into dispatched profiles...")
-    for profile, allowed_skills in _PROFILE_SKILLS.items():
-        profile_home = hermes_home / "profiles" / profile
-        if not profile_home.is_dir():
-            print(f"   !  {profile}: profile home not found at {profile_home} — skipping")
-            continue
-        profile_skills = profile_home / "skills"
-        if profile_skills.exists():
-            shutil.rmtree(profile_skills, ignore_errors=True)
-        seeded = 0
-        for child in sorted(skills_src.iterdir()):
-            if child.name not in allowed_skills:
-                continue
-            skill_md = child / "SKILL.md"
-            if child.is_dir() and skill_md.exists():
-                dst_dir = profile_skills / child.name
-                dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(
-                    skill_md.read_text(encoding="utf-8"), encoding="utf-8"
-                )
-                seeded += 1
-        print(f"   OK {profile}: {seeded} skills seeded {sorted(allowed_skills)}")
+    # ── 2b. Profile skill isolation check + seed ─────────────────────
+    # Named profiles run with their OWN HERMES_HOME. `profile create --clone`
+    # copies the default profile's entire skill tree (stale built-in kanban-*).
+    # Check for drift, then wipe and seed only role-specific plugin skills.
+    worker_profile, orchestrator_profile, _ = dispatch_profile_names(
+        read_overlay_config(config_file)
+    )
+    print("2b. Checking profile skill isolation (provision --profiles-only --check)...")
+    profile_check = run_provision_profile_check(project_root, SCRIPTS_DIR, _run)
+    if profile_check is None:
+        print("   !  bash/provision.sh unavailable — skipping profile drift check")
+    elif profile_check.returncode == 0:
+        print("   OK Profile skills isolated")
+    else:
+        print("   !  Profile skill drift detected — reseeding in next step")
+        if profile_check.stdout.strip():
+            for line in profile_check.stdout.strip().splitlines():
+                if "DRIFT profile" in line or "MISSING profile" in line:
+                    print(f"      {line}")
+
+    print("2c. Seeding plugin skills into dispatched profiles...")
+    seed_dispatch_profile_skills(
+        hermes_home,
+        skills_src,
+        worker_profile,
+        orchestrator_profile,
+        log=print,
+    )
 
     # ── 3. Cron scripts + token tracker ───────────────────────────────
     print("3. Provisioning cron scripts + token tracker...")
@@ -578,7 +562,7 @@ def _handle_init(args) -> int:
     print("OK kanban-advanced is ready!")
     print(f"  Config: {config_file}")
     print(f"  Cron scripts: {cron_dir}")
-    print(f"  Profiles: worker, orchestrator")
+    print(f"  Profiles: {DEFAULT_WORKER_PROFILE}, {DEFAULT_ORCHESTRATOR_PROFILE}")
     print(f"  Coding agent: {coding_binary}")
     print(f"  Governance profile: {policy_profile}")
     if not gateway_ok:

@@ -192,7 +192,7 @@ if __name__ == "__main__":
     parser.add_argument("plan_id", help="Plan ID (e.g., kanban-governance-hardening)")
     parser.add_argument("--preflight-result", default="", help="Path to preflight JSON output")
     parser.add_argument("--plan-file", default="", help="Path to plan .md file (for agent block count)")
-    parser.add_argument("--profiles", default="worker,orchestrator",
+    parser.add_argument("--profiles", default="kanban-advanced-worker,kanban-advanced-orchestrator",
                         help="Comma-separated profile names to check")
     parser.add_argument("--verify", action="store_true", help="Verify existing attestation instead of generating")
     parser.add_argument("--output-dir", default="", help="Output directory for attestation.yaml")

@@ -27,8 +27,8 @@ while [[ $# -gt 0 ]]; do
 done
 FAILURES=0
 WARNINGS=0
-WORKER_PROFILE="${WORKER_PROFILE:-worker}"
-ORCHESTRATOR_PROFILE="${ORCHESTRATOR_PROFILE:-orchestrator}"
+WORKER_PROFILE="${WORKER_PROFILE:-kanban-advanced-worker}"
+ORCHESTRATOR_PROFILE="${ORCHESTRATOR_PROFILE:-kanban-advanced-orchestrator}"
 
 find_repo_root() {
   local dir="$SCRIPT_DIR"

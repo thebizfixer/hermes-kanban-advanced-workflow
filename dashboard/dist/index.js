@@ -367,14 +367,23 @@
               React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Profiles")
             ),
             React.createElement(CardContent, { className: "space-y-2" },
-              React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors", onClick: function () { openModelPicker("orchestrator"); } },
-                React.createElement("span", { className: "text-sm" }, "orchestrator"),
-                profileBadge(status && status.profiles && status.profiles.orchestrator)
-              ),
-              React.createElement("div", { className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors", onClick: function () { openModelPicker("worker"); } },
-                React.createElement("span", { className: "text-sm" }, "worker"),
-                profileBadge(status && status.profiles && status.profiles.worker)
-              ),
+              (function () {
+                var dispatch = (status && status.dispatch_profiles) || { orchestrator: "kanban-advanced-orchestrator", worker: "kanban-advanced-worker" };
+                var rows = [
+                  { key: "orchestrator", label: dispatch.orchestrator || "kanban-advanced-orchestrator" },
+                  { key: "worker", label: dispatch.worker || "kanban-advanced-worker" }
+                ];
+                return rows.map(function (row) {
+                  return React.createElement("div", {
+                    key: row.label,
+                    className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors",
+                    onClick: function () { openModelPicker(row.label); }
+                  },
+                    React.createElement("span", { className: "text-sm" }, row.label),
+                    profileBadge(status && status.profiles && status.profiles[row.label])
+                  );
+                });
+              })(),
               React.createElement("p", { className: "text-[11px] text-muted-foreground mt-1" }, "Created by bootstrap if missing. Model config copied from current profile. Click profile to change model.")
             )
           ),

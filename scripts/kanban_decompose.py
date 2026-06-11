@@ -360,6 +360,56 @@ def verify_links(card_map: dict[str, str], cards: list[dict]) -> list[str]:
     return errors
 
 
+# ── Overlay profile resolution ─────────────────────────────────────────────
+
+def _find_project_root(start: Path | None = None) -> Path:
+    start = (start or Path.cwd()).resolve()
+    overlay_rel = Path(".hermes") / "kanban-overrides" / "kanban-config.yaml"
+    for parent in [start, *start.parents]:
+        if (parent / overlay_rel).is_file():
+            return parent
+        if (parent / ".git").exists():
+            return parent
+    return start
+
+
+def _read_overlay(project_root: Path) -> dict[str, str]:
+    path = project_root / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
+    if not path.is_file():
+        return {}
+    config: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if ":" in line and not line.startswith("#"):
+            key, _, val = line.partition(":")
+            config[key.strip()] = val.strip().strip('"').strip("'")
+    return config
+
+
+def _resolve_dispatch_profiles(project_root: Path) -> tuple[str, str]:
+    overlay = _read_overlay(project_root)
+    worker = overlay.get("worker_profile", "kanban-advanced-worker")
+    orchestrator = overlay.get("orchestrator_profile", "kanban-advanced-orchestrator")
+    if worker == "worker":
+        worker = "kanban-advanced-worker"
+    if orchestrator == "orchestrator":
+        orchestrator = "kanban-advanced-orchestrator"
+    return worker, orchestrator
+
+
+def _normalize_card_assignee(card: dict, worker: str, orchestrator: str) -> None:
+    assignee = card.get("assignee")
+    card_type = card.get("type", "code-gen")
+    if assignee in ("worker", worker) or (not assignee and card_type == "code-gen"):
+        card["assignee"] = worker
+    elif assignee in ("orchestrator", orchestrator) or card_type in (
+        "root", "gate", "audit", "manual"
+    ):
+        card["assignee"] = orchestrator
+    elif not assignee:
+        card["assignee"] = worker
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 def main():
@@ -374,6 +424,9 @@ def main():
     if not hermes_home:
         print("WARN: HERMES_HOME not set — cron scripts may not resolve", file=sys.stderr)
 
+    project_root = _find_project_root(Path(input_path).resolve().parent)
+    worker_profile, orchestrator_profile = _resolve_dispatch_profiles(project_root)
+
     # Parse plan
     if args.cards_yaml:
         print(f"Parsing cards YAML: {args.cards_yaml}")
@@ -382,6 +435,8 @@ def main():
         print(f"Parsing plan: {args.plan}")
         parsed = parse_plan(args.plan)
     all_cards = parsed["cards"]
+    for card in all_cards:
+        _normalize_card_assignee(card, worker_profile, orchestrator_profile)
 
     # Count impl cards first (used in auto-generated card bodies)
     impl_cards = [c for c in all_cards if c["type"] not in ("gate", "root", "audit")]
@@ -391,7 +446,7 @@ def main():
         "key": "gate",
         "title": f"Gate — {parsed.get('plan_id', 'kanban plan')}",
         "type": "gate",
-        "assignee": "orchestrator",
+        "assignee": orchestrator_profile,
         "plan_id": parsed.get("plan_id", ""),
         "files": [],
         "mode": "N/A",
@@ -412,7 +467,7 @@ def main():
         "key": "root",
         "title": f"{parsed.get('plan_id', 'Kanban plan')} — ROOT",
         "type": "root",
-        "assignee": "orchestrator",
+        "assignee": orchestrator_profile,
         "plan_id": parsed.get("plan_id", ""),
         "files": [],
         "mode": "N/A",
@@ -433,7 +488,7 @@ def main():
         "key": "audit",
         "title": f"Final audit — {parsed.get('plan_id', 'kanban plan')}",
         "type": "audit",
-        "assignee": "orchestrator",
+        "assignee": orchestrator_profile,
         "plan_id": parsed.get("plan_id", ""),
         "files": [],
         "mode": "N/A",

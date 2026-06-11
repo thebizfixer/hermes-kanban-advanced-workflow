@@ -11,6 +11,29 @@ DEFAULT_CODING_AGENT = "agent"
 DEFAULT_POLICY_PROFILE = "balanced"
 VALID_POLICY_PROFILES = frozenset({"advisory", "balanced", "strict"})
 
+DEFAULT_WORKER_PROFILE = "kanban-advanced-worker"
+DEFAULT_ORCHESTRATOR_PROFILE = "kanban-advanced-orchestrator"
+LEGACY_WORKER_PROFILE = "worker"
+LEGACY_ORCHESTRATOR_PROFILE = "orchestrator"
+
+PROFILE_SKILL_SETS_BY_ROLE: dict[str, frozenset[str]] = {
+    "worker": frozenset({
+        "kanban-worker",
+        "kanban-worker-governance",
+    }),
+    "orchestrator": frozenset({
+        "kanban-advanced",
+        "kanban-cleanup",
+        "kanban-notify",
+        "kanban-orchestrator",
+        "kanban-orchestrator-governance",
+        "kanban-planning",
+        "kanban-postmortem",
+        "kanban-preflight",
+        "kanban-reconciliation",
+    }),
+}
+
 OVERLAY_REL = Path(".hermes") / "kanban-overrides" / "kanban-config.yaml"
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PLUGIN_NAME = "kanban-advanced"
@@ -194,6 +217,37 @@ def resolve_branch_settings(
     return wb, tb, preserved
 
 
+def _upgrade_legacy_profile_name(name: str) -> str:
+    if name == LEGACY_WORKER_PROFILE:
+        return DEFAULT_WORKER_PROFILE
+    if name == LEGACY_ORCHESTRATOR_PROFILE:
+        return DEFAULT_ORCHESTRATOR_PROFILE
+    return name
+
+
+def resolve_dispatch_profiles(
+    existing: dict[str, str] | None = None,
+) -> tuple[str, str, str]:
+    """Return (worker_profile, orchestrator_profile, preflight_profiles)."""
+    existing = existing or {}
+    worker = _upgrade_legacy_profile_name(
+        existing.get("worker_profile") or DEFAULT_WORKER_PROFILE
+    )
+    orchestrator = _upgrade_legacy_profile_name(
+        existing.get("orchestrator_profile") or DEFAULT_ORCHESTRATOR_PROFILE
+    )
+    preflight_raw = existing.get("preflight_profiles")
+    if preflight_raw:
+        preflight = ",".join(
+            _upgrade_legacy_profile_name(part.strip())
+            for part in preflight_raw.split(",")
+            if part.strip()
+        )
+    else:
+        preflight = f"{worker},{orchestrator}"
+    return worker, orchestrator, preflight
+
+
 def normalize_policy_profile(value: str | None) -> str:
     if not value:
         return DEFAULT_POLICY_PROFILE
@@ -264,15 +318,18 @@ def build_overlay_yaml(
 ) -> str:
     """Build overlay YAML, preserving user keys not managed by init/save."""
     existing = dict(existing or {})
+    worker_profile, orchestrator_profile, preflight_profiles = resolve_dispatch_profiles(
+        existing
+    )
     managed: dict[str, str] = {
         "schema_version": "1.0.0",
         "working_branch": working_branch,
         "policy_profile": normalize_policy_profile(
             policy_profile or existing.get("policy_profile")
         ),
-        "orchestrator_profile": existing.get("orchestrator_profile", "orchestrator"),
-        "worker_profile": existing.get("worker_profile", "worker"),
-        "preflight_profiles": existing.get("preflight_profiles", "worker,orchestrator"),
+        "orchestrator_profile": orchestrator_profile,
+        "worker_profile": worker_profile,
+        "preflight_profiles": preflight_profiles,
         "coding_agent_binary": coding_agent,
         "bundle_path": str(bundle_path),
         "skills_output_path": str(Path(hermes_home) / "skills" / "kanban-advanced"),

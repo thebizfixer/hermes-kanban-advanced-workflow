@@ -12,13 +12,15 @@ HERMES_PROJECT_OVERLAY="${HERMES_PROJECT_OVERLAY:-$REPO_ROOT/.hermes/kanban-over
 KANBAN_CONFIG_FILE="${KANBAN_CONFIG_FILE:-$HERMES_PROJECT_OVERLAY/kanban-config.yaml}"
 
 MODE="apply"
+PROFILES_ONLY=0
 DRIFT_FILES=()
 declare -A CONFIG
 
 for arg in "$@"; do
   case "$arg" in
-    --check)    MODE="check" ;;
-    --dry-run)  MODE="dry-run" ;;
+    --check)          MODE="check" ;;
+    --dry-run)        MODE="dry-run" ;;
+    --profiles-only)  PROFILES_ONLY=1; MODE="check" ;;
     --help|-h)
       grep '^#' "$0" | head -40 | sed 's/^# \?//'
       exit 0
@@ -65,15 +67,97 @@ if [[ -f "$KANBAN_CONFIG_FILE" ]]; then
   load_config "$KANBAN_CONFIG_FILE"
 fi
 
-SKILLS_OUTPUT_PATH="${CONFIG[skills_output_path]:-$REPO_ROOT/.hermes/skills/devops}"
-if [[ "$SKILLS_OUTPUT_PATH" != /* ]]; then
-  SKILLS_OUTPUT_PATH="$REPO_ROOT/$SKILLS_OUTPUT_PATH"
-fi
+hash_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+WORKER_PROFILE_NAME="${CONFIG[worker_profile]:-kanban-advanced-worker}"
+ORCH_PROFILE_NAME="${CONFIG[orchestrator_profile]:-kanban-advanced-orchestrator}"
 BUNDLE_PATH="${CONFIG[bundle_path]:-hermes-kanban-advanced-workflow}"
 if [[ "$BUNDLE_PATH" != /* ]]; then
   BUNDLE_PATH="$REPO_ROOT/$BUNDLE_PATH"
 fi
 KANBAN_WORKFLOW_DIR="$BUNDLE_PATH"
+
+declare -A PROFILE_SKILL_SETS
+PROFILE_SKILL_SETS["$WORKER_PROFILE_NAME"]="kanban-worker kanban-worker-governance"
+PROFILE_SKILL_SETS["$ORCH_PROFILE_NAME"]="kanban-advanced kanban-cleanup kanban-notify kanban-orchestrator kanban-orchestrator-governance kanban-planning kanban-postmortem kanban-preflight kanban-reconciliation"
+
+check_profile_skills() {
+  local profile="$1"
+  local expected_str="${PROFILE_SKILL_SETS[$profile]:-}"
+  local profile_home="$HERMES_HOME/profiles/$profile"
+  local profile_skills="$profile_home/skills"
+
+  if [[ -z "$expected_str" ]]; then
+    echo "[provision] SKIP profile $profile: no skill set configured"
+    return
+  fi
+  if [[ ! -d "$profile_home" ]]; then
+    echo "[provision] SKIP profile $profile: home not found ($profile_home)"
+    return
+  fi
+  if [[ ! -d "$profile_skills" ]]; then
+    echo "[provision] DRIFT profile $profile: skills dir missing ($profile_skills)"
+    DRIFT_FILES+=("$profile_skills")
+    return
+  fi
+
+  read -ra expected_arr <<< "$expected_str"
+
+  for skill in "${expected_arr[@]}"; do
+    local src_file="$BUNDLE_PATH/plugin/skills/$skill/SKILL.md"
+    local dst_file="$profile_skills/$skill/SKILL.md"
+    if [[ ! -f "$dst_file" ]]; then
+      echo "[provision] DRIFT profile $profile: missing skill $skill"
+      DRIFT_FILES+=("$dst_file")
+    elif [[ -f "$src_file" ]]; then
+      if [ "$(hash_file "$src_file")" != "$(hash_file "$dst_file")" ]; then
+        echo "[provision] DRIFT profile $profile: stale skill $skill"
+        DRIFT_FILES+=("$dst_file")
+      fi
+    fi
+  done
+
+  while IFS= read -r -d '' skill_dir; do
+    local skill_name
+    skill_name="$(basename "$skill_dir")"
+    local found=0
+    for expected in "${expected_arr[@]}"; do
+      [[ "$skill_name" == "$expected" ]] && found=1 && break
+    done
+    if [[ $found -eq 0 ]]; then
+      echo "[provision] DRIFT profile $profile: unexpected skill '$skill_name' (stale built-in?)"
+      DRIFT_FILES+=("$skill_dir")
+    fi
+  done < <(find "$profile_skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+}
+
+run_profile_skill_checks() {
+  echo "[provision] Checking profile skill isolation..."
+  check_profile_skills "$WORKER_PROFILE_NAME"
+  check_profile_skills "$ORCH_PROFILE_NAME"
+}
+
+if [[ "$PROFILES_ONLY" -eq 1 ]]; then
+  run_profile_skill_checks
+  if [[ ${#DRIFT_FILES[@]} -gt 0 ]]; then
+    echo "[provision] PROFILE CHECK FAILED — ${#DRIFT_FILES[@]} drifted or missing item(s)." >&2
+    printf '%s\n' "${DRIFT_FILES[@]}" >&2
+    exit 1
+  fi
+  echo "[provision] PROFILE CHECK PASSED"
+  exit 0
+fi
+
+SKILLS_OUTPUT_PATH="${CONFIG[skills_output_path]:-$REPO_ROOT/.hermes/skills/devops}"
+if [[ "$SKILLS_OUTPUT_PATH" != /* ]]; then
+  SKILLS_OUTPUT_PATH="$REPO_ROOT/$SKILLS_OUTPUT_PATH"
+fi
 
 substitute_vars() {
   local content="$1"
@@ -127,14 +211,6 @@ materialize_skill() {
       echo "[provision] Wrote: $output_file"
       ;;
   esac
-}
-
-hash_file() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
-  else
-    shasum -a 256 "$1" | awk '{print $1}'
-  fi
 }
 
 sync_reference_dir() {
@@ -305,68 +381,8 @@ if [ -f "$WORKER_SKILL" ] && [[ "$MODE" == "apply" || "$MODE" == "check" ]]; the
     fi
 fi
 
-# ── Profile skill drift check ─────────────────────────────────────────
-# Verify each dispatched profile's skills/ dir contains ONLY the expected
-# plugin skills. Hermes `hermes update` or `profile create --clone` can
-# re-inject stale built-in devops/kanban-* copies that shadow the plugin.
-# Worker: 2 skills. Orchestrator: 9 skills. No extras permitted.
-declare -A PROFILE_SKILL_SETS
-PROFILE_SKILL_SETS["worker"]="kanban-worker kanban-worker-governance"
-PROFILE_SKILL_SETS["orchestrator"]="kanban-advanced kanban-cleanup kanban-notify kanban-orchestrator kanban-orchestrator-governance kanban-planning kanban-postmortem kanban-preflight kanban-reconciliation"
-
-check_profile_skills() {
-  local profile="$1"
-  local expected_str="${PROFILE_SKILL_SETS[$profile]}"
-  local profile_home="$HERMES_HOME/profiles/$profile"
-  local profile_skills="$profile_home/skills"
-
-  if [[ ! -d "$profile_home" ]]; then
-    echo "[provision] SKIP profile $profile: home not found ($profile_home)"
-    return
-  fi
-  if [[ ! -d "$profile_skills" ]]; then
-    echo "[provision] DRIFT profile $profile: skills dir missing ($profile_skills)"
-    DRIFT_FILES+=("$profile_skills")
-    return
-  fi
-
-  read -ra expected_arr <<< "$expected_str"
-
-  # Check every expected skill is present and content matches source
-  for skill in "${expected_arr[@]}"; do
-    local src_file="$BUNDLE_PATH/plugin/skills/$skill/SKILL.md"
-    local dst_file="$profile_skills/$skill/SKILL.md"
-    if [[ ! -f "$dst_file" ]]; then
-      echo "[provision] DRIFT profile $profile: missing skill $skill"
-      DRIFT_FILES+=("$dst_file")
-    elif [[ -f "$src_file" ]]; then
-      if [ "$(hash_file "$src_file")" != "$(hash_file "$dst_file")" ]; then
-        echo "[provision] DRIFT profile $profile: stale skill $skill"
-        DRIFT_FILES+=("$dst_file")
-      fi
-    fi
-  done
-
-  # Check for unexpected skill dirs (stale built-ins or inherited defaults)
-  while IFS= read -r -d '' skill_dir; do
-    local skill_name
-    skill_name="$(basename "$skill_dir")"
-    local found=0
-    for expected in "${expected_arr[@]}"; do
-      [[ "$skill_name" == "$expected" ]] && found=1 && break
-    done
-    if [[ $found -eq 0 ]]; then
-      echo "[provision] DRIFT profile $profile: unexpected skill '$skill_name' (stale built-in?)"
-      DRIFT_FILES+=("$skill_dir")
-    fi
-  done < <(find "$profile_skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
-}
-
 if [[ "$MODE" == "check" || "$MODE" == "apply" ]]; then
-  echo "[provision] Checking profile skill isolation..."
-  for profile in worker orchestrator; do
-    check_profile_skills "$profile"
-  done
+  run_profile_skill_checks
 fi
 
 if [[ "$MODE" == "check" ]]; then

@@ -23,8 +23,8 @@
 
 3. **Create profiles:**
    ```bash
-   hermes profile create orchestrator --clone
-   hermes profile create worker --clone
+   `hermes kanban-advanced init` creates (or renames legacy `worker`/`orchestrator` to)
+   `kanban-advanced-orchestrator` and `kanban-advanced-worker` automatically.
    ```
    Configure thinking effort per role (see [[configuration]]):
    - **orchestrator** → `thinking: high` (planning, auditing, reconciling)

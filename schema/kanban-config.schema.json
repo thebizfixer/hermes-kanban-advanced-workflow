@@ -34,17 +34,17 @@
     "orchestrator_profile": {
       "type": "string",
       "description": "Hermes profile for root, gate, and audit cards. Substituted as ${orchestrator_profile}. Validated by preflight and validate_board.sh.",
-      "default": "orchestrator"
+      "default": "kanban-advanced-orchestrator"
     },
     "worker_profile": {
       "type": "string",
       "description": "Hermes profile for implementation cards. Substituted as ${worker_profile}. Read by validate_board.sh.",
-      "default": "worker"
+      "default": "kanban-advanced-worker"
     },
     "preflight_profiles": {
       "type": "string",
       "description": "Comma-separated profiles for preflight check. Read by preflight.sh.",
-      "default": "worker,orchestrator"
+      "default": "kanban-advanced-worker,kanban-advanced-orchestrator"
     },
     "coding_agent_binary": {
       "type": "string",

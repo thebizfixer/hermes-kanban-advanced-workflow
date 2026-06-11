@@ -21,9 +21,9 @@ feature_branch_prefix: "kanban/"
 # orchestrator_profile → ${orchestrator_profile} in skill files
 # worker_profile       → ${worker_profile} in skill files
 # ---------------------------------------------------------------------------
-orchestrator_profile: orchestrator
-worker_profile: worker
-preflight_profiles: "worker,orchestrator"
+orchestrator_profile: kanban-advanced-orchestrator
+worker_profile: kanban-advanced-worker
+preflight_profiles: "kanban-advanced-worker,kanban-advanced-orchestrator"
 
 # ---------------------------------------------------------------------------
 # Coding agent

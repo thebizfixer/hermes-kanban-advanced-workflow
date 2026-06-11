@@ -20,7 +20,9 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from plugin.config_overlay import (  # noqa: E402
+    DEFAULT_ORCHESTRATOR_PROFILE,
     DEFAULT_PLUGIN_NAME,
+    DEFAULT_WORKER_PROFILE,
     PLUGIN_ROOT,
     build_overlay_yaml,
     detect_default_working_branch,
@@ -30,11 +32,18 @@ from plugin.config_overlay import (  # noqa: E402
     read_overlay_config,
     resolve_branch_settings,
     resolve_coding_agent,
+    resolve_dispatch_profiles,
     resolve_hermes_home,
     resolve_plugin_install_dir,
     resolve_policy_profile,
     resolve_project_root,
     sync_project_env,
+)
+from plugin.profile_bootstrap import (  # noqa: E402
+    dispatch_profile_names,
+    ensure_dispatch_profiles,
+    run_provision_profile_check,
+    seed_dispatch_profile_skills,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,7 +105,16 @@ def _check_model_reachable(profile: str) -> bool | None:
         return None
 
 
-def _check_profiles() -> dict:
+def _dispatch_profile_list(project_root: Path | None = None) -> list[str]:
+    if project_root is None:
+        project_root = resolve_project_root()
+    worker, orchestrator, _ = resolve_dispatch_profiles(
+        read_overlay_config(overlay_path(project_root))
+    )
+    return [worker, orchestrator]
+
+
+def _check_profiles(project_root: Path | None = None) -> dict:
     result = {}
     try:
         r = _run([HERMES_BIN, "profile", "list"])
@@ -104,7 +122,7 @@ def _check_profiles() -> dict:
     except Exception:
         profiles_output = ""
 
-    for profile in ["worker", "orchestrator"]:
+    for profile in _dispatch_profile_list(project_root):
         info: dict = {
             "exists": profile in profiles_output,
             "has_model": False,
@@ -142,9 +160,12 @@ def _check_gateway() -> dict:
         return {"running": False, "outdated": False}
 
 
-def _get_max_turns() -> int:
+def _get_max_turns(project_root: Path | None = None) -> int:
+    _, orchestrator_profile, _ = resolve_dispatch_profiles(
+        read_overlay_config(overlay_path(project_root or resolve_project_root()))
+    )
     try:
-        r = _run([HERMES_BIN, "-p", "orchestrator", "config", "show"])
+        r = _run([HERMES_BIN, "-p", orchestrator_profile, "config", "show"])
         mt = re.search(r"Max turns:\s*(\d+)", r.stdout)
         return int(mt.group(1)) if mt else 90
     except Exception:
@@ -382,8 +403,12 @@ async def status():
         "coding_agent": coding_agent,
         "coding_agent_binary": coding_agent,
         "policy_profile": resolve_policy_profile(project_root, env=env),
-        "max_turns": _get_max_turns(),
-        "profiles": _check_profiles(),
+        "max_turns": _get_max_turns(project_root),
+        "profiles": _check_profiles(project_root),
+        "dispatch_profiles": {
+            "worker": resolve_dispatch_profiles(config)[0],
+            "orchestrator": resolve_dispatch_profiles(config)[1],
+        },
         "gateway": _check_gateway(),
         **_check_plugin_git_status(),
     }
@@ -440,22 +465,25 @@ async def init(request: Request):
     if kept:
         output.append("   Preserved branch settings from existing kanban-config.yaml")
 
-    # Profiles
-    profiles = _check_profiles()
-    for profile in ["worker", "orchestrator"]:
-        if profiles[profile]["exists"]:
-            output.append(f"   OK {profile}")
-        else:
-            r = _run([HERMES_BIN, "profile", "create", profile, "--clone"])
-            if r.returncode == 0:
-                output.append(f"   OK Created '{profile}'")
-            else:
-                output.append(f"   X Failed to create '{profile}': {r.stderr.strip()}")
-                return {"success": False, "output": output, "error": f"Failed to create {profile} profile"}
+    worker_profile, orchestrator_profile = dispatch_profile_names(existing_config)
+    dispatch_profiles = [worker_profile, orchestrator_profile]
+
+    # Profiles (create or rename legacy short names)
+    if not ensure_dispatch_profiles(
+        _run,
+        HERMES_BIN,
+        force=True,
+        log=output.append,
+    ):
+        return {
+            "success": False,
+            "output": output,
+            "error": "Failed to ensure dispatch profiles",
+        }
 
     # Model config
-    for profile in ["worker", "orchestrator"]:
-        profiles = _check_profiles()
+    for profile in dispatch_profiles:
+        profiles = _check_profiles(project_root)
         if profiles[profile]["has_model"]:
             output.append(f"   OK {profile}: model configured")
         else:
@@ -475,11 +503,11 @@ async def init(request: Request):
                 output.append(f"   !  Skipped: {e}")
 
     # Max turns
-    current_turns = _get_max_turns()
+    current_turns = _get_max_turns(project_root)
     if current_turns >= max_turns:
-        output.append(f"   OK orchestrator: max_turns = {current_turns}")
+        output.append(f"   OK {orchestrator_profile}: max_turns = {current_turns}")
     else:
-        _run([HERMES_BIN, "-p", "orchestrator", "config", "set", "agent.max_turns", str(max_turns)])
+        _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)])
         output.append(f"   OK max_turns set to {max_turns}")
 
     # Coding agent
@@ -526,6 +554,24 @@ async def init(request: Request):
                 (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
+
+    worker_profile, orchestrator_profile, _ = dispatch_profile_names(
+        read_overlay_config(config_file)
+    )
+    profile_check = run_provision_profile_check(project_root, PLUGIN_ROOT / "scripts", _run)
+    if profile_check is None:
+        output.append("   !  bash/provision.sh unavailable — skipped profile drift check")
+    elif profile_check.returncode == 0:
+        output.append("   OK Profile skills isolated")
+    else:
+        output.append("   !  Profile skill drift detected — reseeding profile skills")
+    seed_dispatch_profile_skills(
+        hermes_home,
+        skills_src,
+        worker_profile,
+        orchestrator_profile,
+        log=output.append,
+    )
 
     # Provision scripts
     scripts_src = PLUGIN_ROOT / "scripts"
@@ -632,9 +678,10 @@ async def save(request: Request):
     )
     output.append("   OK Saved .env")
 
-    current_turns = _get_max_turns()
+    current_turns = _get_max_turns(project_root)
+    _, orchestrator_profile, _ = resolve_dispatch_profiles(config)
     if current_turns < max_turns:
-        _run([HERMES_BIN, "-p", "orchestrator", "config", "set", "agent.max_turns", str(max_turns)])
+        _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)])
         output.append(f"   OK max_turns set to {max_turns}")
 
     skills_src = PLUGIN_ROOT / "plugin" / "skills"
@@ -650,6 +697,15 @@ async def save(request: Request):
                 (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
+
+    worker_profile, orchestrator_profile, _ = dispatch_profile_names(config)
+    seed_dispatch_profile_skills(
+        hermes_home,
+        skills_src,
+        worker_profile,
+        orchestrator_profile,
+        log=output.append,
+    )
 
     output.append("OK Settings saved")
     return {"success": True, "output": output}
