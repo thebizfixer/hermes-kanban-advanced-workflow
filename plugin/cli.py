@@ -39,8 +39,7 @@ from .config_overlay import (
 from .profile_bootstrap import (
     dispatch_profile_names,
     ensure_dispatch_profiles,
-    run_provision_profile_check,
-    seed_dispatch_profile_skills,
+    reconcile_dispatch_profiles,
 )
 
 logger = logging.getLogger(__name__)
@@ -242,11 +241,11 @@ def _handle_init(args) -> int:
         except (EOFError, KeyboardInterrupt):
             return False
 
-    def _run(cmd: list[str], timeout: int = 15) -> subprocess.CompletedProcess:
+    def _run(cmd: list[str], timeout: int = 15, env: dict | None = None) -> subprocess.CompletedProcess:
         return subprocess.run(
             cmd, capture_output=True, text=True,
             encoding="utf-8", errors="replace",
-            timeout=timeout,
+            timeout=timeout, env=env,
         )
 
     # ── 1. Profiles ──────────────────────────────────────────────────
@@ -256,6 +255,7 @@ def _handle_init(args) -> int:
     if not ensure_dispatch_profiles(
         _run,
         HERMES_BIN,
+        hermes_home=hermes_home,
         force=force,
         prompt_yes_no=_yn,
         log=print,
@@ -451,34 +451,27 @@ def _handle_init(args) -> int:
         print(f"   X Skills not found at {skills_src}")
         return 1
 
-    # ── 2b. Profile skill isolation check + seed ─────────────────────
-    # Named profiles run with their OWN HERMES_HOME. `profile create --clone`
-    # copies the default profile's entire skill tree (stale built-in kanban-*).
-    # Check for drift, then wipe and seed only role-specific plugin skills.
+    # ── 2b. Reconcile profiles: rename → seed role skills → verify+fix ─
+    # `profile create --clone` copies the default profile's entire skill tree
+    # (stale built-in kanban-*). reconcile_dispatch_profiles wipes that, seeds
+    # only the role-specific skills, then VERIFIES the end state (prefixed
+    # names + role-only skills) and reseeds once if verification fails.
     worker_profile, orchestrator_profile = dispatch_profile_names(
         read_overlay_config(config_file)
     )
-    print("2b. Checking profile skill isolation (provision --profiles-only --check)...")
-    profile_check = run_provision_profile_check(project_root, SCRIPTS_DIR, _run)
-    if profile_check is None:
-        print("   !  bash/provision.sh unavailable — skipping profile drift check")
-    elif profile_check.returncode == 0:
-        print("   OK Profile skills isolated")
-    else:
-        print("   !  Profile skill drift detected — reseeding in next step")
-        if profile_check.stdout.strip():
-            for line in profile_check.stdout.strip().splitlines():
-                if "DRIFT profile" in line or "MISSING profile" in line:
-                    print(f"      {line}")
-
-    print("2c. Seeding plugin skills into dispatched profiles...")
-    seed_dispatch_profile_skills(
+    print("2b. Reconciling profiles (name prefix + role-only skills + verify)...")
+    if not reconcile_dispatch_profiles(
+        _run,
+        HERMES_BIN,
         hermes_home,
         skills_src,
         worker_profile,
         orchestrator_profile,
+        force=True,
         log=print,
-    )
+    ):
+        print("   X Profile reconciliation failed — see issues above.")
+        return 1
 
     # ── 3. Cron scripts + token tracker ───────────────────────────────
     print("3. Provisioning cron scripts + token tracker...")

@@ -42,8 +42,7 @@ from plugin.config_overlay import (  # noqa: E402
 from plugin.profile_bootstrap import (  # noqa: E402
     dispatch_profile_names,
     ensure_dispatch_profiles,
-    run_provision_profile_check,
-    seed_dispatch_profile_skills,
+    reconcile_dispatch_profiles,
 )
 
 logger = logging.getLogger(__name__)
@@ -53,11 +52,13 @@ router = APIRouter()
 HERMES_BIN = os.environ.get("HERMES_BIN", "hermes")
 
 
-def _run(cmd: list[str], timeout: int = 30, cwd: str | None = None) -> subprocess.CompletedProcess:
+def _run(
+    cmd: list[str], timeout: int = 30, cwd: str | None = None, env: dict | None = None
+) -> subprocess.CompletedProcess:
     return subprocess.run(
         cmd, capture_output=True, text=True,
         encoding="utf-8", errors="replace",
-        timeout=timeout, cwd=cwd,
+        timeout=timeout, cwd=cwd, env=env,
     )
 
 
@@ -465,13 +466,16 @@ async def init(request: Request):
     if kept:
         output.append("   Preserved branch settings from existing kanban-config.yaml")
 
+    hermes_home_pre = resolve_hermes_home()
     worker_profile, orchestrator_profile = dispatch_profile_names(existing_config)
     dispatch_profiles = [worker_profile, orchestrator_profile]
 
-    # Profiles (create or rename legacy short names)
+    # Profiles (create or rename legacy short names) — model config below needs
+    # the prefixed profiles to exist; full reconcile (seed + verify) runs later.
     if not ensure_dispatch_profiles(
         _run,
         HERMES_BIN,
+        hermes_home=hermes_home_pre,
         force=True,
         log=output.append,
     ):
@@ -555,23 +559,25 @@ async def init(request: Request):
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
 
+    # Reconcile profiles: rename → seed role-only skills → verify (+ fix retry)
     worker_profile, orchestrator_profile = dispatch_profile_names(
         read_overlay_config(config_file)
     )
-    profile_check = run_provision_profile_check(project_root, PLUGIN_ROOT / "scripts", _run)
-    if profile_check is None:
-        output.append("   !  bash/provision.sh unavailable — skipped profile drift check")
-    elif profile_check.returncode == 0:
-        output.append("   OK Profile skills isolated")
-    else:
-        output.append("   !  Profile skill drift detected — reseeding profile skills")
-    seed_dispatch_profile_skills(
+    if not reconcile_dispatch_profiles(
+        _run,
+        HERMES_BIN,
         hermes_home,
         skills_src,
         worker_profile,
         orchestrator_profile,
+        force=True,
         log=output.append,
-    )
+    ):
+        return {
+            "success": False,
+            "output": output,
+            "error": "Profile reconciliation/verification failed",
+        }
 
     # Provision scripts
     scripts_src = PLUGIN_ROOT / "scripts"
@@ -699,11 +705,14 @@ async def save(request: Request):
         output.append(f"   OK {count} skills -> {skills_dst}")
 
     worker_profile, orchestrator_profile = dispatch_profile_names(config)
-    seed_dispatch_profile_skills(
+    reconcile_dispatch_profiles(
+        _run,
+        HERMES_BIN,
         hermes_home,
         skills_src,
         worker_profile,
         orchestrator_profile,
+        force=True,
         log=output.append,
     )
 
@@ -751,5 +760,27 @@ async def update_plugin():
 
     hermes_home = resolve_hermes_home()
     output.extend(_materialize_plugin_assets(install_dir, hermes_home))
+
+    # Reconcile dispatch profiles so a code pull also fixes profile state:
+    # rename legacy worker/orchestrator → kanban-advanced-*, reseed role-only
+    # skills, then verify (with one fix retry). Without this, "Update Plugin"
+    # pulls new code but leaves stale profiles named worker/orchestrator.
+    project_root = resolve_project_root()
+    worker_profile, orchestrator_profile = dispatch_profile_names(
+        read_overlay_config(overlay_path(project_root))
+    )
+    skills_src = install_dir / "plugin" / "skills"
+    if skills_src.is_dir():
+        reconcile_dispatch_profiles(
+            _run,
+            HERMES_BIN,
+            hermes_home,
+            skills_src,
+            worker_profile,
+            orchestrator_profile,
+            force=True,
+            log=output.append,
+        )
+
     output.append("OK Plugin updated")
     return {"success": True, "unchanged": False, "output": output}

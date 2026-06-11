@@ -1,4 +1,10 @@
-"""Dispatch profile ensure, skill isolation check, and plugin skill seeding."""
+"""Dispatch profile ensure, skill isolation, verification, and seeding.
+
+All hermes profile subprocess calls target an explicit HERMES_HOME so the
+rename/create/verify operations always hit the same state directory that
+hosts the dispatch profiles (project plugins resolve a project-local
+HERMES_HOME, not the global ~/.hermes).
+"""
 
 from __future__ import annotations
 
@@ -26,38 +32,79 @@ DISPATCH_PROFILE_SPECS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _profiles_list_text(run: RunFn, hermes_bin: str) -> str:
+def _home_env(hermes_home: Path | str | None) -> dict[str, str] | None:
+    """Build a subprocess env that pins HERMES_HOME, or None to inherit."""
+    if hermes_home is None:
+        return None
+    return {**os.environ, "HERMES_HOME": str(hermes_home)}
+
+
+def _run_home(
+    run: RunFn, cmd: list[str], env: dict[str, str] | None
+) -> subprocess.CompletedProcess:
+    """Call the injected run fn, passing env only when set (back-compat)."""
+    if env is None:
+        return run(cmd)
     try:
-        return run([hermes_bin, "profile", "list"]).stdout
+        return run(cmd, env=env)
+    except TypeError:
+        # Injected run fn predates the env kwarg — fall back to process env.
+        prev = os.environ.get("HERMES_HOME")
+        os.environ["HERMES_HOME"] = env["HERMES_HOME"]
+        try:
+            return run(cmd)
+        finally:
+            if prev is None:
+                os.environ.pop("HERMES_HOME", None)
+            else:
+                os.environ["HERMES_HOME"] = prev
+
+
+def _profiles_list_text(
+    run: RunFn, hermes_bin: str, env: dict[str, str] | None
+) -> str:
+    try:
+        return _run_home(run, [hermes_bin, "profile", "list"], env).stdout
     except Exception:
         return ""
+
+
+def _profile_present(profiles_output: str, name: str) -> bool:
+    """Whole-token match so 'worker' does not match 'kanban-advanced-worker'."""
+    import re
+
+    return re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", profiles_output) is not None
 
 
 def ensure_dispatch_profiles(
     run: RunFn,
     hermes_bin: str,
     *,
+    hermes_home: Path | str | None = None,
     force: bool = False,
     prompt_yes_no: Callable[[str], bool] | None = None,
     log: Callable[[str], Any] = print,
 ) -> tuple[str, str] | None:
     """Ensure dispatch profiles exist; rename legacy short names when present."""
-    profiles_output = _profiles_list_text(run, hermes_bin)
+    env = _home_env(hermes_home)
+    profiles_output = _profiles_list_text(run, hermes_bin, env)
 
     for new_name, legacy_name in DISPATCH_PROFILE_SPECS:
-        if new_name in profiles_output:
+        if _profile_present(profiles_output, new_name):
             log(f"   OK {new_name}")
             continue
 
-        if legacy_name in profiles_output:
+        if _profile_present(profiles_output, legacy_name):
             should_rename = force or (prompt_yes_no and prompt_yes_no(
-                f"   Rename legacy profile '{legacy_name}' → '{new_name}'?"
+                f"   Rename legacy profile '{legacy_name}' -> '{new_name}'?"
             ))
             if should_rename:
-                r = run([hermes_bin, "profile", "rename", legacy_name, new_name])
+                r = _run_home(
+                    run, [hermes_bin, "profile", "rename", legacy_name, new_name], env
+                )
                 if r.returncode == 0:
-                    log(f"   OK Renamed '{legacy_name}' → '{new_name}'")
-                    profiles_output = profiles_output.replace(legacy_name, new_name)
+                    log(f"   OK Renamed '{legacy_name}' -> '{new_name}'")
+                    profiles_output += f"\n{new_name}"
                 else:
                     log(f"   X Failed to rename '{legacy_name}': {r.stderr.strip()}")
                     return None
@@ -73,7 +120,9 @@ def ensure_dispatch_profiles(
             f"   Profile '{new_name}' not found. Create it now?"
         ))
         if should_create:
-            r = run([hermes_bin, "profile", "create", new_name, "--clone"])
+            r = _run_home(
+                run, [hermes_bin, "profile", "create", new_name, "--clone"], env
+            )
             if r.returncode == 0:
                 log(f"   OK Created '{new_name}'")
                 profiles_output += f"\n{new_name}"
@@ -146,6 +195,100 @@ def seed_dispatch_profile_skills(
         log(f"   OK {profile}: {seeded} skills seeded {sorted(allowed_skills)}")
         total += seeded
     return total
+
+
+def verify_dispatch_profiles(
+    run: RunFn,
+    hermes_bin: str,
+    hermes_home: Path,
+    worker_profile: str,
+    orchestrator_profile: str,
+) -> list[str]:
+    """Return a list of problems; empty means profiles are correctly named + isolated.
+
+    Checks, per role profile:
+      * the profile exists in `hermes profile list` (correct prefixed name)
+      * its skills/ dir contains EXACTLY the role's allowed skill set
+    """
+    env = _home_env(hermes_home)
+    profiles_output = _profiles_list_text(run, hermes_bin, env)
+    issues: list[str] = []
+
+    role_map = {
+        worker_profile: PROFILE_SKILL_SETS_BY_ROLE["worker"],
+        orchestrator_profile: PROFILE_SKILL_SETS_BY_ROLE["orchestrator"],
+    }
+    for profile, allowed in role_map.items():
+        if not _profile_present(profiles_output, profile):
+            issues.append(f"profile '{profile}' not found (expected prefixed name)")
+        skills_dir = hermes_home / "profiles" / profile / "skills"
+        if not skills_dir.is_dir():
+            issues.append(f"profile '{profile}' has no skills dir")
+            continue
+        present = {p.name for p in skills_dir.iterdir() if p.is_dir()}
+        missing = allowed - present
+        extra = present - allowed
+        for name in sorted(missing):
+            issues.append(f"profile '{profile}' missing skill '{name}'")
+        for name in sorted(extra):
+            issues.append(f"profile '{profile}' has unexpected skill '{name}'")
+    return issues
+
+
+def reconcile_dispatch_profiles(
+    run: RunFn,
+    hermes_bin: str,
+    hermes_home: Path,
+    skills_src: Path,
+    worker_profile: str,
+    orchestrator_profile: str,
+    *,
+    force: bool = True,
+    prompt_yes_no: Callable[[str], bool] | None = None,
+    log: Callable[[str], Any] = print,
+) -> bool:
+    """Ensure + seed + verify (with one fix retry). Returns True when verified clean.
+
+    This is the single entry point init/update should call so the end state is
+    always: prefixed profile names, role-only skills, confirmed by verification.
+    """
+    if not ensure_dispatch_profiles(
+        run,
+        hermes_bin,
+        hermes_home=hermes_home,
+        force=force,
+        prompt_yes_no=prompt_yes_no,
+        log=log,
+    ):
+        return False
+
+    seed_dispatch_profile_skills(
+        hermes_home, skills_src, worker_profile, orchestrator_profile, log=log
+    )
+
+    issues = verify_dispatch_profiles(
+        run, hermes_bin, hermes_home, worker_profile, orchestrator_profile
+    )
+    if issues:
+        log("   !  Profile verification failed — applying fix:")
+        for issue in issues:
+            log(f"      - {issue}")
+        # One reseed attempt covers stale/extra skill dirs after rename.
+        seed_dispatch_profile_skills(
+            hermes_home, skills_src, worker_profile, orchestrator_profile, log=log
+        )
+        issues = verify_dispatch_profiles(
+            run, hermes_bin, hermes_home, worker_profile, orchestrator_profile
+        )
+
+    if issues:
+        log("   X Profile verification STILL failing after fix:")
+        for issue in issues:
+            log(f"      - {issue}")
+        return False
+
+    log(f"   OK Profiles verified: {worker_profile}, {orchestrator_profile} (role skills only)")
+    return True
 
 
 def dispatch_profile_names(existing: dict[str, str] | None = None) -> tuple[str, str]:
