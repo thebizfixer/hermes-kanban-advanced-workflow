@@ -473,22 +473,24 @@
 
       // ── Status banner with inline buttons ──
       React.createElement(Card, { className: statusError ? "border-red-500/30" : statusInitialized ? "border-green-500/30" : "" },
-        React.createElement(CardContent, { className: "flex flex-wrap items-start gap-x-3 gap-y-3 py-4" },
-          React.createElement(StatusDot, { status: statusError ? "error" : statusInitialized ? "ok" : "warn" }),
-          React.createElement("div", { className: "min-w-[min(100%,16rem)] max-w-2xl space-y-1" },
-            React.createElement("p", { className: "text-sm font-medium" },
-              statusError ? "Cannot reach API" : initializedLabel()
-            ),
-            React.createElement("p", { className: "text-xs text-muted-foreground truncate" },
-              statusError ? status.error
-                : statusInitialized ? "Config: " + (status.config_path || "kanban-config.yaml")
-                : "Run bootstrap to provision profiles, config, and cron scripts."
-            ),
-            !statusError ? React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
-              "Bootstrap to run hermes kanban-advanced init with the following parameters. Save any parameter changes to plugin configuration after editing any field."
-            ) : null
+        React.createElement(CardContent, { className: "flex items-start gap-3 py-4 max-[420px]:flex-col max-[420px]:gap-3" },
+          React.createElement("div", { className: "flex min-w-0 flex-1 items-start gap-3" },
+            React.createElement(StatusDot, { status: statusError ? "error" : statusInitialized ? "ok" : "warn" }),
+            React.createElement("div", { className: "min-w-0 flex-1 space-y-1" },
+              React.createElement("p", { className: "text-sm font-medium" },
+                statusError ? "Cannot reach API" : initializedLabel()
+              ),
+              React.createElement("p", { className: "text-xs text-muted-foreground truncate" },
+                statusError ? status.error
+                  : statusInitialized ? "Config: " + (status.config_path || "kanban-config.yaml")
+                  : "Run bootstrap to provision profiles, config, and cron scripts."
+              ),
+              !statusError ? React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
+                "Bootstrap to run hermes kanban-advanced init with the following parameters. Save any parameter changes to plugin configuration after editing any field."
+              ) : null
+            )
           ),
-          React.createElement("div", { className: "ml-auto flex flex-wrap items-center justify-end gap-2" },
+          React.createElement("div", { className: "flex shrink-0 flex-wrap items-center justify-end gap-2 max-[420px]:self-end" },
             React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping || pluginUpdating, size: "sm" },
               bootstrapping ? "Running…" : "Bootstrap"
             ),
