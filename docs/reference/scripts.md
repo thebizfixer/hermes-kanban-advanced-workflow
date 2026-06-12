@@ -203,6 +203,8 @@ python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md
 
 Creates one hardened, idempotent orchestrator-handoff card when a non-orchestrator profile needs to trigger decomposition without a manual session switch.  The card title is `Decompose: <plan_id>` and carries `Type: orchestrator-handoff` — a governance carve-out that exempts it from the worker code-gen rules (P001/P002/P003).  The body is SOP-only: **no `agent -p` block** (to prevent auto-decompose into stub children).
 
+The runbook uses **absolute** `{BUNDLE_ROOT}/scripts/…` paths, stamps `pre_dispatch_gate` (orchestrator skips re-run when `PASSED`), resolves `cards_yaml` from plan-adjacent or `{plan_memory_path}/{plan_id}.yaml`, and records `gate_script` for forensics. Resolves gate script from `$HERMES_HOME/scripts/`, overlay `bundle_path`, or plugin checkout — not only `repo_root/scripts/`.
+
 Exit codes:
 
 | Code | Meaning | Fix |
@@ -222,7 +224,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_recover.py --cascade      
 python hermes-kanban-advanced-workflow/scripts/kanban_recover.py --list                             # list all recovery actions
 ```
 
-Maps the registry's 36 error codes to recovery actions — 10 have dedicated automated recovery functions (shown by `--list`); the rest surface the registry's documented recovery guidance for manual intervention. Cascade triage: pause downstream → env first → agent second → governance infra last → verify.
+Maps the registry's 37 error codes to recovery actions — 10 have dedicated automated recovery functions (shown by `--list`); the rest surface the registry's documented recovery guidance for manual intervention. Cascade triage: pause downstream → env first → agent second → governance infra last → verify.
 
 ## Post-merge gate (`post_merge_gate.sh`)
 
@@ -311,7 +313,7 @@ Validates `kanban-config.yaml` overlay: required keys present, profiles exist, p
 python hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md
 ```
 
-Verifies goal-card acceptance criteria, scenario tags, and budget limits before attestation.
+Verifies goal-card acceptance criteria, scenario tags, and budget limits before attestation. Counts structured YAML (`workstreams[].goal_card`) and standalone `goal_card: true` lines under `###` sections only — **not** markdown table prose containing `` `goal_card: true` ``.
 
 ## Anchor verification (`verify_anchors.sh`)
 

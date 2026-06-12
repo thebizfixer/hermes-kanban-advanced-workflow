@@ -51,6 +51,7 @@ from .hermes_model_config import (
 from .profile_bootstrap import (
     dispatch_profile_names,
     ensure_dispatch_profiles,
+    materialize_skill_dir,
     reconcile_dispatch_profiles,
 )
 from .script_materialize import materialize_hermes_scripts
@@ -459,9 +460,13 @@ def _handle_init(args) -> int:
         for child in sorted(skills_src.iterdir()):
             skill_md = child / "SKILL.md"
             if child.is_dir() and skill_md.exists():
-                dst_dir = skills_dst / child.name
-                dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
+                data_refs = PLUGIN_ROOT / "plugin" / "data" / "references"
+                bundle = data_refs if child.name == "kanban-advanced" else None
+                materialize_skill_dir(
+                    child,
+                    skills_dst / child.name,
+                    bundle_data_references=bundle,
+                )
                 count += 1
         print(f"   OK {count} skills -> {skills_dst}")
     else:

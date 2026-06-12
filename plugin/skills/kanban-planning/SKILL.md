@@ -42,7 +42,7 @@ The planning phase proceeds through five stages in this exact order. Do not skip
 | **Harden** | `"Harden the plan"` | Apply the hardening checklist to close gaps discovered during sanity check (or self-discovered). Tier-gated pass: Critical → Important → Nice-to-have. | Hardened plan (content-complete) |
 | **Revise** | `"Revise section X"` | Edit in-place, return to review — conversational updates to plan content | Revised plan |
 | **Optimize** | `"Optimize for Kanban"` | Close execution-formatting gaps: add agent-prompt blocks, draw dependency graph, estimate iteration budgets, add Files:/Mode: lines, plan same-provider staggering, pre-write commit messages. See §Optimize checklist below. | Decomposition-ready plan |
-| **Execute** | `"Execute the plan"` | **Orchestrator profile only.** Decompose into kanban cards, dispatch workers. Non-orchestrator profiles prefer the **board-mediated handoff**: `python3 scripts/kanban_handoff.py --plan <plan.md>` creates one hardened handoff card the dispatcher runs under the orchestrator profile (idempotent; checks its own preconditions). **Fallback only** (no gateway): start a new orchestrator session — `/profile` does **not** switch — via `hermes -p orchestrator chat`. See `references/profile-switching.md`. | Decomposed board |
+| **Execute** | `"Execute the plan"` | **Orchestrator profile only.** Decompose into kanban cards, dispatch workers. Non-orchestrator profiles prefer the **board-mediated handoff**: `python3 scripts/kanban_handoff.py --plan <plan.md>` creates one hardened handoff card the dispatcher runs under the orchestrator profile (idempotent; checks its own preconditions). **Fallback only** (no gateway): start a new orchestrator session — `/profile` does **not** switch — via `hermes -p orchestrator chat`. See `plugin/data/references/profile-switching.md`. | Decomposed board |
 
 **Critical ordering rule:** Sanity check, Harden, and Revise iterate BEFORE Optimize. Sanity check is read-only — it finds gaps. Harden closes them. Optimize formats for execution. The interaction model is: **Draft → Sanity check → Harden → Revise → repeat → Optimize → execute**. Never Optimize before Harden — formatting a plan with content gaps wastes tokens on cards that will be blocked or produce wrong code.
 
@@ -50,7 +50,7 @@ The planning phase proceeds through five stages in this exact order. Do not skip
 
 ### Harden checklist (WHAT — content completeness)
 
-Run this during the Harden stage, after the initial sanity check. These items verify the plan's content is complete, correct, and well-researched. See `references/plan-hardening-methodology.md` for the tier-gated approach (Critical → Important → Nice-to-have) and verification grep suite.
+Run this during the Harden stage, after the initial sanity check. These items verify the plan's content is complete, correct, and well-researched. See `plugin/data/references/plan-hardening-methodology.md` for the tier-gated approach (Critical → Important → Nice-to-have) and verification grep suite.
 
 1. **Anchor points verified** — All line numbers, function names, and file paths were checked against the current `HEAD`. If the plan references stale line numbers, re-verify before patching. This is the first thing you do in Harden — never harden a plan with stale references.
 2. **No-deletions policy confirmed** — If the plan requires preserving existing code, every quarantined block has a marker tag. If the plan deletes code, the deletion is intentional and documented.
@@ -61,7 +61,7 @@ Run this during the Harden stage, after the initial sanity check. These items ve
 7. **Redundant change detection, already-shipped scan, and compaction** — For each section, check whether the desired end state already exists in `HEAD`. **Already-shipped detection:** grep the CHANGELOG and `docs/DEFERRED_FEATURES.md` for related keywords; if a plan item's fix is already live (e.g., a constant's helper function already returns 0.0 unconditionally), mark the todo as `completed` with the ship date. **Compaction:** when plan prose says "trace finalize paths to understand X" but `grep` shows the function doesn't write that field at all (e.g., `serialize_snapshot` doesn't write `retained_count`), the tracing step is unnecessary — compact the plan item to the minimal change ("one line"). Document what exists vs. what needs to be added so the worker targets the minimal change.
 8. **Scope-appropriateness confirmed** — The plan doesn't bundle "nice to have" work. Deferred items are explicitly scoped out with a v2 target. Non-goals are stated.
 9. **Monkeypatch paths verified** — When extracting functions from a god module to a new module, grep the test tree for `monkeypatch.setattr` and `@patch` targeting any moved function. If the plan moves a function `old_module.foo()` to `new_module.foo()`, verify the test strategy accounts for dual-patching: the internal caller in `new_module` needs its own patch. See Pitfalls § Module extraction breaks test monkeypatches.
-10. **Goal-card suitability** — For each code workstream, set `goal_card: false` (default) or `goal_card: true` with `goal_rationale:` and `goal_scenario:` (`D1`–`D10`, `A1`–`A10`, or `none`). Scan `references/goal-card-selection.md` § Scenario index. If any workstream is `true`, set plan-level `goal_card_budget` (default **2**). Document which table row matched or which **A*** anti-pattern forced `false`. Do not mark `true` for exploration/spikes (A3) or splittable parallel lanes (A2).
+10. **Goal-card suitability** — For each code workstream, set `goal_card: false` (default) or `goal_card: true` with `goal_rationale:` and `goal_scenario:` (`D1`–`D10`, `A1`–`A10`, or `none`). Scan `plugin/data/references/goal-card-selection.md` § Scenario index. If any workstream is `true`, set plan-level `goal_card_budget` (default **2**). Document which table row matched or which **A*** anti-pattern forced `false`. Do not mark `true` for exploration/spikes (A3) or splittable parallel lanes (A2).
 11. **Simplification scan** — After verifying anchor points but before the tier-gated hardening pass, scan every plan todo item and ask: "Could this be simpler than the plan describes?" Look for: (a) analysis steps that `grep` renders unnecessary (e.g., "trace finalize paths" when the function doesn't write the field), (b) multi-step fixes where the first step invalidates later steps (e.g., discovering a constant is already 0 makes the gate logic moot), (c) prose descriptions that overstate complexity. For each simplification found, update the todo content to the minimal change and add a note explaining what was compacted.
 12. **Holistic vs Surgical classification** — Every fix must be explicitly classified as **holistic** (addresses a problem globally, minimal blast radius, few files, no schema changes) or **surgical** (complex, scoped to a specific owner, may affect event buses or cross-cutting concerns). This classification guides decomposition ordering: holistic fixes run first because they unblock surgical work and reduce the blast radius for later cards. Add a classification column to the signal map or a dedicated classification section.
 
@@ -85,7 +85,7 @@ Run this during the Optimize stage, after the plan content is hardened. These it
 14. **Plan committed and pushed to `${working_branch}`** — The hardened, optimized plan is committed to `${working_branch}` and pushed to `origin/${working_branch}`. Workers branch their worktrees from `${working_branch}` and need the full plan file for autonomous troubleshooting. Verify: `git log --oneline -1 -- .agent/plans/<plan>.md` shows a recent commit on `${working_branch}` AND `git fetch origin ${working_branch} --dry-run` confirms the push.
 15. **Card body self-containment verified** — Every agent-prompt block includes inline code for function bodies, types, and constants the worker can't derive from file paths alone. Section references (`§3b`) are acceptable for narrative context but NOT for implementation details. If a card says "implement curiousPresentationComplete per plan §3b", the function body MUST be included in the agent-prompt block. Workers without plan file access will block on "plan detail missing."
 16. **Diff cap present** — Every agent-prompt block over 50 lines includes an explicit scope guard: `"If your diff exceeds 150 lines net, STOP and report what's remaining."` This prevents scope explosion (observed: 1654-line diff on a 91-line card). Smaller cards don't need this.
-17. **Goal-card acceptance encoded** — For each `goal_card: true` workstream: add an **`Acceptance:`** subsection (judge-facing; use template in `references/goal-card-selection.md`); optional `goal_max_turns` in frontmatter (default **20**, must not exceed `goals.max_turns`). Run `python3 hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md` before attestation.
+17. **Goal-card acceptance encoded** — For each `goal_card: true` workstream: add an **`Acceptance:`** subsection (judge-facing; use template in `plugin/data/references/goal-card-selection.md`); optional `goal_max_turns` in frontmatter (default **20**, must not exceed `goals.max_turns`). Run `python3 hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md` before attestation.
 18. **Executive summary documentation-ready** — For plans that serve double-duty as implementation plans AND documentation artifacts (linked from `docs/` or referenced by other plans), the executive summary must be self-contained: a reader who never opens the evidence matrix must understand the problem, root causes, what's already fixed, what each phase delivers, and target metrics. Anti-pattern: a flat severity table. Required structure: (a) one-sentence opening, (b) root causes table with fix-complexity column, (c) already-shipped items, (d) remediation-at-a-glance phase table, (e) key performance targets in before/after format, (f) closing line with blast radius.
 
 ### System-agnostic path convention
@@ -102,7 +102,7 @@ The trigger phrase table in the interaction model, the adoption protocol, and al
 
 **CLI Agent terminology:** In KPI/metrics sections, use "CLI Agent" (system-agnostic). In coding-agent rosters and intro paragraphs, use the actual product name ("Cursor CLI"). The distinction: metrics should be portable across coding agents; the roster tells users exactly what to install.
 
-**README formatting pitfalls:** After any markdown edit, check for URL-encoded HTML artifacts (`%3C` wrappers), HTML entities (`&gt;`/`&lt;`), broken code fences, triple blank lines, and mixed table formatting. See `references/readme-formatting-pitfalls.md` for the full checklist.
+**README formatting pitfalls:** After any markdown edit, check for URL-encoded HTML artifacts (`%3C` wrappers), HTML entities (`&gt;`/`&lt;`), broken code fences, triple blank lines, and mixed table formatting. See `plugin/data/references/readme-formatting-pitfalls.md` for the full checklist.
 
 ### Scope-appropriateness gate
 
@@ -114,7 +114,7 @@ Before planning, check whether the kanban-advanced workflow is even the right to
 | --- | --- |
 | Tiny / no board | `/goal` or `agent -p` |
 | Multi-lane, governed delivery | kanban-advanced (default **one-shot** cards) |
-| One stubborn outcome lane on a board | kanban-advanced + `--goal` on **0–2** cards after Harden (`references/goal-card-selection.md`) |
+| One stubborn outcome lane on a board | kanban-advanced + `--goal` on **0–2** cards after Harden (`plugin/data/references/goal-card-selection.md`) |
 
 Requires **Hermes ≥ 0.16.0** for `--goal` on `hermes kanban create`.
 
@@ -136,7 +136,7 @@ If the user gate reveals scope creep or misalignment, trim the plan *before* spa
 
 Every plan must have:
 
-1. **YAML frontmatter** with `name`, `plan_id`, `overview`, `line_budget`, `contingencies`, and `todos` list. Optional: `goal_card_budget` (default 2), per-workstream `goal_card`, `goal_scenario`, `goal_max_turns`, `goal_rationale` (see `references/goal-card-selection.md`).
+1. **YAML frontmatter** with `name`, `plan_id`, `overview`, `line_budget`, `contingencies`, and `todos` list. Optional: `goal_card_budget` (default 2), per-workstream `goal_card`, `goal_scenario`, `goal_max_turns`, `goal_rationale` (see `plugin/data/references/goal-card-selection.md`).
 2. **Clear section-per-change.** Each fix or feature gets its own `###` section with:
   - File path(s) — where the change belongs and how it integrates
   - Implementation approach — what's needed to fulfill the requirement
@@ -257,7 +257,7 @@ Before decomposition, every plan must include a contingencies table. If a risk i
 
 ## Line budget analysis
 
-Before decomposing a plan into cards, compute the expected net line changes AND the estimated agent iterations. See `references/iteration-budget-estimation.md` for the formula, hard ceiling of 35 turns, and real Phase 2 outcomes.
+Before decomposing a plan into cards, compute the expected net line changes AND the estimated agent iterations. See `plugin/data/references/iteration-budget-estimation.md` for the formula, hard ceiling of 35 turns, and real Phase 2 outcomes.
 
 1. **Count additions** — new lines the card will introduce.
 2. **Count deletions** — existing lines the card will remove.
@@ -273,7 +273,7 @@ Net change = additions + deletions + rewrites.
 | 101–200 | 30–50 | Warning — verify granularity; split if touching >2 files |
 | > 200 | > 50 | **FLAG — must split.** Either line count or iteration estimate exceeds safe bounds. |
 
-> **Code relocation is NOT exempt from splitting.** Moving 300 lines of existing code (add+del=600, net=30) is still a large card. The agent must read, understand, copy, verify imports, remove, re-export, test, and commit — each step consumes iterations. A 19-function extraction with full test suite easily burns 60+ happy-path turns and exhausts the 90-turn budget on any failure. Split relocation cards the same way you split greenfield cards. See `references/iteration-budget-case-study.md` for a worked example (WS9: 19 functions, 72 happy-path turns, exhausted 90-turn budget).
+> **Code relocation is NOT exempt from splitting.** Moving 300 lines of existing code (add+del=600, net=30) is still a large card. The agent must read, understand, copy, verify imports, remove, re-export, test, and commit — each step consumes iterations. A 19-function extraction with full test suite easily burns 60+ happy-path turns and exhausts the 90-turn budget on any failure. Split relocation cards the same way you split greenfield cards. See `plugin/data/references/iteration-budget-case-study.md` for a worked example (WS9: 19 functions, 72 happy-path turns, exhausted 90-turn budget).
 
 ## Section template
 
@@ -373,18 +373,18 @@ Run `bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh --plan 
 
 ## References
 
-- `references/plan-anchor-verification-pitfalls.md` — common inaccuracy patterns when verifying plan claims against the codebase
-- `references/worker-actionability-audit.md` — per-section actionability checklist before decomposition
-- `references/single-coherent-filesystem.md` — filesystem coherence and commit cadence incident analysis
-- `references/documentation-style.md` — system-agnostic paths, CLI Agent vs Cursor terminology, wiki table formatting, user-authored prose preservation
-- `references/documentation-sanity-check.md` — stale reference detection, code fence integrity, table formatting, package tree maintenance
-- `references/readme-formatting-pitfalls.md` — URL-encoded HTML artifacts, HTML entities, broken code fences, triple blanks, user-authored prose preservation
-- `references/vanilla-kanban-known-issues.md` — upstream Hermes Agent kanban bugs mapped to structural workarounds (dependency gating, workspace isolation, dispatcher resilience, root card anti-patterns)
-- `references/iteration-budget-case-study.md` — worked example: WS9 19-function extraction exhausted 90-turn budget; how to calculate operation counts and split correctly
-- `references/governance-sad-path-audit.md` — full flowchart trace of every transition with 23 sad paths, governance coverage assessment, and prioritized gaps (kanban-advanced:kanban-orchestrator reference)
-- `references/plan-hardening-checklist.md` — 11-item first-pass hardening checklist (Critical → Important → Nice-to-have) + redundant change detection pattern; runs between sanity check and optimization
-- `references/phase-transition-hardening.md` — re-verifying line numbers, fleshing out placeholder workstreams, dependency graphs, and verification gates when reactivating a deferred plan phase
-- `references/plan-hardening-methodology.md` — tier-gated hardening pass (Critical → Important → Nice-to-have) after a sanity check; verification grep suite; before/after report template
-- `references/dependency-graph-format.md` (kanban-advanced:kanban-orchestrator) — ASCII-art dependency graph format for parent-child link planning
+- `plugin/data/references/plan-anchor-verification-pitfalls.md` — common inaccuracy patterns when verifying plan claims against the codebase
+- `plugin/data/references/worker-actionability-audit.md` — per-section actionability checklist before decomposition
+- `plugin/data/references/single-coherent-filesystem.md` — filesystem coherence and commit cadence incident analysis
+- `plugin/data/references/documentation-style.md` — system-agnostic paths, CLI Agent vs Cursor terminology, wiki table formatting, user-authored prose preservation
+- `plugin/data/references/documentation-sanity-check.md` — stale reference detection, code fence integrity, table formatting, package tree maintenance
+- `plugin/data/references/readme-formatting-pitfalls.md` — URL-encoded HTML artifacts, HTML entities, broken code fences, triple blanks, user-authored prose preservation
+- `plugin/data/references/vanilla-kanban-known-issues.md` — upstream Hermes Agent kanban bugs mapped to structural workarounds (dependency gating, workspace isolation, dispatcher resilience, root card anti-patterns)
+- `plugin/data/references/iteration-budget-case-study.md` — worked example: WS9 19-function extraction exhausted 90-turn budget; how to calculate operation counts and split correctly
+- `plugin/data/references/governance-sad-path-audit.md` — full flowchart trace of every transition with 23 sad paths, governance coverage assessment, and prioritized gaps (kanban-advanced:kanban-orchestrator reference)
+- `plugin/data/references/plan-hardening-checklist.md` — 11-item first-pass hardening checklist (Critical → Important → Nice-to-have) + redundant change detection pattern; runs between sanity check and optimization
+- `plugin/data/references/phase-transition-hardening.md` — re-verifying line numbers, fleshing out placeholder workstreams, dependency graphs, and verification gates when reactivating a deferred plan phase
+- `plugin/data/references/plan-hardening-methodology.md` — tier-gated hardening pass (Critical → Important → Nice-to-have) after a sanity check; verification grep suite; before/after report template
+- `plugin/data/references/dependency-graph-format.md` (kanban-advanced:kanban-orchestrator) — ASCII-art dependency graph format for parent-child link planning
 - **Wiki: provider-strategy** — multi-provider fan-out, rate-limit prevention, fallback configuration (for same-provider staggering decisions in checklist item 9)
 - **Wiki: Why NOT Kanban** (README § Why NOT Kanban) — when to skip the workflow entirely (scope-appropriateness gate before planning begins)

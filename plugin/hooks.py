@@ -1,8 +1,8 @@
 """Lifecycle hooks for the kanban-advanced plugin.
 
 on_session_start — logs skill availability hint when a new session starts.
-    The primary discovery mechanism is materialized skills appearing in
-    the system prompt's <available_skills> index, not hook injection.
+    Logger-only: text is NOT injected into agent context. Sad-path routing lives
+    in SOUL prompts, procedural skill headers, and profile-local skills.
 
 post_tool_call — logs board events after kanban tool calls (create, complete,
     block, unblock, link) for audit and debugging.
@@ -49,14 +49,22 @@ def on_session_start(**kwargs: Any) -> None:
             skill_hint = (
                 "[kanban-advanced] Orchestrator profile detected. "
                 "Load kanban-advanced:kanban-orchestrator for the full "
-                "decomposition SOP.  All kanban-advanced skills available: "
+                "decomposition SOP. On gate FAIL: kanban-advanced:kanban-orchestrator-governance "
+                "+ skill_view(kanban-advanced, references/in-flight-governance-index.md). "
+                "All kanban-advanced skills available: "
                 "kanban-advanced:kanban-planning, "
-                "kanban-advanced:kanban-worker, "
                 "kanban-advanced:kanban-preflight, "
                 "kanban-advanced:kanban-cleanup, "
                 "kanban-advanced:kanban-postmortem, "
                 "kanban-advanced:kanban-reconciliation, "
                 "kanban-advanced:kanban-notify."
+            )
+        elif profile in ("worker", "kanban-advanced-worker"):
+            skill_hint = (
+                "[kanban-advanced] Worker profile detected. "
+                "Load kanban-advanced:kanban-worker for supervisor lifecycle. "
+                "On DENY/block: kanban-advanced:kanban-worker-governance "
+                "+ skill_view(kanban-advanced, references/in-flight-governance-index.md)."
             )
         else:
             skill_hint = (

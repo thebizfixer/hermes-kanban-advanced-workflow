@@ -131,6 +131,13 @@ Destination: `<profile-home>/SOUL.md` (profile home resolved from `hermes profil
 
 SOUL opens with `# Worker Prompt` or `# Orchestrator Prompt` after a successful bootstrap.
 
+SOUL includes **sad-path paragraphs** (re-applied on every init/reconcile):
+
+- Worker: evaluation-chain DENY → `kanban-worker-governance` + in-flight index; no raw `git worktree add`.
+- Orchestrator: gate FAIL → `kanban-orchestrator-governance` + in-flight index.
+
+Governance skills are profile-local (2 worker / 9 orchestrator skills). The in-flight index SSOT lives at `plugin/skills/kanban-advanced/references/in-flight-governance-index.md`. Init materializes `kanban-advanced` with that index **plus** every `plugin/data/references/*.md` file under `references/` (except the pointer stub overwrites are skipped when the SSOT index already exists). Orchestrator profile-local copy includes the same tree. Load via `skill_view("kanban-advanced:kanban-advanced", "references/<file>.md")` — not a separate profile skill.
+
 ### 2. Role-only skills (profile-local)
 
 Wipes `<profile-home>/skills/` completely, then copies **only** these plugin skills:
@@ -140,7 +147,7 @@ Wipes `<profile-home>/skills/` completely, then copies **only** these plugin ski
 | `kanban-advanced-worker` | 2 | `kanban-worker`, `kanban-worker-governance` |
 | `kanban-advanced-orchestrator` | 9 | `kanban-advanced`, `kanban-cleanup`, `kanban-notify`, `kanban-orchestrator`, `kanban-orchestrator-governance`, `kanban-planning`, `kanban-postmortem`, `kanban-preflight`, `kanban-reconciliation` |
 
-Each skill is a directory with `SKILL.md` copied from `plugin/skills/<name>/SKILL.md` in the **installed plugin** (`$HERMES_HOME/plugins/kanban-advanced/`), not from a random dev checkout unless that is the install path.
+Each skill is a directory with `SKILL.md` (and `references/` when present) copied from `plugin/skills/<name>/` in the **installed plugin** (`$HERMES_HOME/plugins/kanban-advanced/`), not from a random dev checkout unless that is the install path.
 
 ### 3. Verification
 

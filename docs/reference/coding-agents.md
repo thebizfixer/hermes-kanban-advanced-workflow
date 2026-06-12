@@ -82,6 +82,12 @@ This is **separate** from Hermes profile `model_reachability` (`hermes -p <profi
 
 After re-auth: delete `.hermes/kanban/preflight_cache.json`. See [wiki/troubleshooting.md](../../wiki/troubleshooting.md).
 
+## Worker model tier (advisory)
+
+Hermes dispatch profiles carry `model.default` for the **orchestrator/worker** session — separate from the coding CLI (`KANBAN_CODING_AGENT`). Fast or low-reasoning tiers (e.g. Haiku, Flash, mini variants) may skip procedural steps; kanban-advanced compensates with deterministic waypoints (Step 3 E021 worktree check, evaluation chain, card body policy).
+
+Workers log a **non-blocking** advisory when the worker profile uses a fast tier; under `policy_profile=strict`, waypoints are the primary safety rail. Orchestrator profiles may use stronger reasoning models for decomposition oversight.
+
 ## Cursor CLI (`agent`) — recommended default
 
 **List models:**

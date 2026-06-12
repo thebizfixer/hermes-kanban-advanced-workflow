@@ -41,6 +41,6 @@ If you hit an error, report the EXACT error message to the worker. Do NOT guess 
 After committing, the worker will run:
 1. `git diff --stat <baseline>..HEAD` — every `Files:` path must show >0 changes
 2. The test command from `Tests:`
-3. The evaluation chain (E001–E020)
+3. The evaluation chain (E001–E021)
 
 Your commit message must match the `Commit:` line. Token usage is extracted from your JSON output.

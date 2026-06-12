@@ -10,7 +10,7 @@ metadata:
 
 # Kanban Orchestrator — Decomposition Playbook
 
-> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E020, card body policy P001–P009, preflight.sh, validate_board.sh, pre_dispatch_gate.sh) structurally enforces them. If you hit a DENY or block, load `kanban-advanced:kanban-orchestrator-governance` for the error code reference and pitfall encyclopedia — do not guess.
+> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E021, card body policy P001–P009, preflight.sh, validate_board.sh, pre_dispatch_gate.sh) structurally enforces them. If you hit a DENY or block, load `kanban-advanced:kanban-orchestrator-governance` then `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` — do not guess.
 
 > The core worker lifecycle (including the `kanban_create` fan-out pattern and the "decompose, don't execute" rule) is auto-injected into every kanban process via the `KANBAN_GUIDANCE` system-prompt block. This skill is the deeper playbook when you're an orchestrator profile whose whole job is routing.
 
@@ -26,7 +26,7 @@ metadata:
 This skill is for the **orchestrator profile only**. If you are NOT running as the orchestrator profile:
 
 - **Planning stage triggers** ("plan this out", "sanity check", "harden", "optimize") — you MAY execute these as any profile. Load `kanban-advanced:kanban-planning`.
-- **Execution stage triggers** ("execute the plan", "proceed", "decompose") — you MUST refuse on non-orchestrator profiles. Run `hermes profile list`, show output (`*` = active per [Hermes profile commands](https://hermes-agent.nousresearch.com/docs/reference/profile-commands)), and direct the user to **start a new orchestrator session** — Hermes has **no in-chat profile switch** (`/profile` is show-only). Use: `hermes -p orchestrator chat`, or `orchestrator chat` if aliased, or `hermes profile use orchestrator` then `hermes chat`. Full script: `references/profile-switching.md`.
+- **Execution stage triggers** ("execute the plan", "proceed", "decompose") — you MUST refuse on non-orchestrator profiles. Run `hermes profile list`, show output (`*` = active per [Hermes profile commands](https://hermes-agent.nousresearch.com/docs/reference/profile-commands)), and direct the user to **start a new orchestrator session** — Hermes has **no in-chat profile switch** (`/profile` is show-only). Use: `hermes -p orchestrator chat`, or `orchestrator chat` if aliased, or `hermes profile use orchestrator` then `hermes chat`. Full script: `plugin/data/references/profile-switching.md`.
 - **Do not attempt decomposition from a non-orchestrator profile** (chat session). Card creation, linking, cron setup, and gate management are orchestrator-only operations. Doing them from another profile bypasses governance (no gate/root/audit cards, no staggering, no crons, wrong assignee discipline). Exception: one-shot `hermes -p orchestrator kanban …` via terminal_tool is allowed for individual CLI ops — not for full decomposition SOP.
 
 To detect your profile: check your system prompt for the active profile name, or run `hermes profile list` and note which is marked `*` (active).
@@ -48,18 +48,24 @@ that skill is for workers, not orchestrators, and adds unnecessary context overh
 skill_view("kanban-advanced:kanban-orchestrator")
 ```
 
-Check the card body for `pre_dispatch_gate:` and `cards_yaml:` metadata:
+**Sad-path exception:** On gate FAIL, attestation error, or runbook step failure → also load `kanban-advanced:kanban-orchestrator-governance` + in-flight index (L2–L4).
+
+Check the card body for `pre_dispatch_gate:`, `cards_yaml:`, `BUNDLE_ROOT:`, and `gate_script:` metadata:
 
 | Card body shows | Action |
 |----------------|--------|
-| `pre_dispatch_gate: PASSED at …` | Skip pre_dispatch_gate.sh entirely — go straight to Standard Process **Step 2** (create gate) |
-| `pre_dispatch_gate: FAILED …` or `UNKNOWN` | Run `bash scripts/pre_dispatch_gate.sh <plan_id>` first and resolve failures |
+| `pre_dispatch_gate: PASSED at …` | Skip `pre_dispatch_gate.sh` and preflight — go straight to runbook **Step 2** (create gate) |
+| `pre_dispatch_gate: FAILED …` or `UNKNOWN` | Run `bash <gate_script from card body>` or `bash <BUNDLE_ROOT>/scripts/pre_dispatch_gate.sh <plan_id>` and resolve failures |
+| `BUNDLE_ROOT: <path>` | Use absolute paths from the runbook (`bash <BUNDLE_ROOT>/scripts/…`) — do not hunt for `scripts/` |
 | `cards_yaml: <path>` (not "none") | Pass `--cards-yaml <path>` to `kanban_decompose.py` (richer workspace/branch metadata) |
 | `cards_yaml: none` | Pass `--plan <plan_path>` to `kanban_decompose.py` |
 
 The card body is a **command-first runbook** with literal CLI commands pre-substituted.
 Read the "Decomposition runbook" section in the card body and execute the steps in order.
-You do not need to re-derive paths, plan_id, or profile names — they are in the card body.
+**Do not read the full Plan file** — runbook + `cards_yaml` + gate stamp only.
+Ignore archived `done` cards in `worker_context` when the body indicates a fresh decomposition.
+
+Orchestrator may use a capable reasoning model; workers on fast tiers rely on Step 3 waypoint discipline (E021) and the evaluation chain.
 
 **Self-referential exception:** if the plan modifies the kanban-advanced governance
 infrastructure itself, do NOT auto-decompose — block the handoff card and notify the
@@ -203,9 +209,9 @@ After the last implementation card completes and the final audit passes:
 
 At each checkpoint the orchestrator MUST present findings and wait for the user's explicit "yes" before proceeding. Silently finishing or skipping checkpoints is a governance violation. See `plugin/data/references/interaction-model.md` for the full contract with exact phrasing and anti-patterns.
 
-**Known vanilla hermes bugs:** See `references/vanilla-kanban-known-issues.md` — maps 12 upstream kanban bugs to structural workarounds. Load during Step 0b (Preflight) and apply fixes before decomposition.
+**Known vanilla hermes bugs:** See `plugin/data/references/vanilla-kanban-known-issues.md` — maps 12 upstream kanban bugs to structural workarounds. Load during Step 0b (Preflight) and apply fixes before decomposition.
 
-**Governance sad-path audit:** See `references/governance-sad-path-audit.md` — full flowchart trace of every transition with 23 sad paths identified, governance coverage assessed, and gaps prioritized. Load during Step 0b to verify the plan's decomposition strategy covers every known failure mode.
+**Governance sad-path audit:** See `plugin/data/references/governance-sad-path-audit.md` — full flowchart trace of every transition with 23 sad paths identified, governance coverage assessed, and gaps prioritized. Load during Step 0b to verify the plan's decomposition strategy covers every known failure mode.
 
 ## Decomposition choreography (Six Sigma)
 
@@ -219,7 +225,7 @@ bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 
 This runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py` — separate from Hermes profile model reachability) → attestation → card policy present → plan memory seeded → DB integrity. Fails on any blocking check with a specific error.
 
-**Coding-agent auth gate (blocking):** Bootstrap smoke is **advisory only** — init can succeed while auth is broken. If `coding_agent_cli` or preflight `coding_agent_cli_reachability` fails, **do not decompose**. Load `references/coding-agent-auth.md`. Common fixes: API key in `.env`, vendor login on gateway host, `HOME=` in `.env` or systemd. Cursor: `agent status` can lie when `HOME` is unset or OAuth in `~/.config/cursor/auth.json` is expired — operator runs `agent login` (or fixes `HOME`), `hermes gateway restart` → delete `.hermes/kanban/preflight_cache.json` → re-run gate. Bootstrap alone does not prove workers can dispatch the coding CLI.
+**Coding-agent auth gate (blocking):** Bootstrap smoke is **advisory only** — init can succeed while auth is broken. If `coding_agent_cli` or preflight `coding_agent_cli_reachability` fails, **do not decompose**. Load `plugin/data/references/coding-agent-auth.md`. Common fixes: API key in `.env`, vendor login on gateway host, `HOME=` in `.env` or systemd. Cursor: `agent status` can lie when `HOME` is unset or OAuth in `~/.config/cursor/auth.json` is expired — operator runs `agent login` (or fixes `HOME`), `hermes gateway restart` → delete `.hermes/kanban/preflight_cache.json` → re-run gate. Bootstrap alone does not prove workers can dispatch the coding CLI.
 
 After the gate passes, proceed directly to the Standard process. Plans may sit for hours or days while the user thinks them over. After the plan is optimized:
 
@@ -304,7 +310,7 @@ Or they can be left as-is — the tool no longer reads them.
 
 ### Full upgrade checklist
 
-See `references/hermes-v0.15.0-upgrade.md` for the step-by-step upgrade procedure covering: update, config migrate, aux model configuration, profile verification, stale config cleanup, and smoke testing.
+See `plugin/data/references/hermes-v0.15.0-upgrade.md` for the step-by-step upgrade procedure covering: update, config migrate, aux model configuration, profile verification, stale config cleanup, and smoke testing.
 
 ### Step 1 — Understand the goal
 Ask clarifying questions if ambiguous. Before sketching the task graph, work out what the plan needs to deliver, where each change belongs in the codebase, and whether any preferences can be deferred. Build the graph from what is needed first — optional improvements can be separate cards that drop if the budget runs short.
@@ -373,7 +379,7 @@ bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh --remove 
 
 ### Goal-mode cards (vanilla `--goal`, Hermes ≥ 0.16.0)
 
-Default: **one-shot** worker cards (no `--goal`). Use goal-mode only when the plan marks `goal_card: true` after Harden (see `references/goal-card-selection.md`, scenarios D1–D10). Plan-level cap: `goal_card_budget` (default **2**).
+Default: **one-shot** worker cards (no `--goal`). Use goal-mode only when the plan marks `goal_card: true` after Harden (see `plugin/data/references/goal-card-selection.md`, scenarios D1–D10). Plan-level cap: `goal_card_budget` (default **2**).
 
 **Rules:**
 
@@ -521,7 +527,7 @@ Coding agent fails
         ▼
 2nd resort: WORKER IMPLEMENTS DIRECTLY
    Worker writes the code, runs tests, commits, and runs the FULL
-   evaluation chain (E001–E020). Worker plays both roles: implementer
+   evaluation chain (E001–E021). Worker plays both roles: implementer
    and verifier.
    ✓ Eval chain still runs — log tokens with source="worker-direct".
         │ (if worker cannot implement — wrong skill set, infra-only)
@@ -730,11 +736,11 @@ cronjob(action="list")   # verify next_run_at; store job_id for remove
 
 ## Salvage pattern
 
-When a card hits the iteration limit but completed its extraction work, the orchestrator can recover it without re-running the agent. See `references/salvage-pattern-iteration-exhausted-cards.md` for the full procedure.
+When a card hits the iteration limit but completed its extraction work, the orchestrator can recover it without re-running the agent. See `plugin/data/references/salvage-pattern-iteration-exhausted-cards.md` for the full procedure.
 
 ## Pitfalls
 
-> **Full pitfall encyclopedia → `kanban-advanced:kanban-orchestrator-governance`.** The evaluation chain (E001–E020) and card body policy (P001–P009) structurally enforce the most critical rules. Load the governance reference skill when you need detailed diagnostics and historical context for a specific pitfall.
+> **Full pitfall encyclopedia → `kanban-advanced:kanban-orchestrator-governance`.** The evaluation chain (E001–E021) and card body policy (P001–P009) structurally enforce the most critical rules. Load the governance reference skill when you need detailed diagnostics and historical context for a specific pitfall.
 
 **Key procedural pitfalls (see governance ref for full context):**
 - `auto_decompose: true` creates duplicate children — set to `false`.
@@ -743,5 +749,5 @@ When a card hits the iteration limit but completed its extraction work, the orch
 - Iteration-limit blocked cards often have committed work — salvage, don't re-dispatch.
 - Workspace paths must be absolute and unique (`worktree:/tmp/wt-<plan>-<card>`).
 - Cherry-pick without `-x` breaks traceability — always use `-x`.
-- Never complete a card without running the evaluation chain (E001–E020).
+- Never complete a card without running the evaluation chain (E001–E021).
 - **Canonical-first rule:** edit canonical source → `provision.sh` → `provision.sh --check`.

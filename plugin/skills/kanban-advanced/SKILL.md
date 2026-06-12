@@ -47,6 +47,9 @@ Load the skill that matches the user's request and proceed. All kanban-advanced 
 | Preflight before dispatch | `kanban-advanced:kanban-preflight` | Environment gating |
 | Worker hit a DENY / block | `kanban-advanced:kanban-worker-governance` | Error code reference |
 | Orchestrator hit a governance block | `kanban-advanced:kanban-orchestrator-governance` | Pitfall encyclopedia |
+| Blocked / don't know why | `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` | Symptom → layer → command router |
+| Shared reference doc | `skill_view("kanban-advanced:kanban-advanced", "references/<file>.md")` | Init bundles `plugin/data/references/*.md` here; worktree fallback: `cat "$BUNDLE/plugin/data/references/<file>.md"` |
+| Deep navigation / matrices | `wiki/in-flight-navigation.md` (repo root) | Belt routers + worktree access diagram |
 
 ### When you DO need the orchestrator profile
 
@@ -65,8 +68,10 @@ python3 scripts/kanban_handoff.py --plan <plan.md>
 ```
 
    The gateway dispatcher claims the `ready` card and spawns an orchestrator-profile
-   agent that runs the decomposition SOP autonomously. The builder is idempotent
-   (one open handoff card per plan_id) and checks its own preconditions.
+   agent that runs the decomposition SOP autonomously. The builder runs
+   `pre_dispatch_gate.sh` at creation (stamps result), resolves `cards_yaml`, and emits
+   absolute `{BUNDLE_ROOT}/scripts/…` runbook commands. Idempotent (one open handoff per
+   `plan_id`) with precondition checks.
 2. If the builder exits non-zero, relay its `fix` message and act on it:
    - exit 2 — orchestrator profile missing → `hermes kanban-advanced init`
    - exit 3 — gateway not running → ask the user, then `hermes gateway run`

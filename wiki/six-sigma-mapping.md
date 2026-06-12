@@ -42,7 +42,7 @@ A Six Sigma black belt will recognize these as our quality metrics:
 | **DPMO** (defects per million opportunities) | Failed evaluation chain steps / total steps run | Tracked per reconciliation |
 | **Process capability (Cp/Cpk)** | Token burn variance across tasks | Flag outliers > 2σ from mean |
 | **Control limits** | Policy profiles (advisory/balanced/strict) | Escalation at strict level |
-| **Root cause analysis** | Failure-mode taxonomy with categorized error codes (E001–E020, P001–P009, A001–A003, PR001, G001–G003) | Every blocked task classified |
+| **Root cause analysis** | Failure-mode taxonomy with categorized error codes (E001–E021, P001–P009, A001–A003, PR001, G001–G003) | Every blocked task classified |
 
 ## The "belt" model
 

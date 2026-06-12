@@ -104,10 +104,12 @@ if [ "$FAILURES" -gt 0 ]; then
 fi
 
 # Pre-warm Cursor OAuth once so parallel workers inherit a fresh access token.
+GATE_LIB_DIR="$SCRIPT_DIR/lib"
+[[ "$SCRIPT_DIR" == */lib ]] && GATE_LIB_DIR="$SCRIPT_DIR"
 # shellcheck source=lib/coding_agent_env.sh
-source "$SCRIPT_DIR/lib/coding_agent_env.sh"
+source "$GATE_LIB_DIR/coding_agent_env.sh"
 # shellcheck source=lib/coding_agent_auth_lock.sh
-source "$SCRIPT_DIR/lib/coding_agent_auth_lock.sh"
+source "$GATE_LIB_DIR/coding_agent_auth_lock.sh"
 if [ -f "$REPO_ROOT/.env" ]; then
   set -a
   # shellcheck disable=SC1091

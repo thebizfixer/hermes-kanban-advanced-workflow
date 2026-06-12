@@ -229,3 +229,14 @@ This is where most of our Phase 2 failures occurred. Each sad path now has a str
 12. **Cursor CLI compatibility check** — Version verification
 13. **Concurrent plan isolation** — Upstream #32228
 14. **Postmortem commit enforcement** — Auto-commit postmortem
+
+---
+
+## Post-audit navigation (2026-06)
+
+Gaps closed or routed by the in-flight governance navigation plan:
+
+- **Sad-path SSOT:** `plugin/skills/kanban-advanced/references/in-flight-governance-index.md` + `wiki/in-flight-navigation.md`
+- **Handoff / worktree / delegation incidents:** index rows + `handoff-regression-checklist.md`
+- **Worker SOUL vs skill:** `worktree_setup.sh` + E021 in seeded `worker.md`
+- **Remaining audit items** (P008/P009 script logic, meta-monitoring, etc.) — still engineering backlog; index points to T2/T3 recovery where documented

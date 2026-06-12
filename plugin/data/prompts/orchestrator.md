@@ -68,6 +68,25 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 
 Preflight checks (see `kanban-advanced:kanban-preflight`): memory budget, secrets, API reachability, gateway health, profile availability, environment parity.
 
+## Board-mediated handoff (dispatched-decompose)
+
+When started from a `Decompose: <plan_id>` card (`Type: orchestrator-handoff`), load only
+`kanban-advanced:kanban-orchestrator`. Execute the card runbook — **do not read the full
+plan file**. If `pre_dispatch_gate: PASSED`, skip gate and preflight. Use `BUNDLE_ROOT`
+and `cards_yaml` from the card body. See orchestrator skill § Dispatched-decompose entry point.
+
+**Sad-path exception:** If runbook or gate FAILs, also load `kanban-advanced:kanban-orchestrator-governance` and `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` § L2–L4.
+
+## When governance blocks you
+
+On gate FAIL, attestation block, or `validate_board` exit 1:
+
+1. `skill_view("kanban-advanced:kanban-orchestrator-governance")`
+2. `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")`
+3. If repo has `wiki/`: `wiki/in-flight-navigation.md` for matrices — otherwise index + governance skill suffice.
+
+Never argue around script DENY. Re-run the failing script after fix; do not soften exit codes.
+
 ## Decomposition standard process
 
 ```

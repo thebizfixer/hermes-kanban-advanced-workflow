@@ -15,40 +15,28 @@ You are a Kanban worker that delegates code changes to an external coding agent.
    git checkout origin/${working_branch} -- .agent/plans/*${PLAN_ID}*.md 2>/dev/null || true
    ```
    The plan file is essential for autonomous troubleshooting — section references (`§3b`) cannot be resolved without it.
-2. **Pre-flight.** 
-   - **Worktree check:** Verify `$HERMES_KANBAN_WORKSPACE` exists and is a git worktree. If not, create one:
+2. **Pre-flight (governed waypoints — see `kanban-advanced:kanban-worker` Step 3).**
+   - **Never** use raw `git worktree add` — it skips `.worktreeinclude` and blocks at **E021**. Always run `worktree_setup.sh` from the main repo or `$HERMES_HOME/scripts/`:
      ```bash
-     WS="${HERMES_KANBAN_WORKSPACE:-$(pwd)}"
-     REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-     if [ ! -d "$WS/.git" ]; then
-       BRANCH="${HERMES_KANBAN_BRANCH:-wt/$(echo $HERMES_KANBAN_TASK | cut -c1-8)}"
-       git -C "$REPO_ROOT" worktree add --detach "$WS" HEAD 2>/dev/null || \
-       git -C "$REPO_ROOT" worktree add -b "$BRANCH" "$WS" HEAD
-       echo "[worker] Created worktree at $WS"
+     REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel)}"
+     source "${HERMES_HOME:-$HOME/.hermes}/scripts/lib/kanban_bundle.sh" 2>/dev/null \
+       || source "$REPO_ROOT/hermes-kanban-advanced-workflow/scripts/lib/kanban_bundle.sh"
+     WORKTREE_SETUP="$(_resolve_kanban_script worktree_setup.sh "$REPO_ROOT")"
+     [ -n "$WORKTREE_SETUP" ] || WORKTREE_SETUP="$REPO_ROOT/hermes-kanban-advanced-workflow/scripts/worktree_setup.sh"
+     eval "$(bash "$WORKTREE_SETUP" --task-id "$HERMES_KANBAN_TASK" --repo-root "$REPO_ROOT")"
+     cd "$WORKTREE_PATH"
+     if [ ! -f "$WORKTREE_PATH/.hermes/scripts/coding_agent_invoke.sh" ]; then
+       kanban_block "$HERMES_KANBAN_TASK" \
+         "E021_WORKTREE_INCOMPLETE: run worktree_setup.sh — not raw git worktree add"
+       exit 1
      fi
      ```
-     Never work in the main repo — always use an isolated worktree.
-   - Verify the external agent binary works: `bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke` (per-binary flags in `plugin/data/references/coding-agent-cli-invocation.md`).
-   - **Workspace trust (Cursor CLI):** If using Cursor CLI in a `/tmp` worktree, pre-create the trust file so the agent doesn't hang on first run:
-     ```bash
-     WORKSPACE_PATH="${HERMES_KANBAN_WORKSPACE:-$(pwd)}"
-     if [[ "$WORKSPACE_PATH" =~ ^[A-Za-z]: ]]; then
-       TRUST_HASH=$(echo "$WORKSPACE_PATH" | sed 's|:||; s|[/\\]|-|g')
-     else
-       TRUST_HASH=$(echo "$WORKSPACE_PATH" | sed 's|^/||; s|/|-|g')
-     fi
-     TRUST_DIR="$HOME/.cursor/projects/$TRUST_HASH"
-     mkdir -p "$TRUST_DIR" && touch "$TRUST_DIR/.workspace-trusted"
-     ```
-   - **Integration freshness:** If the parent card completed >1hr ago, merge `origin/${working_branch}` so the agent works against current code:
-     ```bash
-     git fetch "origin/${working_branch}"
-     git merge "origin/${working_branch}" --no-edit
-     ```
-3. **Dispatch.** 
-   - Prepend the governance block from `plugin/data/references/coding-agent-governance.md` to the agent prompt
-   - Spawn via `bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$FULL_PROMPT"`. Capture stdout for token attribution.
-   - Start a heartbeat thread simultaneously
+   - **Coding-agent smoke:** Resolve bundle (`bundle_path` in kanban-config → `$HERMES_HOME/plugins/kanban-advanced` → repo bundle), then `timeout 180 bash "$BUNDLE/scripts/coding_agent_invoke.sh" smoke` from the worktree via **`terminal()`** — not `execute_code`. On auth failure tag `[escalation:coding_agent:auth]` (operator tier after one retry with `HOME` set).
+   - **Integration freshness:** Before dispatch, merge `origin/${working_branch}` if the integration branch advanced since the worktree was created.
+3. **Dispatch (code-gen cards only).**
+   - Prepend `plugin/data/references/coding-agent-governance.md` to the extracted `agent -p` block from the card body.
+   - Run the coding CLI via **`terminal()`** with `coding_agent_invoke.sh dispatch` or `agent -p "…" --trust` — **never** `execute_code`, **never** implement code yourself. If dispatch fails, `kanban_block` with evidence.
+   - Start a heartbeat thread before the agent call.
 4. **Verify.** After agent completes, run post-agent file verification before calling `kanban_complete`.
 5. **Complete or block.** If all files changed and tests pass, complete. If any file missing, block with evidence.
 
@@ -78,46 +66,26 @@ After the agent commits, the worker re-runs the same `git diff --stat <baseline>
 
 ## External agent dispatch
 
-```python
-import threading, time, os, subprocess
+Use **`terminal()`** only — not `execute_code` or inline Python subprocesses. Start the heartbeat thread first, resolve `BUNDLE`, then dispatch via `coding_agent_invoke.sh` (see `kanban-advanced:kanban-worker` Step 4):
 
-stop = threading.Event()
-task_id = os.environ["HERMES_KANBAN_TASK"]
-workspace = os.environ["HERMES_KANBAN_WORKSPACE"]
+```bash
+# Heartbeat: start in a background terminal thread before dispatch (see kanban-worker skill).
 
-# Read coding agent from project .env (set by kanban-advanced init / dashboard Save)
-coding_agent = os.environ.get("KANBAN_CODING_AGENT", "agent")
-coding_agent_model = os.environ.get("KANBAN_CODING_AGENT_MODEL", "auto")
+BUNDLE=""
+for candidate in \
+  "$(grep -E '^bundle_path:' .hermes/kanban-overrides/kanban-config.yaml 2>/dev/null | head -1 | sed 's/^bundle_path: *//; s/^[\"'\'']//; s/[\"'\'']$//')" \
+  "${HERMES_HOME}/plugins/kanban-advanced" \
+  "${HERMES_KANBAN_REPO_ROOT:-.}/hermes-kanban-advanced-workflow"; do
+  [ -n "$candidate" ] && [ -f "$candidate/scripts/coding_agent_invoke.sh" ] && BUNDLE="$candidate" && break
+done
+INVOKE="$BUNDLE/scripts/coding_agent_invoke.sh"
+[ -x "$INVOKE" ] || INVOKE="${HERMES_HOME}/scripts/coding_agent_invoke.sh"
 
-# Extract prompt, Files:, and Mode: from card body
-prompt = "<extract the agent -p prompt string from card body>"
-files_line = "<extract Files: comma-separated paths>"
-mode = "<extract Mode: modify-only|create-only|any>"
-
-def _heartbeat_loop():
-    start = time.time()
-    while not stop.is_set():
-        elapsed = int(time.time() - start)
-        kanban_heartbeat(
-            task_id=task_id,
-            note=f"Agent running — {elapsed//60}m elapsed"
-        )
-        stop.wait(timeout=180)
-
-hb = threading.Thread(target=_heartbeat_loop, daemon=True)
-hb.start()
-from plugin.coding_agent import build_dispatch_argv
-
-cmd = build_dispatch_argv(coding_agent, prompt, coding_agent_model)
-try:
-    result = subprocess.run(
-        cmd,
-        capture_output=True, text=True, timeout=900, cwd=workspace
-    )
-finally:
-    stop.set()
-    hb.join(timeout=5)
+FULL_PROMPT="<governance preamble + memory brief + extracted agent -p block from card body>"
+timeout 900 bash "$INVOKE" dispatch "$FULL_PROMPT"
 ```
+
+On non-zero exit: `kanban_block` with stderr excerpt — never implement code yourself.
 
 ## Post-agent file verification (mandatory)
 
@@ -132,9 +100,14 @@ Before calling `kanban_complete`:
 7. Verify the commit message matches the task.
 8. Run the test command from the card body.
 
+## When evaluation chain DENYs
+
+On DENY or `kanban_block` from the evaluation chain: load `kanban-advanced:kanban-worker-governance`, then `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` for the symptom row. Exhaust T1 recovery before escalating. Never soften a script DENY to pass.
+
 ## Do NOT
 
 - Write code yourself. Always delegate to the external agent.
+- Use raw `git worktree add` or `execute_code` for coding-agent dispatch.
 - Push only to your assigned worktree branch — never to `${working_branch}`.
 - Use `git add -A`. Use `git add <specific files>`.
 - Complete a task with missing files.

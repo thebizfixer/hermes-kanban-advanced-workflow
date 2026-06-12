@@ -94,13 +94,35 @@ The handoff card is deliberately hardened:
 | Body | plan path + repo + branch + orchestrator SOP | Self-contained instructions |
 | Agent block | **none** | A coding `agent -p` block would make Hermes LLM-decompose the card into stub children (the reason `auto_decompose=false` is also required) |
 
+Handoff body metadata (stamped by `kanban_handoff.py`):
+
+| Field | Purpose |
+|-------|---------|
+| `BUNDLE_ROOT` | Absolute plugin checkout — runbook commands use `{BUNDLE_ROOT}/scripts/…` |
+| `gate_script` | Resolved `pre_dispatch_gate.sh` path (forensics for double-`lib/` incidents) |
+| `pre_dispatch_gate` | Gate result at creation — orchestrator skips re-run when `PASSED` |
+| `cards_yaml` | Structured decompose input when optimize/harden wrote `.hermes/kanban/memory/<plan_id>.yaml` (or plan-adjacent YAML) |
+
+Cards YAML convention: optimize/harden may write `{plan_memory_path}/{plan_id}.yaml` (default `.hermes/kanban/memory/`). Handoff discovers plan-adjacent YAML first, then plan memory.
+
 The builder is **idempotent** (one open `todo/ready/running/blocked` handoff per
 `plan_id`, plus a Hermes `--idempotency-key`) and checks its own preconditions before
 creating anything: orchestrator profile exists, `kanban.dispatch_in_gateway` is on,
 `kanban.auto_decompose` is off, and the gateway is running. It exits non-zero with a
 `fix` hint otherwise (use `--allow-offline` to create the card regardless). A manual
-`hermes -p orchestrator chat` session is the **fallback** when the gateway is
+`hermes -p kanban-advanced-orchestrator chat` session is the **fallback** when the gateway is
 unavailable — see `plugin/data/references/profile-switching.md`.
+
+### Handoff sad-path
+
+| Symptom | Index layer | Recovery |
+|---------|-------------|----------|
+| Builder exit 2–4 | L3 | Follow printed `fix` (init, gateway, dispatcher config) |
+| Handoff `ready` 10+ min | L3 | Restart gateway; confirm assignee = orchestrator profile |
+| `pre_dispatch_gate: UNKNOWN` on card | L2 | Orchestrator re-runs `bash <BUNDLE_ROOT>/scripts/pre_dispatch_gate.sh <plan_id>` |
+| `pre_dispatch_gate: PASSED` on card | L2 | Skip gate — proceed to runbook Step 2 |
+
+See `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` § L3.
 
 The `Type: orchestrator-handoff` marker is whitelisted in `kanban_card_policy.py` so
 the SOP-only body is exempt from the worker code-gen rules (P001/P002/P003), exactly

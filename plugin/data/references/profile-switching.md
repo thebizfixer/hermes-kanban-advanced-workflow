@@ -35,6 +35,11 @@ decomposition SOP. The builder checks its own preconditions and exits non-zero w
 `fix` hint when the orchestrator profile is missing (2), the gateway is down (3), or the
 dispatcher/`auto_decompose` config is wrong (4).
 
+The handoff card body stamps `pre_dispatch_gate` (orchestrator skips re-run when `PASSED`),
+`BUNDLE_ROOT`, `gate_script`, and `cards_yaml` (from plan-adjacent or
+`.hermes/kanban/memory/<plan_id>.yaml`). Runbook commands use absolute
+`{BUNDLE_ROOT}/scripts/…` paths.
+
 Use the **manual session switch below only** when the gateway/dispatcher is unavailable
 and cannot be started.
 

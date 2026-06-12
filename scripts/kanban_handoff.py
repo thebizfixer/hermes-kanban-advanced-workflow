@@ -84,6 +84,85 @@ def _read_overlay(project_root: Path) -> dict[str, str]:
     return config
 
 
+def _bundle_has_scripts(root: Path) -> bool:
+    return (root / "scripts" / "coding_agent_invoke.sh").is_file()
+
+
+def _bash_path(path: Path) -> str:
+    """Return a path Git Bash can execute on Windows (MSYS path conversion)."""
+    resolved = path.resolve()
+    posix = resolved.as_posix()
+    if os.name == "nt" and len(posix) >= 2 and posix[1] == ":":
+        return f"/{posix[0].lower()}{posix[2:]}"
+    return posix
+
+
+def _resolve_bundle_root(project_root: Path, overlay: dict[str, str]) -> Path | None:
+    """Mirror scripts/lib/kanban_bundle.sh _resolve_kanban_bundle_root order."""
+    if _bundle_has_scripts(project_root):
+        return project_root.resolve()
+
+    bundle_path = overlay.get("bundle_path", "").strip()
+    if bundle_path:
+        candidate = Path(bundle_path)
+        if not candidate.is_absolute():
+            candidate = (project_root / candidate).resolve()
+        if _bundle_has_scripts(candidate):
+            return candidate
+
+    hermes_home = os.environ.get("HERMES_HOME", "").strip()
+    workflow_dir = os.environ.get("KANBAN_WORKFLOW_DIR", "").strip()
+    for candidate_str in (
+        workflow_dir,
+        f"{hermes_home}/plugins/kanban-advanced" if hermes_home else "",
+        str(project_root / "hermes-kanban-advanced-workflow"),
+        str(project_root / ".hermes" / "plugins" / "kanban-advanced"),
+    ):
+        if not candidate_str:
+            continue
+        candidate = Path(candidate_str).expanduser().resolve()
+        if _bundle_has_scripts(candidate):
+            return candidate
+    return None
+
+
+def _resolve_gate_script(project_root: Path, overlay: dict[str, str]) -> Path | None:
+    hermes_home = os.environ.get("HERMES_HOME", "").strip()
+    candidates: list[Path] = []
+    if hermes_home:
+        candidates.append(Path(hermes_home) / "scripts" / "pre_dispatch_gate.sh")
+    bundle = _resolve_bundle_root(project_root, overlay)
+    if bundle:
+        candidates.append(bundle / "scripts" / "pre_dispatch_gate.sh")
+    candidates.append(project_root / "scripts" / "pre_dispatch_gate.sh")
+    candidates.append(
+        project_root / ".hermes" / "plugins" / "kanban-advanced" / "scripts" / "pre_dispatch_gate.sh"
+    )
+    for path in candidates:
+        if path.is_file():
+            return path.resolve()
+    return None
+
+
+def _discover_cards_yaml(
+    plan_id: str,
+    plan_path: Path,
+    project_root: Path,
+    overlay: dict[str, str],
+) -> Path | None:
+    plan_memory = overlay.get("plan_memory_path", ".hermes/kanban/memory").strip()
+    candidates = [
+        plan_path.parent / f"{plan_id}.yaml",
+        plan_path.with_suffix(".yaml"),
+        project_root / plan_memory / f"{plan_id}.yaml",
+        project_root / ".hermes" / "kanban" / "memory" / f"{plan_id}.yaml",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
 # ── hermes CLI helpers ───────────────────────────────────────────────────────
 
 def _hermes(*args: str, timeout: int = 15) -> subprocess.CompletedProcess:
@@ -165,19 +244,33 @@ def _gateway_running() -> bool:
     return r.returncode == 0 and "running" in r.stdout.lower()
 
 
-def _run_pre_dispatch_gate(plan_id: str, repo_root: Path) -> str:
-    """Run pre_dispatch_gate.sh and return a status stamp for the card body.
+def _parse_gate_result(stdout: str, stderr: str) -> tuple[int, int] | None:
+    combined = (stdout or "") + (stderr or "")
+    m = re.search(r"\[GATE\] Result:\s*(\d+)\s+failures,\s*(\d+)\s+warnings", combined)
+    if not m:
+        return None
+    return int(m.group(1)), int(m.group(2))
 
-    Returns 'PASSED at <iso-timestamp>' on rc=0, or 'UNKNOWN (not run)' if the
-    script is absent, or 'FAILED: <reason>' on non-zero exit.  Never raises.
+
+def _run_pre_dispatch_gate(
+    plan_id: str,
+    repo_root: Path,
+    overlay: dict[str, str],
+) -> tuple[str, Path | None]:
+    """Run pre_dispatch_gate.sh and return (status stamp, resolved script path).
+
+    Returns PASSED stamp with failure/warning counts on rc=0, UNKNOWN if absent,
+    or FAILED on non-zero exit. Never raises.
     """
-    gate_script = repo_root / "scripts" / "pre_dispatch_gate.sh"
-    if not gate_script.is_file():
-        return "UNKNOWN (pre_dispatch_gate.sh not found)"
+    gate_script = _resolve_gate_script(repo_root, overlay)
+    if gate_script is None:
+        return "UNKNOWN (pre_dispatch_gate.sh not found)", None
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    gate_path = _bash_path(gate_script)
+    stamp_path = gate_script.resolve().as_posix()
     try:
         r = subprocess.run(
-            ["bash", str(gate_script), plan_id],
+            ["bash", gate_path, plan_id],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -186,12 +279,21 @@ def _run_pre_dispatch_gate(plan_id: str, repo_root: Path) -> str:
             cwd=str(repo_root),
         )
         if r.returncode == 0:
-            return f"PASSED at {ts}"
+            counts = _parse_gate_result(r.stdout, r.stderr)
+            if counts:
+                failures, warnings = counts
+                stamp = (
+                    f"PASSED at {ts} ({failures} failures, {warnings} warnings) "
+                    f"via {stamp_path}"
+                )
+            else:
+                stamp = f"PASSED at {ts} via {stamp_path}"
+            return stamp, gate_script
         summary = (r.stdout + r.stderr).strip().splitlines()
         reason = next((l for l in summary if l.strip()), "non-zero exit").strip()[:120]
-        return f"FAILED at {ts}: {reason}"
+        return f"FAILED at {ts}: {reason}", gate_script
     except Exception as exc:
-        return f"UNKNOWN (error: {exc})"
+        return f"UNKNOWN (error: {exc})", gate_script
 
 
 def _list_cards() -> list[dict]:
@@ -252,8 +354,10 @@ def _derive_plan_id(plan_path: Path, explicit: str | None) -> str | None:
 
 def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: str,
                 orchestrator_profile: str,
+                bundle_root: Path,
                 cards_yaml_path: Path | None = None,
-                gate_status: str = "UNKNOWN (not run)") -> str:
+                gate_status: str = "UNKNOWN (not run)",
+                gate_script: Path | None = None) -> str:
     """SOP-only handoff body. NO ``agent -p`` block by design.
 
     Designed as a command-first runbook: literal CLI commands are pre-substituted
@@ -269,9 +373,14 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
         source_note = f"(plan markdown — workspace defaults to worktree)"
 
     gate_skip = (
-        "pre_dispatch_gate already PASSED — skip directly to Step 2."
+        "pre_dispatch_gate already PASSED — skip directly to Step 2. "
+        "Do not re-run pre_dispatch_gate.sh or preflight."
         if gate_status.startswith("PASSED")
         else f"pre_dispatch_gate status: {gate_status} — re-run if needed before Step 2."
+    )
+    bundle = bundle_root.as_posix()
+    gate_script_line = (
+        f"gate_script: {gate_script.resolve().as_posix()}" if gate_script else "gate_script: none"
     )
 
     return f"""Type: {HANDOFF_TYPE}
@@ -280,12 +389,16 @@ Plan: {plan_path}
 cards_yaml: {cards_yaml_path or "none"}
 Repo: {repo_root}
 working_branch: {working_branch}
+BUNDLE_ROOT: {bundle}
+{gate_script_line}
 pre_dispatch_gate: {gate_status}
 
 ## Decomposition runbook
 
 You are the **{orchestrator_profile}** profile. This is a board-mediated handoff —
 SOP-only, no `agent -p` block, not a coding task.
+
+**Do not read the full Plan file — execute this runbook only.** Use `Plan:` for metadata.
 
 **Load skill first (ONLY this skill — do NOT load kanban-worker at entry):**
 ```
@@ -304,8 +417,8 @@ hermes kanban block <gate_id> "Gate — awaiting links"
 
 **Immediately after gate — create wave crons BEFORE impl cards (no messaging required):**
 ```bash
-bash scripts/provision_kanban_crons.sh --create --plan-id {plan_id}
-bash scripts/provision_kanban_crons.sh --check
+bash {bundle}/scripts/provision_kanban_crons.sh --create --plan-id {plan_id}
+bash {bundle}/scripts/provision_kanban_crons.sh --check
 ```
 
 Uses `deliver=local` and `no_agent=true` — gateway must run; Telegram/Discord not required.
@@ -316,14 +429,14 @@ Uses `deliver=local` and `no_agent=true` — gateway must run; Telegram/Discord 
 
 Substitute `<gate_id>` from Step 2:
 ```bash
-python3 scripts/kanban_decompose.py {decompose_source} --gate-id <gate_id>
+python3 {bundle}/scripts/kanban_decompose.py {decompose_source} --gate-id <gate_id>
 ```
 {source_note} — block-on-create; never `--triage`, never `--parent` on create.
 
 ### Step 4 — Validate
 
 ```bash
-bash scripts/validate_board.sh
+bash {bundle}/scripts/validate_board.sh
 ```
 Fix every structural failure before proceeding.
 
@@ -381,16 +494,6 @@ def main() -> int:
         emit({"ok": False, "error": "could not determine plan_id"})
         return 5
 
-    # Prefer --cards-yaml when it exists alongside the plan (richer per-card metadata).
-    cards_yaml_path: Path | None = None
-    for candidate in [
-        plan_path.parent / f"{plan_id}.yaml",
-        plan_path.with_suffix(".yaml"),
-    ]:
-        if candidate.is_file():
-            cards_yaml_path = candidate
-            break
-
     project_root = _find_project_root(plan_path.parent)
     overlay = _read_overlay(project_root)
     orchestrator_profile = overlay.get("orchestrator_profile", "kanban-advanced-orchestrator")
@@ -398,16 +501,22 @@ def main() -> int:
         orchestrator_profile = "kanban-advanced-orchestrator"
     working_branch = overlay.get("working_branch", "main")
 
-    # Run pre_dispatch_gate.sh now and stamp the result.  This lets the
-    # orchestrator skip re-running it when the card shows PASSED.
-    gate_status = _run_pre_dispatch_gate(plan_id, project_root)
+    bundle_root = _resolve_bundle_root(project_root, overlay)
+    if bundle_root is None:
+        bundle_root = project_root / "hermes-kanban-advanced-workflow"
+
+    cards_yaml_path = _discover_cards_yaml(plan_id, plan_path, project_root, overlay)
+
+    gate_status, gate_script = _run_pre_dispatch_gate(plan_id, project_root, overlay)
 
     title = f"Decompose: {plan_id}"
     body = _build_body(
         plan_id, plan_path, project_root, working_branch,
         orchestrator_profile,
+        bundle_root=bundle_root,
         cards_yaml_path=cards_yaml_path,
         gate_status=gate_status,
+        gate_script=gate_script,
     )
 
     # ── Preconditions ──────────────────────────────────────────────────────

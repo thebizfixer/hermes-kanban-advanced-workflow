@@ -66,7 +66,7 @@ After changing `HOME` or credentials: delete `.hermes/kanban/preflight_cache.jso
 
 ## Worktree provisioning (`.worktreeinclude`)
 
-Card worktrees are plain `git worktree add` checkouts — they do **not** include gitignored `.hermes/` files unless copied. Init writes **`.worktreeinclude`** at the repo root; `worktree_setup.sh` copies listed paths (scripts, `kanban-overrides`, plugin invoke `lib/`) into each worktree before the worker smoke test.
+Card worktrees start as `git worktree add` checkouts — they do **not** include gitignored `.hermes/` files unless copied. Init writes **`.worktreeinclude`** at the repo root; **`worktree_setup.sh`** (governed path — not raw `git worktree add` alone) copies listed paths (scripts, `kanban-overrides`, plugin invoke `lib/`) into each worktree before the worker smoke test. Workers block at **E021** when worktree-local `.hermes/scripts/coding_agent_invoke.sh` is missing.
 
 If smoke works at project root but fails in the worktree with exit 127 on `coding_agent_invoke.sh`, re-run init / **Update Plugin** and confirm `.worktreeinclude` is committed.
 

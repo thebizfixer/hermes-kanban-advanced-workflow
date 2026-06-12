@@ -159,6 +159,14 @@ codes:
     source: evaluation_chain_step_5
     retry: false
 
+  E019:
+    code: E019_DESTRUCTIVE_GIT_OP
+    severity: error
+    description: "Destructive git operation detected in reflog — checkout --theirs, checkout --ours, or reset --hard. These overwrite ENTIRE files on multi-author code, silently dropping unrelated changes."
+    recovery: "Resolve conflicts per-hunk with git mergetool or manual edit. Never use --theirs/--ours on source files. Legitimate reset --hard for project artifact restoration (.cursor/plans/, docs/) is auto-exempted."
+    source: evaluation_chain_step_8
+    retry: true
+
   E020:
     code: E020_AGENT_OUTPUT_UNPARSEABLE
     severity: error
@@ -167,13 +175,13 @@ codes:
     source: evaluation_chain_step_7
     retry: true
 
-  E019:
-    code: E019_DESTRUCTIVE_GIT_OP
+  E021:
+    code: E021_WORKTREE_INCOMPLETE
     severity: error
-    description: "Destructive git operation detected in reflog — checkout --theirs, checkout --ours, or reset --hard. These overwrite ENTIRE files on multi-author code, silently dropping unrelated changes."
-    recovery: "Resolve conflicts per-hunk with git mergetool or manual edit. Never use --theirs/--ours on source files. Legitimate reset --hard for project artifact restoration (.cursor/plans/, docs/) is auto-exempted."
-    source: evaluation_chain_step_8
-    retry: true
+    description: "Worktree missing kanban scripts — worker used raw git worktree add or worktree_setup.sh did not run"
+    recovery: "Re-run worktree_setup.sh --task-id <id> --repo-root <repo>. Do not use raw git worktree add. Confirm .worktreeinclude copied .hermes/scripts/ into the worktree."
+    source: worker_sanity_step_3
+    retry: false
 
   # ── Card body policy errors (Workstream 3) ──
   P001:

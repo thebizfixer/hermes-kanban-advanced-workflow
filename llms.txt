@@ -59,7 +59,7 @@ When users ask platform-specific questions, cite upstream sources from `wiki/ext
 - How-to: `docs/how-to/` (install, governance, goal-cards, preflight, provider-strategy, troubleshooting)
 - Reference: `docs/reference/` (architecture, interaction-model, configuration, error-codes, kpis, personas, scripts, coding-agents, limitations)
 - Explanation: `docs/explanation/` (why-kanban-advanced, six-sigma-mapping)
-- Agent wiki: `wiki/` (setup, **bootstrap**, configuration, governance, decomposition-workflow, troubleshooting, provider-strategy, six-sigma-mapping, external-references)
+- Agent wiki: `wiki/` (setup, **bootstrap**, configuration, **governance** § Full pre-execution stack, decomposition-workflow, troubleshooting, provider-strategy, six-sigma-mapping, external-references)
 
 ## Dashboard tab
 
@@ -89,6 +89,9 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 - Plugin entry: `__init__.py` → `plugin/__init__.py` → `register(ctx)`
 - Skills: `plugin/skills/<name>/SKILL.md` (11 skills)
 - Data: `plugin/data/` (references, registry, policies, prompts)
-- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, check_coding_agent_cli.py, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py)
+- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, check_coding_agent_cli.py, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py, verify_goal_cards.py)
+- Handoff: `kanban_handoff.py` stamps `pre_dispatch_gate`, `BUNDLE_ROOT`, `gate_script`, `cards_yaml`; orchestrator skips gate re-run when PASSED — see `wiki/decomposition-workflow.md` § Board-mediated handoff
+- In-flight sad-path: index `plugin/skills/kanban-advanced/references/in-flight-governance-index.md` (`skill_view`); hub `wiki/in-flight-navigation.md`; regression `plugin/data/references/handoff-regression-checklist.md`
+- Worker E021: Step 3 blocks incomplete worktrees (missing `.hermes/scripts/` in worktree) before smoke — not eval-chain
 - Dashboard: `dashboard/` (settings tab — `manifest.json`, `plugin_api.py`, `index.html`)
 - README: `README.md`

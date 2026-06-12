@@ -2,6 +2,20 @@
 
 > **For the agent:** When a user reports a failure, match the symptom to the error code below. Every error maps to a recovery action in [[governance]].
 
+## In-flight quick router
+
+| Symptom keyword | Layer | Tier | Belt | First load |
+|-----------------|-------|------|------|------------|
+| goal_card / attestation | L0 | T2 | MBB | Index L0 → `verify_goal_cards.py` |
+| preflight / gate FAIL | L1–L2 | T2 | MBB | Index L1–L2 → `pre_dispatch_gate.sh` |
+| handoff stuck / exit 2–4 | L3 | T2/T3 | MBB | Index L3 → [[decomposition-workflow]] § handoff |
+| scratch / crons / validate | L4 | T2 | MBB | Index L4 |
+| E021 / exit 127 / auth smoke | L5-pre/L5 | T1→T3 | BB | Index L5 → `worktree_setup.sh` / invoke smoke |
+| delegation / stale skill | L5 | T1/T2 | BB/MBB | Index L5 → [[#Stale skills / plugin updated mid-kanban execution]] |
+| E001–E020 DENY | L6 | T1 | BB | worker-governance → `kanban_recover.py --list` |
+
+**SSOT commands:** `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")`. Hub: [[in-flight-navigation]].
+
 ## Quick diagnosis
 
 ```bash
@@ -17,6 +31,32 @@ python hermes-kanban-advanced-workflow/scripts/kanban_recover.py <task_id> <erro
 ```
 
 ## Common failures
+
+### Handoff card stuck in `ready` (`Decompose: <plan_id>`)
+
+**Symptom:** Handoff card stays `ready`; no orchestrator session starts.
+
+**Checklist:**
+
+1. `hermes config show` — `kanban.dispatch_in_gateway` must be `true`.
+2. Card `assignee` must match `orchestrator_profile` in `.hermes/kanban-overrides/kanban-config.yaml`.
+3. Gateway running: `hermes gateway status` (restart gateway after plugin Update Plugin).
+4. Duplicate open handoff for same `plan_id` — `hermes kanban list` (idempotent reuse is OK).
+5. Card created with `--allow-offline` — dispatcher was down; start gateway and wait for claim.
+
+Handoff cards are intentionally `ready` without block (wave-0 dispatch). Stuck `ready` is dispatcher/config, not a missing block.
+
+### Worktree incomplete (E021)
+
+**Symptom:** Worker blocks with `E021_WORKTREE_INCOMPLETE: missing kanban scripts` before smoke.
+
+**Fix:** Re-run governed bootstrap — do **not** use raw `git worktree add`:
+
+```bash
+bash <bundle>/scripts/worktree_setup.sh --task-id <task_id> --repo-root <repo_root>
+```
+
+Confirm `.worktreeinclude` lists kanban script paths and worktree has `.hermes/scripts/coding_agent_invoke.sh`.
 
 ### "Profile has no config.yaml" (PR001)
 
@@ -92,6 +132,8 @@ grep -E 'coding_agent_invoke|terminal\(\)' \
 ```
 
 Also confirm the worker profile loads **plugin** skills (`kanban-worker` from `$HERMES_HOME/skills/kanban-advanced/`), not the built-in `devops/kanban-worker` copy. `hermes profile show kanban-advanced-worker | grep Skills:` should list only role skills (count 2), with content from the materialized plugin tree.
+
+**In-flight index:** Workers and orchestrators should load `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` for symptom-keyed recovery (delegation, stale skill, E021, scratch workspace). Operator regression pass: `plugin/data/references/handoff-regression-checklist.md`.
 
 ### Bootstrap passed but coding-agent auth fails at execute
 
@@ -415,7 +457,7 @@ hermes gateway restart
 
 ## Full error code listing
 
-See `plugin/data/registry/error-codes.yaml` for all 36 codes with severity, recovery, and retry flags.
+See `plugin/data/registry/error-codes.yaml` for all 37 codes with severity, recovery, and retry flags.
 
 ## Still stuck?
 

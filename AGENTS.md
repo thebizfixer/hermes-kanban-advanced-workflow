@@ -19,9 +19,10 @@ Load the relevant wiki page for detailed instructions:
 | How do I configure it? | `wiki/configuration.md` |
 | Which coding agent / model does the worker use? | `docs/reference/coding-agents.md` |
 | Headless CLI flags (smoke + dispatch per binary)? | `plugin/data/references/coding-agent-cli-invocation.md` |
-| How does governance work? | `wiki/governance.md` |
+| How does governance work? | `wiki/governance.md` (§ Full pre-execution governance stack) |
 | Why block-on-create / decomposition workflow? | `wiki/decomposition-workflow.md` |
 | Something is broken | `wiki/troubleshooting.md` |
+| Supervisor hit a rail mid-card / mid-decompose | `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` or `wiki/in-flight-navigation.md` |
 | Coding agent auth / smoke failed (bootstrap passed, workers block) | `plugin/data/references/coding-agent-auth.md` → then `wiki/troubleshooting.md` |
 | Bootstrap limitations (advisory smoke vs blocking gate) | `wiki/bootstrap.md` § Coding-agent auth during bootstrap |
 | What must the operator provision (.env, worktree, deps)? | `plugin/data/references/operator-provisioning.md` |
@@ -63,6 +64,7 @@ Do **not** assume bootstrap copied `.env` into worktrees — the plugin never ad
 ## Key commands
 
 - `hermes kanban-advanced init` — bootstrap project (dispatch profiles, config, cron script files — not cron jobs; **advisory** coding-agent smoke only)
+- `python3 hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <file>` — board-mediated orchestrator handoff (non-orchestrator profiles)
 - `hermes kanban-advanced decompose --plan <file>` — create cards from a plan
 - `hermes kanban-advanced list` — board status
 - `hermes kanban-advanced validate` — pre-dispatch validation

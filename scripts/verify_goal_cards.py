@@ -15,10 +15,7 @@ except ImportError:
 
 
 DEFAULT_BUDGET = 2
-GOAL_TRUE_RE = re.compile(
-    r"goal_card\s*:\s*true",
-    re.IGNORECASE,
-)
+GOAL_LINE_RE = re.compile(r"^\s*goal_card\s*:\s*true\s*$", re.IGNORECASE)
 ACCEPTANCE_RE = re.compile(r"^Acceptance\s*:", re.MULTILINE | re.IGNORECASE)
 AGENT_BLOCK_RE = re.compile(r"```agent\b")
 GOAL_RATIONALE_RE = re.compile(
@@ -45,16 +42,53 @@ def _parse_frontmatter(text: str) -> tuple[dict, str]:
     return meta, body
 
 
+def _is_valid_goal_line(line: str) -> bool:
+    stripped = line.strip()
+    if not GOAL_LINE_RE.match(stripped):
+        return False
+    if "|" in line:
+        return False
+    if "`" in line:
+        return False
+    return True
+
+
+def _count_frontmatter_goals(meta: dict) -> int:
+    workstreams = meta.get("workstreams")
+    if not isinstance(workstreams, list):
+        return 0
+    return sum(
+        1 for w in workstreams if isinstance(w, dict) and w.get("goal_card") is True
+    )
+
+
+def _count_body_goal_sections(body: str) -> int:
+    count = 0
+    chunks = re.split(r"(?=^###\s+)", body, flags=re.MULTILINE)
+    for chunk in chunks:
+        if not chunk.strip().startswith("###"):
+            continue
+        if any(_is_valid_goal_line(line) for line in chunk.splitlines()):
+            count += 1
+    return count
+
+
+def count_goal_cards(meta: dict, body: str) -> int:
+    """Count goal_card: true markers from structured frontmatter and ### sections only."""
+    return _count_frontmatter_goals(meta) + _count_body_goal_sections(body)
+
+
 def _goal_true_sections(body: str) -> list[str]:
-    """Split on ### headers; return section titles with goal_card: true."""
+    """Split on ### headers; return section titles with a valid goal_card: true line."""
     sections: list[str] = []
     chunks = re.split(r"(?=^###\s+)", body, flags=re.MULTILINE)
     for chunk in chunks:
         if not chunk.strip().startswith("###"):
             continue
+        if not any(_is_valid_goal_line(line) for line in chunk.splitlines()):
+            continue
         first_line = chunk.split("\n", 1)[0]
-        if GOAL_TRUE_RE.search(chunk):
-            sections.append(first_line.strip().lstrip("#").strip())
+        sections.append(first_line.strip().lstrip("#").strip())
     return sections
 
 
@@ -71,7 +105,7 @@ def verify_plan(plan_path: Path) -> tuple[int, int, list[str]]:
         except (TypeError, ValueError):
             warnings.append(f"Invalid goal_card_budget in frontmatter; using {DEFAULT_BUDGET}")
 
-    goal_count = len(GOAL_TRUE_RE.findall(text))
+    goal_count = count_goal_cards(meta, body)
     if goal_count > budget:
         failures.append(
             f"goal_card: true count ({goal_count}) exceeds goal_card_budget ({budget})"
@@ -94,15 +128,13 @@ def verify_plan(plan_path: Path) -> tuple[int, int, list[str]]:
         if section_text and not AGENT_BLOCK_RE.search(section_text):
             failures.append(f"goal_card section missing ```agent block — {title}")
 
-    # Frontmatter workstreams list (optional structured form)
-    workstreams = meta.get("workstreams")
-    if isinstance(workstreams, list):
-        ws_goal = sum(1 for w in workstreams if isinstance(w, dict) and w.get("goal_card") is True)
-        if ws_goal != goal_count and goal_count > 0:
-            warnings.append(
-                f"Frontmatter workstreams goal_card count ({ws_goal}) "
-                f"may not match inline goal_card: true markers ({goal_count})"
-            )
+    ws_goal = _count_frontmatter_goals(meta)
+    body_goal = _count_body_goal_sections(body)
+    if ws_goal and body_goal and ws_goal != body_goal:
+        warnings.append(
+            f"Frontmatter workstreams goal_card count ({ws_goal}) "
+            f"may not match ### section goal_card markers ({body_goal})"
+        )
 
     for msg in warnings:
         print(f"WARN: {msg}", file=sys.stderr)

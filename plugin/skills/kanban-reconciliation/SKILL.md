@@ -44,8 +44,8 @@ The reconciliation checklist follows the Define → Measure → Analyze → Impr
 | **Measure** | Steps 1–2 | File compliance (git diff), token burn report, failure-mode taxonomy |
 | **Measure** | Step 4 | Non-kanban overhead tally (env fixes, manual interventions, plan hardening) |
 | **Analyze** | Step 3 | Failure-mode taxonomy — categorize by root cause, flag categories >30%, identify token outliers >2× average |
-| **Improve** | Steps 5–6 | Codify lessons into skills, document new pitfalls, sync publishable copies |
-| **Control** | Step 7 | Archive board, remove wave crons + optional monitor cron, verify no orphaned processes |
+| **Improve** | Steps 5–6 | Codify lessons into skills, document new pitfalls, sync publishable copies; **promote `.hermes/docs/kanban-*` handoffs into the in-flight index** |
+| **Control** | Step 7 | Archive board, remove wave crons + optional monitor cron, verify no orphaned processes; run `handoff-regression-checklist.md` |
 
 See the wiki page `six-sigma-mapping.md` for the full DMAIC mapping including the CTQ tree, defect metrics (DPMO, first-pass yield, process capability), and the belt model.
 
@@ -63,7 +63,7 @@ python scripts/kanban_token_report.py --plan <plan_id>
 ```
 Flag any task that burned > 2× the plan average. Include token totals in the KPI report artifact at `.hermes/kanban/reports/`.
 
-> **Fallback:** When `tokens.jsonl` is not configured (no `token_tracker.py` wiring), extract token data manually from agent logs. See `references/manual-token-extraction.md` for extraction commands, cost estimation, and KPI table templates.
+> **Fallback:** When `tokens.jsonl` is not configured (no `token_tracker.py` wiring), extract token data manually from agent logs. See `plugin/data/references/manual-token-extraction.md` for extraction commands, cost estimation, and KPI table templates.
 
 ### 3. Failure-mode taxonomy
 Group task failures by type:
@@ -83,6 +83,13 @@ Count time spent on:
 
 ### 5. Skill updates
 Apply lessons learned to skills. If a pitfall was discovered, document it. If a workflow improvement was validated, codify it.
+
+**Handoff promotion (mandatory when `.hermes/docs/kanban-*` was written this run):**
+
+1. Extract the symptom keyword and layer (L0–L6) from the handoff.
+2. Add a row to `plugin/skills/kanban-advanced/references/in-flight-governance-index.md`.
+3. Update `kanban-*-governance` pitfall text; sync the index mirror under `plugin/data/references/`.
+4. Cross-link `wiki/troubleshooting.md` when subscribers or operators would search there first.
 
 ### 6. Publishable sync
 If kanban skills or prompts changed, update the publishable versions in the `hermes-kanban-advanced-workflow/` directory. Re-run `provision.sh` and verify with `--check`.

@@ -21,14 +21,16 @@ import json
 import datetime
 from pathlib import Path
 
-import re
-
 import yaml
 
-_LIB = Path(__file__).resolve().parent / "lib"
+_SCRIPTS = Path(__file__).resolve().parent
+_LIB = _SCRIPTS / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
+if str(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS))
 from plan_paths import resolve_plan_file  # noqa: E402
+from verify_goal_cards import _parse_frontmatter, count_goal_cards  # noqa: E402
 
 
 def run_cmd(cmd: list, timeout: int = 10) -> subprocess.CompletedProcess:
@@ -74,7 +76,8 @@ def count_agent_blocks(plan_path: str) -> int:
 def summarize_goal_cards(plan_path: str) -> dict:
     """Run verify_goal_cards on plan file; return summary for attestation."""
     text = Path(plan_path).read_text(encoding="utf-8")
-    goal_count = len(re.findall(r"goal_card\s*:\s*true", text, re.I))
+    meta, body = _parse_frontmatter(text)
+    goal_count = count_goal_cards(meta, body)
     vg_script = Path(__file__).resolve().parent / "verify_goal_cards.py"
     result = subprocess.run(
         [sys.executable, str(vg_script), "--plan", plan_path],

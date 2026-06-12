@@ -93,6 +93,8 @@ workstreams:
 
 Each `goal_card: true` section must include an **`Acceptance:`** block in the plan body (copied into card body at decomposition).
 
+Before attestation, run `verify_goal_cards.py` — it counts structured YAML and standalone `goal_card: true` under `###` sections only (markdown table prose is ignored).
+
 ## Related
 
 - [docs/how-to/goal-cards.md](../docs/how-to/goal-cards.md)

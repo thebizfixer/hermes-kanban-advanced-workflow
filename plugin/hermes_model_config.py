@@ -10,6 +10,42 @@ from typing import Any
 
 RunFn = Callable[..., subprocess.CompletedProcess]
 
+# Display names from model pickers / `hermes config show` that are not valid provider IDs.
+_PROVIDER_DISPLAY_ALIASES: dict[str, str] = {
+    "nous portal": "nous",
+    "nous research": "nous",
+    "open router": "openrouter",
+    "openrouter": "openrouter",
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "deepseek": "deepseek",
+    "google": "google",
+    "groq": "groq",
+    "fireworks": "fireworks",
+    "together": "together",
+    "mistral": "mistral",
+    "xai": "xai",
+    "stepfun": "stepfun",
+}
+
+
+def normalize_provider_id(value: str) -> str:
+    """Map provider display names to canonical Hermes provider IDs."""
+    text = (value or "").strip()
+    if not text:
+        return text
+    alias = _PROVIDER_DISPLAY_ALIASES.get(text.lower())
+    if alias:
+        return alias
+    if " " in text:
+        slug = text.lower().replace(" portal", "").strip().replace(" ", "")
+        if slug in _PROVIDER_DISPLAY_ALIASES.values():
+            return slug
+        compact = text.lower().replace(" ", "")
+        if compact in _PROVIDER_DISPLAY_ALIASES.values():
+            return compact
+    return text
+
 
 def parse_model_section(model: Any) -> dict[str, str]:
     """Normalize the model block from a profile config.yaml."""
@@ -25,7 +61,7 @@ def parse_model_section(model: Any) -> dict[str, str]:
     if provider is not None:
         text = str(provider).strip()
         if text and text != "None":
-            out["provider"] = text
+            out["provider"] = normalize_provider_id(text)
     default = model.get("default")
     if default is None:
         default = model.get("model")
@@ -78,7 +114,7 @@ def read_model_config_from_config_show(stdout: str) -> dict[str, str]:
         cfg["default"] = model_match.group(1)
     provider_match = re.search(r"'provider':\s*'([^']+)'", stdout)
     if provider_match:
-        cfg["provider"] = provider_match.group(1)
+        cfg["provider"] = normalize_provider_id(provider_match.group(1))
     base_url_match = re.search(r"'base_url':\s*'([^']*)'", stdout)
     if base_url_match and base_url_match.group(1):
         cfg["base_url"] = base_url_match.group(1)
@@ -133,7 +169,7 @@ def apply_model_config_to_profile(
 
     _set("model.default", cfg["default"])
     if cfg.get("provider"):
-        _set("model.provider", cfg["provider"])
+        _set("model.provider", normalize_provider_id(cfg["provider"]))
     if cfg.get("base_url"):
         _set("model.base_url", cfg["base_url"])
     return True

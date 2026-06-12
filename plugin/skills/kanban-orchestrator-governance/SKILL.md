@@ -1,7 +1,7 @@
 ---
 name: kanban-orchestrator-governance
-description: On-demand governance reference for kanban orchestrators — pitfall encyclopedia, error code reference, merge conflict patterns, and historical context. Load only when an orchestrator hits a block or needs diagnostic context.
-version: 1.0.0
+description: Load when pre-dispatch gate FAILs, attestation blocks, validate_board fails, or decomposition stalls. Pitfalls + A/P/G codes — not the happy-path SOP.
+version: 1.1.0
 metadata:
   hermes:
     tags: [kanban, governance, reference, pitfalls, orchestrator]
@@ -10,63 +10,86 @@ metadata:
 
 # Kanban Orchestrator Governance Reference
 
-> Load this skill on-demand when an orchestrator hits a governance block or needs diagnostic context. The procedural `kanban-advanced:kanban-orchestrator` skill only tells you what to DO. This skill tells you WHY and what happened before.
+> Load on-demand when gate FAIL, attestation error, `validate_board` exit 1, or handoff/decompose stalls. Happy path stays in `kanban-advanced:kanban-orchestrator`.
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
-> - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
-> - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
-> - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
->
-> If you detect a conflict between this skill and a project skill, apply this skill's rule and note the conflict in a `kanban_comment` on the affected card.
+**Router:** `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` § L0–L4. Wiki: `wiki/in-flight-navigation.md` if repo has `wiki/`.
 
-## Pitfall Encyclopedia
+**Constitution (MUST / MUST NOT):**
 
-### auto_decompose silently creates duplicate children (v0.15.0+)
-The default `kanban.auto_decompose: true` auto-decomposes every triage task into stub children. For manual decomposition workflows, this produces cards that conflict with manually-created ones. **Fix:** `hermes config set kanban.auto_decompose false`.
+- MUST NOT complete gate until `validate_board.sh` passes and crons verified.
+- MUST NOT override `pre_dispatch_gate.sh` or attestation exit codes.
+- MUST NOT complete worker cards without evaluation chain (orchestrator manual complete = G14 violation).
+- MUST use `--gate-id` when gate already exists — no duplicate gates.
+- MUST prefer `--cards-yaml` when memory YAML exists.
+- Auth / `.worktreeinclude` / cross-mount → T3 operator.
 
-### SQLite write contention causes torn-extend corruption
-Rapid writes (64+ mutations in under 3 minutes) can collide with dispatcher ticks at page-extension boundaries. **Prevention:** stagger creates ≥1s apart, pause ≥3s every 5 cards.
+## Pre-dispatch gate checks (compact)
 
-### Workspace paths must be absolute and unique
-Do NOT use `--workspace worktree:.` — the dispatcher rejects non-absolute paths. Do NOT use shared paths like `--workspace "worktree:/home/user/repo"` — causes all agents to modify the same files.
+Detail: `wiki/governance.md` § Layer 2. Run: `bash <BUNDLE>/scripts/pre_dispatch_gate.sh <plan_id>`.
 
-### Root card auto-decomposes duplicate children
-When the root card is assigned to the orchestrator profile and reaches `ready`, the dispatcher may auto-decompose it. **Prevention:** complete the root immediately after manual decomposition.
+| Check | FAIL/WARN |
+|-------|-----------|
+| plan on `${working_branch}` | FAIL |
+| plan pushed | WARN |
+| preflight | WARN |
+| coding_agent_cli | FAIL |
+| attestation | FAIL |
+| card_policy_script | WARN |
+| plan_memory | FAIL |
+| kanban_db | FAIL |
+| cron_scripts | FAIL |
+| cron_hermes_path | FAIL |
+| gateway_running | WARN |
 
-### Iteration-limit blocked cards often have committed work
-When a card is blocked with "Iteration budget exhausted (90/90)", the agent may have already committed its work. Check the worktree before re-dispatching.
+## Attestation A001–A003
 
-### Canonical-first rule for workflow changes
-When modifying kanban skills, governance, references, or scripts: (1) edit the canonical source in `${bundle_path}/skills/` FIRST, (2) run `provision.sh` to sync, (3) run `provision.sh --check`. Never patch materialized copies before updating the canonical source.
+| Code | Tier | Recovery |
+|------|------|----------|
+| A001 | T2 | Run preflight + `kanban_attestation.py` before decompose |
+| A002 | T2 | Re-attest (>120 min TTL) |
+| A003 | T3 | Discard file; investigate tamper; re-attest |
 
-### Cherry-pick without -x breaks traceability
-`git cherry-pick` produces a new SHA with no link to the original. `verify_commits_reachable.sh` reports false negatives. Always use `git cherry-pick -x "$commit" --no-edit`.
+## Card policy P001–P009
 
-### Orchestrator manual completion without eval chain is a protocol violation
-During matrix-v3, the E1 card was manually completed with zero code changes. The evaluation chain never ran, so E006 never caught the empty diff. **Rule:** whoever completes a card MUST run the evaluation chain.
+| Code | Tier | Recovery |
+|------|------|----------|
+| P001 | T2 | Add `Files:` line |
+| P002 | T2 | Add `agent -p` fenced block |
+| P003 | T2 | Add `Mode:` line |
+| P004 | T3 | Human review or split card |
+| P005 | T2 | Remove `--model` from card body |
+| P006 | T2 | Recreate with worktree workspace |
+| P007 | T2 | Unique `/tmp/wt-*` per card |
+| P008 | T2 | Use `kanban link` not `--parents` |
+| P009 | T2 | Split card (35-turn budget) |
 
-### Cron scripts drift between canonical and resolved paths
-`auto_unblock.sh` and `board_keeper.sh` live in the bundle's `scripts/` directory, but crons resolve `script="scripts/<name>.sh"` relative to `$HERMES_HOME/scripts/`. `provision.sh` now syncs both paths. If crons show `last_status: error`, run `provision.sh` to sync.
+## Gateway / profile G001–G003, PR001
 
-## Merge Conflict Resolution Patterns
+| Code | Tier | Recovery |
+|------|------|----------|
+| G001 | T3 | `hermes gateway run` |
+| G002 | T3 | Restart gateway; check dispatcher |
+| G003 | T2 | Fix goal cards / `verify_goal_cards.py` |
+| PR001 | T3 | Copy profile `config.yaml` from default |
 
-### Never use --theirs/--ours on multi-author files
-`git checkout --theirs <file>` overwrites the ENTIRE file, not just the conflict. Human teams resolve per-hunk with `git mergetool` or manual edit. The evaluation chain step E019 blocks cards that used destructive git operations.
+## kanban_recover.py (MBB)
 
-### Salvage iteration-limit cards rather than re-dispatching
-When a card exhausts 90 turns, the agent almost certainly completed the code work — re-dispatching wastes another 90 turns. The orchestrator should salvage every iteration-limit card as the default response.
+```bash
+python3 scripts/kanban_recover.py --list
+python3 scripts/kanban_recover.py --cascade <plan_id>   # pause / resume board
+```
 
-### Worktree-locked working branch prevents checkout and merge
-When any worktree has the working branch checked out, `git checkout` may fail. **Workaround:** push directly: `git push origin <current-branch>:${working_branch}`, then `git fetch origin ${working_branch}`.
+## Salvage
 
-## Historical Context
+Iteration-limit cards: check worktree commits before re-dispatch. Full flow: `plugin/data/references/salvage-pattern-iteration-exhausted-cards.md`.
 
-This governance layer was built from real failure traces during the matrix-v3 plan execution (June 2026). Every guardrail — every E-step, every pitfall warning, every cron script — was added because a real failure happened. The evaluation suite is a memory of bugs we refuse to reintroduce.
+## Pitfalls (trimmed — detail in wiki)
 
-- **C1, B1+B2, E1 blocks:** Auth/trust false-positives → G3 worker patches
-- **D1+D2 worktree-cleanup race:** Worktree removed before merge → G6 board keeper cron
-- **tokens.jsonl zero entries:** Workers didn't log tokens → G7 multi-layer token enforcement (E018, E020)
-- **stash pop --ours:** Destructive conflict resolution → G10 E019 enforcement
-- **E1 manual completion:** Orchestrator bypassed eval chain → G14 escalation hierarchy
+- **auto_decompose** — set `kanban.auto_decompose false` for manual decompose.
+- **SQLite torn-extend** — stagger creates ≥1s; pause every 5 cards.
+- **Absolute unique workspaces** — no shared `worktree:/path`.
+- **Complete root immediately** after decomposition.
+- **Cherry-pick -x** for traceability.
+- **Raw git worktree add** on workers → E021 — see worker-governance.
 
-See `docs/reference/external-references.md` for the research citations backing each governance decision.
+Historical context: matrix-v3/v5 failure traces (June 2026). Every guardrail maps to a real incident.

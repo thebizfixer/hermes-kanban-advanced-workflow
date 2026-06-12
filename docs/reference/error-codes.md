@@ -26,6 +26,7 @@ Canonical registry: `plugin/data/registry/error-codes.yaml` (bundled with the pl
 | E018      | error         | Token entry not exact (replaces E005)         | No    |
 | E019      | error         | Destructive git op (reset --hard / theirs)    | Yes   |
 | E020      | error         | Agent output unparseable / missing usage      | Yes   |
+| E021      | error         | Worktree incomplete (missing kanban scripts)  | No    |
 | P001-P009 | error/warning | Card body policy violations                   | No    |
 | A001-A003 | error         | Attestation missing/stale/tampered            | No    |
 | PR001     | error         | Profile no config                             | No    |
@@ -38,4 +39,6 @@ python hermes-kanban-advanced-workflow/scripts/kanban_recover.py --list
 python hermes-kanban-advanced-workflow/scripts/kanban_recover.py <task_id> <code>
 ```
 
-Categories: attestation (A*), policy (P*), evaluation chain (E*), preflight (E011, PR001, …), board validation. See [troubleshooting.md](../how-to/troubleshooting.md).
+Categories: attestation (A*), policy (P*), evaluation chain (E*), preflight (E011, PR001, …), board validation.
+
+**Full recovery narratives:** [wiki/troubleshooting.md](../../wiki/troubleshooting.md). **In-flight symptom router:** `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` or [handoff-regression-checklist.md](../../plugin/data/references/handoff-regression-checklist.md).

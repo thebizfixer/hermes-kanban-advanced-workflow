@@ -24,7 +24,7 @@ metadata:
 >
 > If you find yourself typing code, editing a file, or implementing anything — **stop**. Extract the `agent -p` block and dispatch it instead. The worker session exists to orchestrate and verify, not to produce output.
 
-> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E020, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. If you hit a DENY or block, load `kanban-advanced:kanban-worker-governance` for the error code reference — do not guess.
+> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E021, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. On DENY or block → `skill_view("kanban-advanced:kanban-worker-governance")` then `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` — do not guess.
 
 > The **lifecycle** (7 steps: orient → memory → fast-sanity → handoff → monitor → verify → complete) is the worker's job. The worker is a **supervisor of the coding agent**, not the implementer. Its job: read the card, do a fast sanity check, hand off to the coding agent, monitor progress, verify the output via the evaluation chain, and close the task.
 
@@ -47,6 +47,8 @@ The worker lifecycle is gated by a deterministic evaluation chain — not by ins
 
 ### Step 1 — Orient
 Read the card via `kanban_show`. Extract: `Files:` line, `Mode:` line, `Tests:` line, `Commit:` message, and the `agent -p` fenced code block. Confirm the workspace is a valid worktree. If the card has no `agent -p` block, block it immediately — the plan wasn't ready for decomposition (P002).
+
+**Model tier advisory (non-blocking):** After orient, check the worker profile model via `hermes profile show <worker_profile>`. If `model.default` is a fast/low-reasoning tier (e.g. Haiku, Flash, mini variants), log an advisory: stronger reasoning models catch more edge cases; when `policy_profile=strict`, governance waypoints (Step 3 E021, evaluation chain) compensate. See `docs/reference/coding-agents.md`. Do not block the card on tier alone.
 
 ## Escalation diagnostic path (triggered at Step 1 Orient)
 
@@ -109,7 +111,10 @@ print(f'pitfalls: {pits[:200]}')
 fi
 ```
 
-### Step 3 — Fast sanity
+### Step 3 — Fast sanity (checklist waypoints)
+
+Waypoint order: (1) heartbeat, (2) governed `worktree_setup.sh`, (3) kanban scripts present (E021), (4) scope file, (5) integration freshness, (6) coding-agent smoke. Raw `git worktree add` alone fails at waypoint 3.
+
 - Confirm branch exists and matches card's `--branch`
 - `git status --short` — should be clean or contain only expected artifacts
 - Disk space > 1 GB (E007 if not)
@@ -136,7 +141,15 @@ WORKTREE_OUTPUT=$(bash "$WORKTREE_SETUP" \
 eval "$WORKTREE_OUTPUT"
 cd "$WORKTREE_PATH"
 
-# 3. Write .kanban-scope to the worktree root (pre-commit hook reads this at commit time)
+# Waypoint 3: worktree-local kanban scripts prove worktree_setup / .worktreeinclude ran
+if [ ! -f "$WORKTREE_PATH/.hermes/scripts/coding_agent_invoke.sh" ]; then
+  echo "[E021] Worktree incomplete — re-run worktree_setup.sh (git worktree add alone is insufficient)"
+  hermes kanban block "$HERMES_KANBAN_TASK" \
+    "E021_WORKTREE_INCOMPLETE: missing kanban scripts — run worktree_setup.sh, not raw git worktree add"
+  exit 1
+fi
+
+# 4. Write .kanban-scope to the worktree root (pre-commit hook reads this at commit time)
 FILES_LIST=$(hermes kanban show "$HERMES_KANBAN_TASK" 2>/dev/null \
   | grep -E '^Files:' | sed 's/^Files: *//')
 printf '%s\n' $FILES_LIST > "$WORKTREE_PATH/.kanban-scope"
@@ -210,7 +223,7 @@ Per-binary flags: `plugin/data/references/coding-agent-cli-invocation.md`. **Cur
 
 Do NOT construct the prompt from scratch. Extract the fenced `agent` block from the card body, prepend governance + memory brief, then dispatch via the shared invoke script. Start the heartbeat thread before the agent call.
 
-**Coding agent governance block (mandatory):** Prepend `references/coding-agent-governance.md` before the extracted prompt. The governance block is enforced post-hoc by the evaluation chain (E001–E006), but prompt-level guardrails reduce remediation burden.
+**Coding agent governance block (mandatory):** Prepend `plugin/data/references/coding-agent-governance.md` before the extracted prompt. The governance block is enforced post-hoc by the evaluation chain (E001–E006), but prompt-level guardrails reduce remediation burden.
 
 ```bash
 # The card body contains:
@@ -354,7 +367,7 @@ When the dispatcher sets `HERMES_KANBAN_GOAL_MODE=1`, the worker may run **multi
 - Long `running` state is expected; do not treat as a stall until `goal_max_turns` or block.
 - If budget exhausts, upstream blocks the card — escalate via `kanban-advanced:kanban-notify`; do not silently exit.
 
-See `references/goal-card-selection.md` and `docs/how-to/goal-cards.md`.
+See `plugin/data/references/goal-card-selection.md` and `docs/how-to/goal-cards.md`.
 
 ### Step 7 — Complete
 
@@ -619,7 +632,7 @@ Workers waste 5–8 minutes per task running identical pre-flight checks. Use th
 - Never push to `${working_branch}` — commit to worktree branch only.
 - `git reset --hard` destroys plan files — restore with `git checkout ${working_branch} -- .agent/plans/`.
 - Agent `-p` is for code generation only — pipeline execution uses terminal commands.
-- Never call `kanban_complete` directly — always run the evaluation chain (E001–E020).
+- Never call `kanban_complete` directly — always run the evaluation chain (E001–E021).
 - Cursor `[unauthenticated]` in logs is cosmetic — use Step 3 `coding_agent_invoke.sh smoke` for auth.
 - `CURSOR_API_KEY` is a decoy env var — Cursor CLI uses OAuth in `~/.config/cursor/auth.json`.
 - Pre-create `.workspace-trusted` before spawning agent in `/tmp` worktrees.

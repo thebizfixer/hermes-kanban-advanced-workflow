@@ -167,6 +167,18 @@ Section titles and order are fixed — do not rename or reorder when editing gen
 
 **Agent use:** Paste distilled bullets into the next plan's frontmatter or a "Prior run learnings" subsection; link the postmortem file path.
 
+## DMAIC Improve loop (handoff → index)
+
+When execution surfaces a **new** recurring failure (including forensic notes in project `.hermes/docs/kanban-*` handoffs):
+
+1. **Add** a symptom row to `plugin/skills/kanban-advanced/references/in-flight-governance-index.md` (Trigger | Layer | Tier | First command | Verify).
+2. **Patch** the matching governance skill pitfall (`kanban-worker-governance` or `kanban-orchestrator-governance`).
+3. **Anchor** `wiki/troubleshooting.md` if the failure is operator-visible.
+4. **Pointer** — if the SSOT path changed, update the stub at `plugin/data/references/in-flight-governance-index.md` (do not duplicate the full index there).
+5. **Run** `plugin/data/references/handoff-regression-checklist.md` before the next decomposition on the same project.
+
+If an error code accounts for >30% of blocked tasks in this postmortem, promote it to an embedded quick row in the governance skill (not only the index).
+
 ## Consumption workflow (before the next plan)
 
 1. **Locate** the latest report: `.hermes/kanban/reports/{plan_id}_postmortem_*.md`

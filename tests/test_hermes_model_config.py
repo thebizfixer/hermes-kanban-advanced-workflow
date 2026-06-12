@@ -8,6 +8,7 @@ from pathlib import Path
 
 from plugin.hermes_model_config import (
     config_path_from_show,
+    normalize_provider_id,
     parse_model_section,
     profile_has_model_config,
     read_model_config_from_config_show,
@@ -80,6 +81,16 @@ class TestHermesModelConfig(unittest.TestCase):
     def test_profile_has_model_config(self) -> None:
         self.assertTrue(profile_has_model_config({"default": "gpt-5.2"}))
         self.assertFalse(profile_has_model_config({"provider": "openrouter"}))
+
+    def test_normalize_provider_id_nous_portal(self) -> None:
+        self.assertEqual(normalize_provider_id("Nous Portal"), "nous")
+        self.assertEqual(normalize_provider_id("nous"), "nous")
+
+    def test_parse_model_section_normalizes_display_provider(self) -> None:
+        cfg = parse_model_section(
+            {"provider": "Nous Portal", "default": "stepfun/step-3.7-flash:free"}
+        )
+        self.assertEqual(cfg["provider"], "nous")
 
 
 if __name__ == "__main__":

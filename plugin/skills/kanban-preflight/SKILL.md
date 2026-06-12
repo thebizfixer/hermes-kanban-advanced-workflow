@@ -49,9 +49,9 @@ Each check maps to a JSON `id` in script output. **Blocking** failures halt deco
 
 **Script:** `preflight.sh` `check_filesystem_coherence` blocks `/mnt/*` on Linux/WSL and filesystem types `9p`, `nfs`, `fuse`, etc.
 
-**Dual-clone check (manual):** `git worktree list` — no stale prunable entries from a second clone. See `references/single-coherent-filesystem.md`.
+**Dual-clone check (manual):** `git worktree list` — no stale prunable entries from a second clone. See `plugin/data/references/single-coherent-filesystem.md`.
 
-**Env knobs:** `PREFLIGHT_SKIP_FS_CHECK`, `PREFLIGHT_ALLOWED_FS_TYPES` — see `references/preflight-env-knobs.md`.
+**Env knobs:** `PREFLIGHT_SKIP_FS_CHECK`, `PREFLIGHT_ALLOWED_FS_TYPES` — see `plugin/data/references/preflight-env-knobs.md`.
 
 ---
 
@@ -59,7 +59,7 @@ Each check maps to a JSON `id` in script output. **Blocking** failures halt deco
 
 **Goal:** Verify `$HERMES_HOME/kanban.db` passes `PRAGMA integrity_check` and remove stale `kanban.db.init.lock` if present.
 
-**Typical fixes:** `hermes gateway restart`; see `references/sqlite-kanban-db-recovery.md`.
+**Typical fixes:** `hermes gateway restart`; see `plugin/data/references/sqlite-kanban-db-recovery.md`.
 
 **Goal:** Confirm that materialized kanban skill files match their canonical sources (public bundle + project overlay). Drift means the agent is running from a hand-edited or stale skill copy.
 
@@ -113,7 +113,7 @@ free -m | awk '/^Mem:/ {print "available:", $7, "MB"}'
 
 **Typical fixes:** Copy `.env.example` → `.env` and fill values; for WSL users with `.env` on the Windows side, source it directly before running preflight: `set -a && source /mnt/<drive>/Projects/<project>/.env && set +a`. The `source` command reads env vars safely even from DrvFS paths (no filesystem operations are performed — only variable exports). Do NOT clone or symlink the Windows `.env` into the WSL filesystem. For cloud deploys use Secret Manager mounts — never commit real secrets.
 
-**Card worktrees:** Preflight reads main-repo `.env`. Workers run in `/tmp/wt-*` worktrees — if coding agents or tests need `.env` on disk there, the operator must add `.env` to `.worktreeinclude` (not done by init). See `references/operator-provisioning.md`.
+**Card worktrees:** Preflight reads main-repo `.env`. Workers run in `/tmp/wt-*` worktrees — if coding agents or tests need `.env` on disk there, the operator must add `.env` to `.worktreeinclude` (not done by init). See `plugin/data/references/operator-provisioning.md`.
 
 ---
 
@@ -139,7 +139,7 @@ curl -s -o /dev/null -w "%{http_code}\n" --max-time 5 "${PREFLIGHT_API_URL:-http
 
 **Automated:** `preflight.sh` parses `hermes --version` and probes `hermes kanban create --help` for `--goal`.
 
-**Typical fixes:** `hermes update` or reinstall `hermes-agent>=0.16.0`; see `references/hermes-v0.15.0-upgrade.md`.
+**Typical fixes:** `hermes update` or reinstall `hermes-agent>=0.16.0`; see `plugin/data/references/hermes-v0.15.0-upgrade.md`.
 
 ---
 
@@ -204,7 +204,7 @@ PYTHONPATH=. python3 ${bundle_path}/scripts/check_coding_agent_cli.py --full
 
 **Env knobs:** `PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT` (default `45`), `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` (audit-noted skip).
 
-**Runtime env:** `HOME` must be set for gateway workers (OAuth paths). Init/Save writes `HOME=` to `.env`; `coding_agent_invoke.sh` sources `scripts/lib/coding_agent_env.sh`. See `references/coding-agent-auth.md`.
+**Runtime env:** `HOME` must be set for gateway workers (OAuth paths). Init/Save writes `HOME=` to `.env`; `coding_agent_invoke.sh` sources `scripts/lib/coding_agent_env.sh`. See `plugin/data/references/coding-agent-auth.md`.
 
 **Typical fixes (by binary):**
 
@@ -305,7 +305,7 @@ Use **`${bundle_path}/scripts/preflight.sh`** as the single pre-dispatch gate. I
 - Script: `hermes-kanban-advanced-workflow/scripts/preflight.sh`
 - Orchestrator: `kanban-advanced:kanban-orchestrator` Step 0 user gate + Step 0b preflight
 - Prompt: `hermes-kanban-advanced-workflow/prompts/orchestrator.md` § Preflight gating
-- Bundle documentation audit: [`references/bundle-documentation-audit.md`](references/bundle-documentation-audit.md) — README vs file tree drift detection, distinct from `provision.sh --check`
-- Filesystem coherence detection: [`references/filesystem-coherence-detection.md`](references/filesystem-coherence-detection.md) — canonical shell patterns for cross-mount detection (path-prefix blocklist, `df -T` FS type, config overrides)
-- Preflight env knobs: [`references/preflight-env-knobs.md`](references/preflight-env-knobs.md) — quick-reference table of all env vars that control preflight behavior
-- WSL `.env` sourcing: [`references/wsl-env-sourcing.md`](references/wsl-env-sourcing.md) — sourcing `.env` from Windows side when the WSL repo lacks its own copy
+- Bundle documentation audit: [`plugin/data/references/bundle-documentation-audit.md`](plugin/data/references/bundle-documentation-audit.md) — README vs file tree drift detection, distinct from `provision.sh --check`
+- Filesystem coherence detection: [`plugin/data/references/filesystem-coherence-detection.md`](plugin/data/references/filesystem-coherence-detection.md) — canonical shell patterns for cross-mount detection (path-prefix blocklist, `df -T` FS type, config overrides)
+- Preflight env knobs: [`plugin/data/references/preflight-env-knobs.md`](plugin/data/references/preflight-env-knobs.md) — quick-reference table of all env vars that control preflight behavior
+- WSL `.env` sourcing: [`plugin/data/references/wsl-env-sourcing.md`](plugin/data/references/wsl-env-sourcing.md) — sourcing `.env` from Windows side when the WSL repo lacks its own copy

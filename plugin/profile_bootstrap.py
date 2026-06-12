@@ -20,10 +20,13 @@ from .config_overlay import (
     DEFAULT_WORKER_PROFILE,
     LEGACY_ORCHESTRATOR_PROFILE,
     LEGACY_WORKER_PROFILE,
+    PLUGIN_ROOT,
     PROFILE_SKILL_SETS_BY_ROLE,
     resolve_dispatch_profiles,
     resolve_hermes_home,
 )
+
+_DATA_REFERENCES = PLUGIN_ROOT / "plugin" / "data" / "references"
 
 RunFn = Callable[..., subprocess.CompletedProcess]
 
@@ -138,6 +141,39 @@ def _opt_out_bundled_skills(profile_home: Path) -> None:
     marker = profile_home / NO_BUNDLED_SKILLS_MARKER
     if not marker.is_file():
         marker.write_text(NO_BUNDLED_SKILLS_TEXT, encoding="utf-8")
+
+
+def materialize_skill_dir(
+    src_skill_dir: Path,
+    dst_skill_dir: Path,
+    *,
+    bundle_data_references: Path | None = None,
+) -> None:
+    """Copy SKILL.md and optional references/ for skill_view(name, file_path) resolution.
+
+    When ``bundle_data_references`` is set (kanban-advanced bridge skill), also copy
+    ``plugin/data/references/*.md`` into ``references/`` so supervisors can load shared
+    docs via ``skill_view("kanban-advanced:kanban-advanced", "references/<file>.md")``.
+    Skips ``in-flight-governance-index.md`` from the bundle when the skill-local SSOT
+    copy already exists.
+    """
+    skill_md = src_skill_dir / "SKILL.md"
+    if not skill_md.is_file():
+        raise FileNotFoundError(skill_md)
+    dst_skill_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(skill_md, dst_skill_dir / "SKILL.md")
+    refs_src = src_skill_dir / "references"
+    refs_dst = dst_skill_dir / "references"
+    if refs_src.is_dir():
+        if refs_dst.exists():
+            shutil.rmtree(refs_dst)
+        shutil.copytree(refs_src, refs_dst)
+    if bundle_data_references and bundle_data_references.is_dir():
+        refs_dst.mkdir(parents=True, exist_ok=True)
+        for ref in bundle_data_references.glob("*.md"):
+            if ref.name == "in-flight-governance-index.md" and (refs_dst / ref.name).is_file():
+                continue
+            shutil.copy2(ref, refs_dst / ref.name)
 
 
 def _copy_profile_config_from_default(hermes_home: Path, profile: str) -> None:
@@ -342,10 +378,11 @@ def seed_dispatch_profile_skills(
                 continue
             skill_md = child / "SKILL.md"
             if child.is_dir() and skill_md.exists():
-                dst_dir = profile_skills / child.name
-                dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(
-                    skill_md.read_text(encoding="utf-8"), encoding="utf-8"
+                bundle = _DATA_REFERENCES if child.name == "kanban-advanced" else None
+                materialize_skill_dir(
+                    child,
+                    profile_skills / child.name,
+                    bundle_data_references=bundle,
                 )
                 seeded += 1
         log(f"   OK {profile}: {seeded} skills seeded {sorted(allowed_skills)} ({profile_home})")
