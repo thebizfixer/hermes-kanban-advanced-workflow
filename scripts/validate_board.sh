@@ -65,6 +65,18 @@ fail() { red "  FAIL: $*"; FAILURES=$((FAILURES + 1)); }
 warn() { yellow "  WARN: $*"; WARNINGS=$((WARNINGS + 1)); }
 pass() { green "  âœ“ $*"; }
 
+body_has_files() {
+    echo "$1" | grep -qE '^(Files:|files:)'
+}
+
+body_has_tests() {
+    echo "$1" | grep -qE '^(Tests:|tests:)'
+}
+
+body_is_verification() {
+    echo "$1" | grep -qiE '^(Type:|type:)[[:space:]]*verification'
+}
+
 echo "=== Pre-Dispatch Board Validation ==="
 echo ""
 
@@ -114,17 +126,14 @@ else
     fi
 fi
 
-# Check cron jobs exist via cronjob CLI (non-blocking if CLI unavailable)
+# Verify per-plan wave crons (provision script — deliver=local, no-agent, active)
 if command -v hermes >/dev/null 2>&1; then
-    CRON_LIST=$(hermes cron list 2>/dev/null || true)
-    for expected in "auto_unblock" "board_keeper"; do
-        if echo "$CRON_LIST" | grep -q "$expected"; then
-            pass "$expected cron found and running"
-        else
-            fail "$expected cron NOT found â€” gate cannot be unblocked until cron is created"
-            CRON_ISSUES=$((CRON_ISSUES + 1))
-        fi
-    done
+    if bash "$SCRIPT_DIR_VAL/provision_kanban_crons.sh" --check 2>/dev/null; then
+        pass "wave crons active (auto_unblock + board_keeper, deliver=local)"
+    else
+        fail "wave crons check failed — run provision_kanban_crons.sh --create during decomposition"
+        CRON_ISSUES=$((CRON_ISSUES + 1))
+    fi
 else
     warn "hermes CLI not available â€” cannot verify crons are running"
 fi
@@ -156,7 +165,7 @@ for tid in $PARENTLESS_CARDS; do
     WS=$(hermes kanban show "$tid" 2>/dev/null | grep "workspace:" | head -1)
     if echo "$WS" | grep -q "scratch"; then
         BODY=$(hermes kanban show "$tid" 2>/dev/null)
-        if echo "$BODY" | grep -q "Files:"; then
+        if body_has_files "$BODY"; then
             fail "Code-gen card $tid has scratch workspace (zero output risk)"
             SCRATCH_ISSUES=$((SCRATCH_ISSUES + 1))
         fi
@@ -263,9 +272,10 @@ AGENT_BLOCK_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
     BODY=$(hermes kanban show "$tid" 2>/dev/null)
     ASSIGNEE=$(echo "$BODY" | grep "assignee:" | head -1 | awk '{print $2}')
-    HAS_FILES=$(echo "$BODY" | grep -c "Files:" || true)
+    HAS_FILES=0
+    body_has_files "$BODY" && HAS_FILES=1
     HAS_AGENT=$(echo "$BODY" | grep -c '```agent' || true)
-    if [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$HAS_FILES" -gt 0 ] && [ "$HAS_AGENT" -eq 0 ]; then
+    if [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$HAS_FILES" -gt 0 ] && [ "$HAS_AGENT" -eq 0 ] && ! body_is_verification "$BODY"; then
         fail "Card $tid (assignee=$ASSIGNEE) has Files: but no agent -p block â€” will protocol-violate"
         AGENT_BLOCK_ISSUES=$((AGENT_BLOCK_ISSUES + 1))
     fi
@@ -281,7 +291,17 @@ for tid in $PARENTLESS_CARDS; do
     HAS_AGENT=$(echo "$BODY" | grep -c '```agent' || true)
     # Gate and audit cards have no agent block â€” they're manual orchestrator steps
     TITLE=$(echo "$BODY" | grep "Task $tid:" | head -1)
-    if [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$HAS_AGENT" -eq 0 ] && echo "$TITLE" | grep -qiE 'gate|audit|root'; then
+    IS_VERIFICATION=0
+    body_is_verification "$BODY" && IS_VERIFICATION=1
+    HAS_FILES=0
+    body_has_files "$BODY" && HAS_FILES=1
+    if [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$IS_VERIFICATION" -gt 0 ] && [ "$HAS_FILES" -gt 0 ]; then
+        fail "Card $tid (assignee=$ASSIGNEE) Type: verification must not have Files: line"
+        ORCH_ONLY_ISSUES=$((ORCH_ONLY_ISSUES + 1))
+    elif [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$IS_VERIFICATION" -gt 0 ] && [ "$HAS_AGENT" -gt 0 ]; then
+        fail "Card $tid (assignee=$ASSIGNEE) Type: verification must not have agent block"
+        ORCH_ONLY_ISSUES=$((ORCH_ONLY_ISSUES + 1))
+    elif [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$HAS_AGENT" -eq 0 ] && echo "$TITLE" | grep -qiE 'gate|audit|root'; then
         fail "Card $tid (assignee=$ASSIGNEE) is an orchestrator-only card (gate/audit/root) but assigned to worker profile â€” will protocol-violate"
         ORCH_ONLY_ISSUES=$((ORCH_ONLY_ISSUES + 1))
     fi
@@ -294,9 +314,15 @@ TEST_LINE_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
     BODY=$(hermes kanban show "$tid" 2>/dev/null)
     ASSIGNEE=$(echo "$BODY" | grep "assignee:" | head -1 | awk '{print $2}')
-    HAS_TESTS=$(echo "$BODY" | grep -c "Tests:" || true)
+    HAS_TESTS=0
+    body_has_tests "$BODY" && HAS_TESTS=1
     HAS_AGENT=$(echo "$BODY" | grep -c '```agent' || true)
-    if [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$HAS_AGENT" -gt 0 ] && [ "$HAS_TESTS" -eq 0 ]; then
+    IS_VERIFICATION=0
+    body_is_verification "$BODY" && IS_VERIFICATION=1
+    if [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$IS_VERIFICATION" -gt 0 ] && [ "$HAS_TESTS" -eq 0 ]; then
+        fail "Card $tid (assignee=$ASSIGNEE) Type: verification requires Tests: line"
+        TEST_LINE_ISSUES=$((TEST_LINE_ISSUES + 1))
+    elif [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$HAS_AGENT" -gt 0 ] && [ "$HAS_TESTS" -eq 0 ]; then
         fail "Card $tid (assignee=$ASSIGNEE) has agent block but no Tests: line â€” evaluation chain will silently pass"
         TEST_LINE_ISSUES=$((TEST_LINE_ISSUES + 1))
     fi

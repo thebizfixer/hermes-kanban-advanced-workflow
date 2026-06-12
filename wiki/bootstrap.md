@@ -24,7 +24,7 @@ Bootstrap and init are the **same operation** from two entry points:
 7. **Config overlay** — write `.hermes/kanban-overrides/kanban-config.yaml` (preserves existing branches and coding-agent model on re-init unless overridden).
 8. **Materialize shared skills** — copy all 11 plugin skills to `$HERMES_HOME/skills/kanban-advanced/` (discoverable from any profile via `<available_skills>`).
 9. **Reconcile dispatch profiles** — SOUL.md, role-only profile skills, verification (see [Profile reconciliation](#profile-reconciliation)).
-10. **Cron scripts** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`.
+10. **Cron scripts (files only)** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`. Does **not** create Hermes cron **jobs** — those are per-plan at decomposition (`provision_kanban_crons.sh --create`).
 11. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE`, and **`HOME=`** (for coding-agent credential paths) in project `.env`.
 12. **`.worktreeinclude`** — repo-root file listing gitignored paths copied into each card worktree by `worktree_setup.sh` (`.hermes/scripts/`, `kanban-overrides/`, plugin invoke helpers when using project-local `.hermes`). Commit this file after init.
 13. **Gateway check** — report running/stopped.

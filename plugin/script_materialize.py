@@ -13,6 +13,12 @@ HERMES_SCRIPT_NAMES = (
 
 LIB_SCRIPT_NAMES = (
     "coding_agent_env.sh",
+    "coding_agent_auth_lock.sh",
+    "plan_paths.sh",
+)
+
+LIB_PYTHON_NAMES = (
+    "plan_paths.py",
 )
 
 
@@ -37,5 +43,11 @@ def materialize_hermes_scripts(scripts_src: Path, scripts_dst: Path) -> list[str
                 dst = lib_dst / name
                 dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
                 dst.chmod(0o755)
+                lines.append(f"   OK lib/{name} -> {dst}")
+        for name in LIB_PYTHON_NAMES:
+            src = lib_src / name
+            if src.exists():
+                dst = lib_dst / name
+                dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
                 lines.append(f"   OK lib/{name} -> {dst}")
     return lines

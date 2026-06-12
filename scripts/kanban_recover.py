@@ -96,7 +96,7 @@ def log_recovery(recovery_dir: str, task_id: str, error_code: str, action: str, 
 def recover_e001_file_not_in_diff(task_id: str, workspace: str, registry: dict):
     """E001: Agent missed a file. Check agent output, retry with explicit path."""
     print(f"[recover] E001: File not in diff for {task_id}")
-    print("[recover] Action: Block task for manual review. Agent missed a required file.")
+    print("[recover] Action: Block task for manual review. If salvage already committed, re-run eval chain (already_committed path).")
     subprocess.run(["hermes", "kanban", "block", task_id,
                     "E001: Agent missed a file. Check Files: line and agent output."])
 

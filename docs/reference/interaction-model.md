@@ -31,7 +31,7 @@ After all cards complete, the agent prompts you at each stage:
 | Agent prompts                                                          | You say                | Agent does                                                                      |
 | ---------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------- |
 | *"Kanban complete. Proceed to reconciliation?"*                        | `"Yes"` / `"Proceed"`  | Runs file-level compliance, token burn report, failure-mode taxonomy            |
-| *"Reconciliation complete. Ready to clean up?"*             | `"Yes"` / `"Clean up"` | Archives board, removes monitoring cron, cleans worktree branches               |
+| *"Reconciliation complete. Ready to clean up?"*             | `"Yes"` / `"Clean up"` | Archives board, removes wave crons (`provision_kanban_crons.sh --remove`) + optional monitor, cleans worktree branches |
 | *"Cleanup complete. Ready for post-mortem report?"*        | `"Yes"` / `"Proceed"`  | Generates postmortem with timeline, KPIs, failure taxonomy, and lessons learned |
 
 You can say `"No"` or `"Wait"` at any checkpoint — the agent holds state and resumes when you're ready. You can also skip stages: `"Skip reconciliation, go to postmortem."`

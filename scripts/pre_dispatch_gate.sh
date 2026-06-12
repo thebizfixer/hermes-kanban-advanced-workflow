@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/hermes_home.sh
 source "$SCRIPT_DIR/lib/hermes_home.sh"
+# shellcheck source=lib/plan_paths.sh
+source "$SCRIPT_DIR/lib/plan_paths.sh"
 
 PLAN_ID="${1:-}"
 if [ -z "$PLAN_ID" ]; then
@@ -55,8 +57,14 @@ warn() {
   fi
 }
 
-check "plan on ${WORKING_BRANCH}" \
-  "git log --oneline -1 -- .cursor/plans/*${PLAN_ID}*.md | grep -q ."
+PLAN_REL="$(resolve_plan_file "$REPO_ROOT" "$PLAN_ID" "" 2>/dev/null || true)"
+if [[ -n "$PLAN_REL" ]]; then
+  check "plan on ${WORKING_BRANCH}" \
+    "git log --oneline -1 -- ${PLAN_REL} | grep -q ."
+else
+  check "plan on ${WORKING_BRANCH}" \
+    "git log --oneline -1 -- .cursor/plans/*${PLAN_ID}*.md .agent/plans/*${PLAN_ID}*.md .hermes/kanban/plans/*${PLAN_ID}*.md 2>/dev/null | grep -q ."
+fi
 
 warn "plan pushed" \
   "git fetch origin ${WORKING_BRANCH} --dry-run 2>&1 | grep -q 'up to date'"
@@ -84,6 +92,9 @@ check "cron_scripts" \
 
 check "cron_hermes_path" \
   "PATH=\"${HOME}/.local/bin:${PATH}\" command -v hermes >/dev/null 2>&1"
+
+warn "gateway_running" \
+  "hermes cron status 2>&1 | grep -qiE 'running|active'"
 
 echo ""
 echo "[GATE] Result: $FAILURES failures, $WARNINGS warnings"

@@ -64,16 +64,14 @@ If `hermes kanban show <task_id>` block reason contains `[escalation:coding_agen
 
 **Plan file availability (mandatory):** The full plan file must be accessible in the worktree for autonomous troubleshooting. The card body carries task-specific instructions, but when the cursor agent hits an unexpected failure, the worker needs the plan for root cause context, phase dependencies, and sad-path contingencies.
 
-1. **Identify the plan file** — extract `plan_id` from the card body (first line: `plan_id: <id>`) or `$HERMES_KANBAN_PLAN_ID`. Search for the plan:
+1. **Identify the plan file** — prefer `plan_file:` from the card body (stamped at decomposition). Else use `plan_id:` / `$HERMES_KANBAN_PLAN_ID` with the agent-neutral resolver (`.hermes/kanban/plans/` backup first, then `.agent/plans`, `.cursor/plans`, etc.):
 ```bash
-find .agent/plans .cursor/plans -name "*.md" | xargs grep -l "plan_id: $PLAN_ID" 2>/dev/null
+PYTHONPATH=scripts/lib python3 -c "from plan_paths import resolve_plan_file; print(resolve_plan_file('.', '$PLAN_ID'))"
 ```
 
-2. **Restore if missing** — if the plan file is not found in the worktree (common on fresh worktrees or after `git reset --hard`), restore it from `${working_branch}`:
+2. **Restore if missing** — checkout the resolved repo-relative path from `${working_branch}`:
 ```bash
-git checkout origin/${working_branch} -- .agent/plans/<plan>.md
-# Fallback if plans are in .cursor/plans/:
-# git checkout origin/${working_branch} -- .cursor/plans/
+git checkout origin/${working_branch} -- <plan_file_from_card_or_resolver>
 ```
 
 3. **Verify readability** — confirm the plan has the expected sections (at minimum: frontmatter with `plan_id`, `## Fix design`, and `## Test plan`). If the plan is truncated or corrupted, block the card with reason "Plan file unavailable — cannot troubleshoot autonomously" and escalate to orchestrator.
@@ -116,7 +114,8 @@ fi
 - `git status --short` — should be clean or contain only expected artifacts
 - Disk space > 1 GB (E007 if not)
 - Working directory matches repo root (E011 if cross-mount)
-- **Agent block guard (E014):** If the card has no `agent -p` fenced block AND no `Files:` line, this is an orchestrator-only card (gate, audit, root) that was mistakenly assigned to a worker profile. Do NOT spawn an agent — complete immediately with `kanban_complete(summary="Orchestrator-only card — no agent work to do.")`. Protocol violations happen when workers spawn agents with nothing to execute.
+- **Agent block guard (E014):** If the card has **neither** an `agent -p` block **nor** a `Files:` line, this is an orchestrator-only card (gate, audit, root) — do NOT spawn an agent; `kanban_complete(summary="Orchestrator-only card — no agent work to do.")`.
+- **Verification-only (`Type: verification`):** Do NOT run `coding_agent_invoke.sh` smoke or dispatch. Run `Tests:` via `terminal()`, then run the evaluation chain (mandatory before `kanban_complete`). Set `metadata.verification` to the test command on complete. Skip Step 3 smoke for verification cards.
 
 **Correct sequence within Step 3 (mandatory order):**
 

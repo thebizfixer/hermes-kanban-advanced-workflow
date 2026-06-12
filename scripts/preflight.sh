@@ -548,17 +548,23 @@ check_plan_backup() {
   local plan_src=""
   
   if [[ -n "$plan_id" ]]; then
-    # Try .agent/plans/ first, then .cursor/plans/
-    for dir in ".agent/plans" ".cursor/plans"; do
-      if [[ -f "$dir/${plan_id}.plan.md" ]]; then
-        plan_src="$dir/${plan_id}.plan.md"
-        break
-      fi
-      if [[ -f "$dir/${plan_id}.md" ]]; then
-        plan_src="$dir/${plan_id}.md"
-        break
-      fi
-    done
+    # shellcheck source=lib/plan_paths.sh
+    source "$SCRIPT_DIR/lib/plan_paths.sh"
+    if command -v resolve_plan_file >/dev/null 2>&1; then
+      plan_src="$(resolve_plan_file "$(pwd)" "$plan_id" "" 2>/dev/null || true)"
+    fi
+    if [[ -z "$plan_src" ]]; then
+      for dir in ".hermes/kanban/plans" ".agent/plans" ".cursor/plans"; do
+        if [[ -f "$dir/${plan_id}.plan.md" ]]; then
+          plan_src="$dir/${plan_id}.plan.md"
+          break
+        fi
+        if [[ -f "$dir/${plan_id}.md" ]]; then
+          plan_src="$dir/${plan_id}.md"
+          break
+        fi
+      done
+    fi
   fi
   
   if [[ -n "$plan_src" ]]; then

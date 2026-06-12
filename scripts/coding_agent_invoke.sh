@@ -13,6 +13,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/coding_agent_env.sh
 source "$SCRIPT_DIR/lib/coding_agent_env.sh"
+# shellcheck source=lib/coding_agent_auth_lock.sh
+source "$SCRIPT_DIR/lib/coding_agent_auth_lock.sh"
 ensure_coding_agent_home
 
 MODE="${1:-smoke}"
@@ -48,12 +50,33 @@ append_model_args() {
   esac
 }
 
+_run_agent() {
+  local attempt=1
+  local max_attempts=2
+  while [[ "$attempt" -le "$max_attempts" ]]; do
+  if run_with_coding_agent_auth_lock "$BINARY" "${args[@]}"; then
+      return 0
+    fi
+    local rc=$?
+    if [[ "$attempt" -eq "$max_attempts" ]]; then
+      return "$rc"
+    fi
+    if [[ "$MODE" == "smoke" ]]; then
+      echo "[coding_agent_invoke] auth smoke failed — retry once after peer refresh" >&2
+      attempt=$((attempt + 1))
+      continue
+    fi
+    return "$rc"
+  done
+}
+
 case "$BINARY" in
   agent)
     # Cursor: -p = --print; --output-format requires -p; --trust required in worktrees
     args=( -p "$PROMPT" --output-format json --trust )
     append_model_args args
-    exec "$BINARY" "${args[@]}"
+    _run_agent
+    exit $?
     ;;
   claude)
     args=( -p "$PROMPT" --output-format json --dangerously-skip-permissions )

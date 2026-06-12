@@ -47,9 +47,12 @@ hermes kanban archive <task_id>  # repeat for each task
 # Verify: hermes kanban list should show "(no matching tasks)"
 ```
 
-### 2. Remove monitoring cron
+### 2. Remove wave crons (mandatory) + optional monitor cron
 ```bash
-cronjob(action="list")  # find kanban-monitor job
+PLAN_ID="${HERMES_KANBAN_PLAN_ID:-<plan-id>}"
+bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh --remove --plan-id "$PLAN_ID"
+# Optional walk-away monitor (separate from wave crons):
+cronjob(action="list")  # find kanban-monitor job if created
 cronjob(action="remove", job_id="<id>")
 ```
 

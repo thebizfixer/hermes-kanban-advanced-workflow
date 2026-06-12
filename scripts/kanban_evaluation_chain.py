@@ -54,46 +54,16 @@ def load_error_registry(registry_path: str) -> dict:
     }
 
 
-# ── Card body parser ───────────────────────────────────────────────────
+# ── Card body parser (SSOT: scripts/lib/card_body.py) ──────────────────
 
-def parse_card_body(body: str) -> dict:
-    """Extract Files:, Mode:, Tests:, Commit: lines and agent block from card body."""
-    files_line: List[str] = []
-    mode_line = "any"
-    tests_cmd = ""
-    commit_line = ""
-    estimated_lines = 200  # default: generous for most cards
-    agent_block = ""
-
-    for line in body.split("\n"):
-        if line.startswith("Files:"):
-            raw = line.replace("Files:", "").strip()
-            files_line = [f.strip() for f in raw.split(",") if f.strip()]
-        elif line.startswith("Mode:"):
-            mode_line = line.replace("Mode:", "").strip()
-        elif line.startswith("Tests:"):
-            tests_cmd = line.replace("Tests:", "").strip()
-        elif line.startswith("Commit:"):
-            commit_line = line.replace("Commit:", "").strip()
-        elif line.startswith("Lines:"):
-            try:
-                estimated_lines = int(line.replace("Lines:", "").strip())
-            except ValueError:
-                pass
-
-    # Extract agent block
-    agent_match = re.search(r"```agent\n(.*?)```", body, re.DOTALL)
-    if agent_match:
-        agent_block = agent_match.group(1).strip()
-
-    return {
-        "files": files_line,
-        "mode": mode_line,
-        "tests": tests_cmd,
-        "commit": commit_line,
-        "estimated_lines": estimated_lines,
-        "agent_block": agent_block,
-    }
+_LIB = os.path.join(os.path.dirname(__file__), "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+from card_body import (  # noqa: E402
+    find_prior_commit,
+    is_verification_only,
+    parse_card_body,
+)
 
 
 # ── Scope violation logger ─────────────────────────────────────────────
@@ -156,8 +126,15 @@ def find_attractor(memory: dict, files: List[str], tests_cmd: str, workspace: st
 
 # ── Evaluation steps ───────────────────────────────────────────────────
 
-def step_1_file_compliance(files: List[str], baseline: str, workspace: str) -> Tuple[bool, Optional[str]]:
-    """Every file in card Files: must have >0 changes in git diff."""
+def step_1_file_compliance(
+    files: List[str],
+    baseline: str,
+    workspace: str,
+    commit_line: str = "",
+) -> Tuple[bool, Optional[str]]:
+    """Every file in card Files: must have >0 changes in git diff (or prior commit)."""
+    if not files:
+        return True, None
     result = subprocess.run(
         ["git", "diff", "--stat", f"{baseline}..HEAD"],
         capture_output=True, text=True,
@@ -165,8 +142,13 @@ def step_1_file_compliance(files: List[str], baseline: str, workspace: str) -> T
         cwd=workspace,
     )
     for f in files:
-        if f not in result.stdout:
-            return False, "E001_FILE_NOT_IN_DIFF"
+        if f in result.stdout:
+            continue
+        prior = find_prior_commit(commit_line, files, workspace, baseline)
+        if prior:
+            print(f"[E001] ALLOW — already_committed:{prior[:8]}")
+            continue
+        return False, "E001_FILE_NOT_IN_DIFF"
     return True, None
 
 
@@ -267,6 +249,8 @@ def step_4_commit_match(commit_line: str, workspace: str) -> Tuple[bool, Optiona
     """Last commit message must contain the Commit: line."""
     if not commit_line:
         return True, None  # No commit line specified
+    if re.search(r"(?i)N/A|verification only", commit_line):
+        return True, None
     result = subprocess.run(
         ["git", "log", "-1", "--format=%s"],
         capture_output=True, text=True,
@@ -348,7 +332,7 @@ def step_7_agent_output_capture(task_id: str) -> Tuple[bool, Optional[str]]:
         return False, "E020_AGENT_OUTPUT_UNPARSEABLE"
 
 
-def step_8_no_destructive_git(workspace: str) -> Tuple[bool, Optional[str]]:
+def step_8_no_destructive_git(workspace: str, repo_root: str | None = None) -> Tuple[bool, Optional[str]]:
     """E019 — No destructive git operations in reflog.
 
     Blocks cards that used checkout --theirs, checkout --ours, or reset --hard
@@ -376,7 +360,13 @@ def step_8_no_destructive_git(workspace: str) -> Tuple[bool, Optional[str]]:
         if pattern == "reset --hard":
             # Check if all reset --hard lines have the skip-list pattern
             reset_lines = [line for line in reflog.split("\n") if "reset --hard" in line]
-            legit_resets = sum(1 for line in reset_lines if ".cursor/plans/" in line or "docs/" in line)
+            from plan_paths import is_governance_artifact_path  # noqa: E402
+
+            root = repo_root or workspace
+            legit_resets = sum(
+                1 for line in reset_lines
+                if is_governance_artifact_path(line, root) or "docs/" in line
+            )
             if legit_resets == len(reset_lines):
                 print(f"[E019] Skip-list match: reset --hard for project artifacts")
                 continue
@@ -389,8 +379,15 @@ def step_8_no_destructive_git(workspace: str) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
-def step_6_zero_output(files: List[str], baseline: str, workspace: str) -> Tuple[bool, Optional[str]]:
-    """At least one Files: file must have >0 diff."""
+def step_6_zero_output(
+    files: List[str],
+    baseline: str,
+    workspace: str,
+    commit_line: str = "",
+) -> Tuple[bool, Optional[str]]:
+    """At least one Files: file must have >0 diff (or prior commit covers scope)."""
+    if not files:
+        return True, None
     result = subprocess.run(
         ["git", "diff", "--stat", f"{baseline}..HEAD"],
         capture_output=True, text=True,
@@ -398,9 +395,13 @@ def step_6_zero_output(files: List[str], baseline: str, workspace: str) -> Tuple
         cwd=workspace,
     )
     any_change = any(f in result.stdout for f in files)
-    if not any_change:
-        return False, "E006_ZERO_OUTPUT"
-    return True, None
+    if any_change:
+        return True, None
+    prior = find_prior_commit(commit_line, files, workspace, baseline)
+    if prior:
+        print(f"[E006] ALLOW — already_committed:{prior[:8]}")
+        return True, None
+    return False, "E006_ZERO_OUTPUT"
 
 
 def step_excessive_churn(
@@ -464,6 +465,22 @@ def run_chain(task_id: str, workspace: str, card_body: str,
             return True, f"Advisory pass with warnings: {err}"
         return False, err
 
+    if is_verification_only(parsed, card_body):
+        if not parsed.get("tests") and "Acceptance:" not in card_body:
+            return False, "verification_only: Tests: or Acceptance: required"
+        print("[chain] Verification-only card — running tests + destructive-git checks only")
+        for step_name, step_fn in (
+            ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace)),
+            ("No destructive git (E019)", lambda: step_8_no_destructive_git(workspace, workspace)),
+        ):
+            print(f"[chain] Step: {step_name}...", end=" ")
+            ok, err = step_fn()
+            passed, reason = _finish_step(ok, err)
+            if not passed:
+                return False, reason or err or "verification check failed"
+            print("ALLOW")
+        return True, "All checks passed (verification_only)"
+
     # Lattice memory: skip cold-path validation if attractor matches
     memory = {}
     if lattice_memory_path:
@@ -477,9 +494,11 @@ def run_chain(task_id: str, workspace: str, card_body: str,
                 lambda: step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id),
                 lambda: step_5_exact_token(token_log, task_id),
                 lambda: step_7_agent_output_capture(task_id),
-                lambda: step_6_zero_output(parsed["files"], baseline, workspace),
+                lambda: step_6_zero_output(
+                    parsed["files"], baseline, workspace, parsed.get("commit", "")
+                ),
                 lambda: step_excessive_churn(parsed["estimated_lines"], baseline, workspace),
-                lambda: step_8_no_destructive_git(workspace),
+                lambda: step_8_no_destructive_git(workspace, workspace),
             ):
                 ok, err = step_fn()
                 passed, reason = _finish_step(ok, err)
@@ -493,15 +512,19 @@ def run_chain(task_id: str, workspace: str, card_body: str,
 
     # Cold path: run all steps
     steps = [
-        ("Files: compliance", lambda: step_1_file_compliance(parsed["files"], baseline, workspace)),
+        ("Files: compliance", lambda: step_1_file_compliance(
+            parsed["files"], baseline, workspace, parsed.get("commit", "")
+        )),
         ("Unlisted changes", lambda: step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id)),
         ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace)),
         ("Commit match", lambda: step_4_commit_match(parsed["commit"], workspace)),
         ("Exact token (E018)", lambda: step_5_exact_token(token_log, task_id)),
-        ("Zero-output check", lambda: step_6_zero_output(parsed["files"], baseline, workspace)),
+        ("Zero-output check", lambda: step_6_zero_output(
+            parsed["files"], baseline, workspace, parsed.get("commit", "")
+        )),
         ("Excessive churn (E017)", lambda: step_excessive_churn(parsed["estimated_lines"], baseline, workspace)),
         ("Agent output capture (E020)", lambda: step_7_agent_output_capture(task_id)),
-        ("No destructive git (E019)", lambda: step_8_no_destructive_git(workspace)),
+        ("No destructive git (E019)", lambda: step_8_no_destructive_git(workspace, workspace)),
     ]
 
     for step_name, step_fn in steps:

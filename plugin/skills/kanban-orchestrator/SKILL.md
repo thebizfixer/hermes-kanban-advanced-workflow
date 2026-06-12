@@ -325,16 +325,13 @@ Draft the graph out loud before creating anything:
 1.  CREATE root card                 hermes kanban create "<plan>" --assignee ${orchestrator_profile}
 2.  CREATE gate (blocked)           hermes kanban create gate --assignee ${orchestrator_profile}
                                      hermes kanban block <gate_id> "Gate — awaiting dependency links"
-3.  CREATE auto-unblock cron        cronjob(action="create", name="kanban-auto-unblock-1m",
-                                      schedule="every 1m", deliver="origin", no_agent=true,
-                                      repeat=999, script="scripts/auto_unblock.sh")
-4.  CREATE board keeper cron        cronjob(action="create", name="kanban-board-keeper-3m",
-                                      schedule="every 3m", deliver="origin", no_agent=true,
-                                      repeat=999, script="scripts/board_keeper.sh")
-5.  VERIFY both crons running       cronjob(action="list") — confirm both job_ids with
-                                      next_run_at in the future. Store job IDs.
-                                      STOP here if crons cannot be verified — do not create
-                                      implementation cards without a functioning auto-unblock.
+3.  CREATE wave crons (shell)       bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh
+                                      --create --plan-id <plan_id>
+                                      (deliver=local, no_agent=true — no messaging platform required)
+4.  (reserved — kanban_decompose Step 6 also calls --create if Steps 3–5 skipped)
+5.  VERIFY wave crons               bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh --check
+                                      Gateway must run (`hermes gateway start`). STOP if check fails —
+                                      do not create implementation cards without functioning auto-unblock.
 6.  CREATE all implementation cards Create independent cards as ready. Create dependent cards as ready,
     (STAGGERED)                     then immediately block before the dispatcher claims them.
                                      Stagger creates: ≥1s between cards, ≥3s pause every 5 cards.
@@ -357,19 +354,16 @@ Draft the graph out loud before creating anything:
 
 **Auto-progression (mandatory):** Crons are created at Steps 3–5, **before any implementation cards exist**. This guarantees auto-unblock is polling before the first worker completes. If the orchestrator session terminates after card creation but before gate completion, crons are already in place and wave progression continues. The gate cannot complete until crons are verified running (Step 5) AND validate_board.sh passes (Step 10).
 
-**Cron removal during cleanup:** Both crons must be removed during `kanban-advanced:kanban-cleanup`:
+**Cron removal during cleanup:** Both wave crons must be removed during `kanban-advanced:kanban-cleanup`:
 
 ```bash
-# Start auto-unblock — runs every 1m during execution (minimum supported interval)
-cronjob(action="create", name="kanban-auto-unblock-1m", schedule="every 1m",
-  deliver="null", no_agent=true,
-  script="scripts/auto_unblock.sh")
+bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh --remove --plan-id <plan_id>
 ```
 
-This script finds all blocked cards whose parents are done and unblocks them. It handles every wave transition without orchestrator intervention. The orchestrator still monitors for failures (via watch/cron), but wave progression is fully automated. Remove during cleanup.
+`auto_unblock.sh` finds blocked cards whose parents are done and unblocks them every 1m. `board_keeper.sh` runs salvage every 3m. Both use script-only crons (`deliver=local`). Do not leave jobs running between plans.
 
 **Profile assignment discipline (mandatory):**
-- `${worker_profile}` → worker profile. ALL implementation cards. Must have `agent -p` block.
+- `${worker_profile}` → worker profile. ALL implementation cards. Must have `agent -p` block (except `Type: verification` — tests only, no agent block).
 - `${orchestrator_profile}` → orchestrator profile. Root, gate, audit cards only. Must NOT have `agent -p` block (manual steps).
 - Never assign an orchestrator card to a worker profile — the worker will spawn an agent with no work to do, and it will protocol-violate on every retry.
 

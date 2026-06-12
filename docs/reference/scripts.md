@@ -68,7 +68,17 @@ Proactive board manager for walk-away execution.  Runs every 180s.  5 functions:
 4. Detect unmerged done cards (commits ahead of `${working_branch}`)
 5. Report board status
 
-Designed for LLM-driven cron (`no_agent=false`) — the script output feeds the agent's decision loop. Calls `kanban_escalation_tracker.sh` for **every** blocked card and emits `ESCALATE:` / `HUMAN_INTERVENTION:` signals to stdout (`RETRY:` auto-unblocks silently).
+Runs as a **script-only** Hermes cron (`no_agent=true`, `deliver=local`). Pure bash salvage — no LLM required for wave progression. Logs to `$HERMES_HOME/kanban/logs/board-keeper.log`.
+
+### `provision_kanban_crons.sh`
+
+```bash
+bash scripts/provision_kanban_crons.sh --create [--plan-id <id>]
+bash scripts/provision_kanban_crons.sh --check
+bash scripts/provision_kanban_crons.sh --remove [--plan-id <id>]
+```
+
+Per-plan lifecycle for `kanban-auto-unblock-1m` and `kanban-board-keeper-3m`. Uses `deliver=local` (no messaging platform). **Not** called at init — create at decomposition, remove at cleanup. Stores job IDs in `.hermes/kanban/memory/<plan_id>.json`.
 
 ### `kanban_escalation_tracker.sh`
 

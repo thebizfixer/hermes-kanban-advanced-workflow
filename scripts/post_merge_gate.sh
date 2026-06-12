@@ -7,6 +7,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/kanban_config.sh
 source "$SCRIPT_DIR/lib/kanban_config.sh"
+# shellcheck source=lib/plan_paths.sh
+source "$SCRIPT_DIR/lib/plan_paths.sh"
 
 PLAN_ID="${1:-}"
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -26,7 +28,7 @@ FAILURES=0
 # ── 1. Gate tests from plan Test plan section ──
 echo "[MERGE-GATE] Running gate tests..."
 # Extract test commands from the plan's Test plan section
-PLAN_FILE=$(find .cursor/plans .agent/plans -name "*${PLAN_ID}*" -type f 2>/dev/null | head -1)
+PLAN_FILE="$(resolve_plan_file "$REPO_ROOT" "$PLAN_ID" "" 2>/dev/null || true)"
 if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
   # Parse test commands from the plan
   TEST_CMDS=$(grep -oP 'pytest[^`"]+' "$PLAN_FILE" 2>/dev/null | head -5 || true)

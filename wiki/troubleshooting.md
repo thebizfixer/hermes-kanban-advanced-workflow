@@ -377,6 +377,42 @@ hermes -p kanban-advanced-orchestrator chat  # new orchestrator session (all pla
 
 Then repeat **execute the plan**. Plugin reference: `plugin/data/references/profile-switching.md`.
 
+### Intermittent Cursor auth on parallel workers (coding-agent OAuth race)
+
+**Symptom:** Preflight and single-shot `check_coding_agent_cli.py` pass; some worker cards fail auth while others succeed.
+
+**Fix:** Update plugin (materializes `coding_agent_auth_lock.sh`). Restart gateway. Verify lock file under `$HERMES_HOME/.locks/`. See [coding-agent auth](../plugin/data/references/coding-agent-auth.md) § Concurrent OAuth refresh race.
+
+### Crons not firing (blocked cards stuck)
+
+**Symptom:** Parents are `done` but children stay `blocked`; manual chat unblock works; no wave progression.
+
+**Checks (in order):**
+
+1. **Gateway running** — `hermes gateway status` or `hermes cron status`. Crons tick inside the gateway process; CLI chat alone does not fire them.
+2. **Wave crons exist** — `hermes cron list` must show `kanban-auto-unblock-1m` and `kanban-board-keeper-3m` as `[active]` with `Deliver: local`.
+3. **Created per plan** — jobs are provisioned at decomposition (`provision_kanban_crons.sh --create`), **not** at init. Re-run create during an active plan if missing.
+4. **Logs** — `tail -f $HERMES_HOME/kanban/logs/auto-unblock.log` (and `board-keeper.log`). Empty lines on no-op ticks are normal.
+5. **Messaging optional** — missing Telegram/Discord does **not** stop script crons (`deliver=local`).
+
+**Cleanup:** If plan ended but crons still listed → `bash scripts/provision_kanban_crons.sh --remove --plan-id <id>`.
+
+### Broken Hermes post-merge hook (dashboard WebSocket SyntaxError)
+
+**Symptom:** After `hermes update`, dashboard WebSocket `SyntaxError` at `tui_gateway/server.py` ~line 7639.
+
+**Cause:** Local `~/.hermes/hermes-agent/.git/hooks/post-merge` re-applies a broken skill-bundle patch.
+
+**Fix:**
+
+```bash
+cd "${HERMES_HOME:-$HOME/.hermes}/hermes-agent"
+mv .git/hooks/post-merge .git/hooks/post-merge.disabled
+git restore tui_gateway/server.py
+git pull --ff-only
+hermes gateway restart
+```
+
 ## Full error code listing
 
 See `plugin/data/registry/error-codes.yaml` for all 36 codes with severity, recovery, and retry flags.

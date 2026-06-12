@@ -97,7 +97,7 @@ Agent reference: [wiki/bootstrap.md](../../wiki/bootstrap.md)
 
 1. **Config overlay** — `.hermes/kanban-overrides/kanban-config.yaml`
 2. **Shared skill materialization** — all 11 skills → `$HERMES_HOME/skills/kanban-advanced/`
-3. **Cron scripts** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`
+3. **Cron scripts (files only)** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`. Hermes cron **jobs** are created per plan at decomposition (`provision_kanban_crons.sh --create`), not at init.
 4. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE`, `HOME` in `.env` (kanban keys only — not app secrets)
 5. **`.worktreeinclude`** — kanban gitignored paths for card worktrees (overlay, invoke scripts); **you** add `.env` / `.venv/` as needed
 
@@ -143,6 +143,6 @@ Follow the [tutorial](../tutorial/kanban-advanced-tutorial.md) for a guided walk
 | "Profile reconciliation/verification failed" | Read bootstrap output issues; Update Plugin + restart gateway |
 | Bootstrap OK but execute fails on coding agent | Bootstrap does not block on auth — run `check_coding_agent_cli.py`, fix keys/OAuth/`HOME` — [coding-agent auth](../../plugin/data/references/coding-agent-auth.md) |
 | "Project-local plugins are disabled" | Init sets `HERMES_ENABLE_PROJECT_PLUGINS=true` in `.env`. Source it or restart. |
-| Cron scripts don't run | Verify they exist at `$HERMES_HOME/scripts/`. Re-run init. |
+| Cron scripts don't run | Script files: `$HERMES_HOME/scripts/`. Jobs: `hermes cron list` + gateway running. Create per plan: `provision_kanban_crons.sh --create`. |
 
 For more help, see [troubleshooting.md](troubleshooting.md) and [wiki/bootstrap.md](../../wiki/bootstrap.md).

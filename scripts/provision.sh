@@ -342,7 +342,7 @@ done
 # coding_agent_invoke.sh sources $HERMES_HOME/scripts/lib/coding_agent_env.sh
 LIB_SCRIPTS_DIR="${CRON_SCRIPTS_DIR}/lib"
 mkdir -p "$LIB_SCRIPTS_DIR"
-for libscript in coding_agent_env.sh; do
+for libscript in coding_agent_env.sh coding_agent_auth_lock.sh plan_paths.sh plan_paths.py; do
     if [ -f "${BUNDLE_PATH}/scripts/lib/${libscript}" ]; then
         case "$MODE" in
             apply)

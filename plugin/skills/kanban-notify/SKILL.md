@@ -123,6 +123,8 @@ Dedupe: do **not** re-send the same `task_id` + `failure_class` within **30 minu
 
 Push delivery requires the Hermes **gateway** with a configured chat platform (Telegram, Discord, etc.). CLI-only setups cannot receive push — use `hermes kanban watch` in tmux instead.
 
+**Wave crons are separate:** `auto_unblock.sh` and `board_keeper.sh` use script-only crons (`deliver=local`) and do **not** require messaging. Missing Telegram/Discord does not stop wave progression — only intervention **notify** pages need a chat channel.
+
 ### Prerequisites
 
 1. **Gateway running**

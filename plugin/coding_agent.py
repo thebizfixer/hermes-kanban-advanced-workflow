@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -166,18 +167,41 @@ def binary_on_path(binary: str) -> bool:
     return resolve_binary_executable(binary) is not None
 
 
+def _coding_agent_auth_lock_path() -> Path:
+    hermes_home = os.environ.get("HERMES_HOME", "").strip()
+    base = Path(hermes_home) if hermes_home else Path.home() / ".hermes"
+    lock_dir = base / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    return lock_dir / "coding-agent-auth.lock"
+
+
 def _run_binary_command(
     cmd: list[str],
     run: Callable[..., object],
     *,
     timeout: int,
+    use_auth_lock: bool = False,
 ):
     if not cmd:
         raise ValueError("empty command")
     executable = resolve_binary_executable(cmd[0])
     if not executable:
         raise FileNotFoundError(cmd[0])
-    return run([executable, *cmd[1:]], timeout=timeout)
+    argv = [executable, *cmd[1:]]
+    if use_auth_lock and shutil.which("flock"):
+        lockfile = _coding_agent_auth_lock_path()
+        return run(["flock", "-w", "120", str(lockfile), *argv], timeout=timeout)
+    if use_auth_lock and sys.platform != "win32":
+        try:
+            import fcntl
+
+            lockfile = _coding_agent_auth_lock_path()
+            with open(lockfile, "a+", encoding="utf-8") as lockfh:
+                fcntl.flock(lockfh.fileno(), fcntl.LOCK_EX)
+                return run(argv, timeout=timeout)
+        except ImportError:
+            pass
+    return run(argv, timeout=timeout)
 
 
 def parse_cursor_list_models(stdout: str) -> list[dict[str, str]]:
@@ -465,7 +489,9 @@ def smoke_test_coding_agent(
             probe_timeout = min(timeout, AUTH_PROBE_TIMEOUT_SECONDS)
             plain_argv = build_smoke_argv(binary, model, json_output=False)
             try:
-                probe = _run_binary_command(plain_argv, run, timeout=probe_timeout)
+                probe = _run_binary_command(
+                    plain_argv, run, timeout=probe_timeout, use_auth_lock=True
+                )
                 probe_ok = _interpret_smoke_result(
                     binary,
                     returncode=getattr(probe, "returncode", 1),
@@ -479,7 +505,12 @@ def smoke_test_coding_agent(
                 return False
 
         json_argv = build_smoke_argv(binary, model, json_output=True)
-        result = _run_binary_command(json_argv, run, timeout=timeout)
+        result = _run_binary_command(
+            json_argv,
+            run,
+            timeout=timeout,
+            use_auth_lock=(binary == "agent"),
+        )
         returncode = getattr(result, "returncode", 1)
         stdout = getattr(result, "stdout", "") or ""
         stderr = getattr(result, "stderr", "") or ""
@@ -500,6 +531,7 @@ def smoke_test_coding_agent(
                 build_smoke_argv(binary, model, json_output=False),
                 run,
                 timeout=timeout,
+                use_auth_lock=True,
             )
             return _interpret_smoke_result(
                 binary,

@@ -427,6 +427,13 @@ def main():
     project_root = _find_project_root(Path(input_path).resolve().parent)
     worker_profile, orchestrator_profile = _resolve_dispatch_profiles(project_root)
 
+    plan_file_rel = ""
+    if args.plan:
+        try:
+            plan_file_rel = Path(args.plan).resolve().relative_to(project_root.resolve()).as_posix()
+        except ValueError:
+            plan_file_rel = str(args.plan)
+
     # Parse plan
     if args.cards_yaml:
         print(f"Parsing cards YAML: {args.cards_yaml}")
@@ -437,6 +444,8 @@ def main():
     all_cards = parsed["cards"]
     for card in all_cards:
         _normalize_card_assignee(card, worker_profile, orchestrator_profile)
+        if plan_file_rel and "plan_file:" not in card.get("body", ""):
+            card["body"] = f"plan_file: {plan_file_rel}\n{card['body']}"
 
     # Count impl cards first (used in auto-generated card bodies)
     impl_cards = [c for c in all_cards if c["type"] not in ("gate", "root", "audit")]
@@ -650,11 +659,24 @@ def main():
     print(f"  Do NOT unblock the gate — complete it. Completing triggers wave promotion.")
 
     # ── Step 6: Create crons (optional) ──
-    if not args.no_crons and not args.dry_run:
+    plan_id_for_cron = parsed.get("plan_id", "")
+    if not plan_id_for_cron and args.plan:
+        plan_id_for_cron = Path(args.plan).stem.replace(".plan", "")
+    if not args.no_crons:
         print(f"\n=== Step 6: Create auto-unblock + board-keeper crons ===")
-        print("  (cron creation requires the cronjob tool — invoke separately)")
-    elif args.dry_run:
-        print(f"\n=== Step 6: [DRY-RUN] Would create crons ===")
+        cron_script = Path(__file__).resolve().parent / "provision_kanban_crons.sh"
+        cron_cmd = ["bash", str(cron_script), "--create"]
+        if plan_id_for_cron:
+            cron_cmd.extend(["--plan-id", plan_id_for_cron])
+        if args.dry_run:
+            cron_cmd.append("--dry-run")
+        result = subprocess.run(cron_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if result.stdout:
+            print(result.stdout.rstrip())
+        if result.stderr:
+            print(result.stderr.rstrip(), file=sys.stderr)
+        if result.returncode != 0 and not args.dry_run:
+            sys.exit("Cron provisioning failed — fix gateway/hermes cron and retry")
 
     # ── Output ──
     print(f"\n=== Summary ===")

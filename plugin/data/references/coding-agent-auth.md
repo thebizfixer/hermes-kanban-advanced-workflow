@@ -105,6 +105,27 @@ cd <worktree>
 bash ../hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke
 ```
 
+## Concurrent OAuth refresh race (Cursor `agent`)
+
+**Symptom:** `check_coding_agent_cli.py` passes once, but parallel workers intermittently fail with `[escalation:coding_agent:auth]` or `Authentication required` on some cards only.
+
+**Cause:** Multiple workers call `coding_agent_invoke.sh` concurrently; each may refresh `~/.config/cursor/auth.json` at the same time.
+
+**Fix (plugin):** All Cursor `agent` invocations are serialized with `flock` on `$HERMES_HOME/.locks/coding-agent-auth.lock` (120s wait). Smoke probes in `plugin/coding_agent.py` use the same lock.
+
+**Operator check:**
+
+```bash
+ls -la "${HERMES_HOME:-$HOME/.hermes}/.locks/coding-agent-auth.lock"
+# After parallel dispatch: only one holder at a time; waiters queue
+```
+
+**Notes:**
+
+- Requires `flock` on the gateway host (WSL/Linux). NFS lock files are unreliable — keep `HERMES_HOME` and `~/.config/cursor` on local disk.
+- One smoke retry after auth failure may succeed if a peer refreshed credentials.
+- Complements (does not replace) `pre_dispatch_gate` pre-warm smoke before decomposition.
+
 ## Related
 
 - Headless flags: `coding-agent-cli-invocation.md`

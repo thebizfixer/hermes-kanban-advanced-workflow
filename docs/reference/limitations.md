@@ -6,7 +6,7 @@ What the plugin CAN'T do — these remain manual or bootstrap-only because the p
 |-----------|---------------|------------|
 | Profile creation | Init shells out to `hermes profile create --no-skills` (not available as a plugin API tool) | `hermes kanban-advanced init` or dashboard **Bootstrap** |
 | Gateway dispatch management | Dispatcher is a core gateway feature | User starts gateway separately |
-| Cron job creation | Plugin can't call the `cronjob` tool during init | `kanban-advanced init` documents the cron commands |
+| Cron job creation at init | Plugin can't call `cronjob` during init/bootstrap | Init materializes **scripts only**; per-plan jobs via `provision_kanban_crons.sh --create` at decomposition (also `kanban_decompose.py` Step 6) |
 | Worktree path configuration | Project-specific paths | Config overlay in `.hermes/kanban-overrides/` |
 | Coding-agent vendor auth (API keys / OAuth) | Bootstrap does not write `GROK_API_KEY`, `ANTHROPIC_API_KEY`, etc.; advisory smoke only — does not block init | Operator adds keys to `.env` or runs vendor login on gateway host; **preflight** + **pre-dispatch gate** block if smoke still fails — [`coding-agent-auth.md`](../../plugin/data/references/coding-agent-auth.md) |
 | Agent binary verification | Plugin can't check `agent --version` | `kanban-advanced init` advisory smoke; blocking `check_coding_agent_cli.py` at preflight |

@@ -62,7 +62,7 @@ Do **not** assume bootstrap copied `.env` into worktrees — the plugin never ad
 
 ## Key commands
 
-- `hermes kanban-advanced init` — bootstrap project (dispatch profiles, config, cron scripts; **advisory** coding-agent smoke only)
+- `hermes kanban-advanced init` — bootstrap project (dispatch profiles, config, cron script files — not cron jobs; **advisory** coding-agent smoke only)
 - `hermes kanban-advanced decompose --plan <file>` — create cards from a plan
 - `hermes kanban-advanced list` — board status
 - `hermes kanban-advanced validate` — pre-dispatch validation

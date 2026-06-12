@@ -24,6 +24,12 @@ from typing import List, Tuple, Optional
 _LIB = Path(__file__).resolve().parent / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
+from card_body import (  # noqa: E402
+    has_files_declaration,
+    has_mode_declaration,
+    is_verification_card,
+    parse_card_body,
+)
 from governance_profile import (  # noqa: E402
     emit_strict_notification,
     resolve_governance_profile,
@@ -94,25 +100,28 @@ def validate_card(task_id: str, body: str, policy: dict) -> List[dict]:
     # is exempt from the worker code-gen body rules (P001/P002/P003), exactly like
     # gate/root/audit control cards. Do not loosen the general rule — whitelist only
     # this marker.
-    if "Type: orchestrator-handoff" in body:
+    if "Type: orchestrator-handoff" in body or "type: orchestrator-handoff" in body.lower():
+        return []
+    if is_verification_card(body):
         return []
     violations = []
     for rule in policy.get("rules", []):
         condition = rule.get("condition", "")
-        if condition == "body does not contain 'Files:'" and "Files:" not in body:
+        if condition == "body does not contain 'Files:'" and not has_files_declaration(body):
             violations.append(rule)
         elif condition == "body does not contain '```agent'" and "```agent" not in body:
             violations.append(rule)
-        elif condition == "body does not contain 'Mode:'" and "Mode:" not in body:
+        elif condition == "body does not contain 'Mode:'" and not has_mode_declaration(body):
             violations.append(rule)
         elif condition == "Files: count > 3":
-            # Count files listed on Files: line
-            for line in body.split("\n"):
-                if line.startswith("Files:"):
-                    count = len([f for f in line.replace("Files:", "").split(",") if f.strip()])
-                    if count > 3:
-                        violations.append(rule)
-                    break
+            count = len(parse_card_body(body).get("files") or [])
+            if not count:
+                for line in body.split("\n"):
+                    if line.startswith("Files:"):
+                        count = len([f for f in line.replace("Files:", "").split(",") if f.strip()])
+                        break
+            if count > 3:
+                violations.append(rule)
         elif condition == "card was created with --parents flag (known-broken in vanilla hermes)":
             # P008: Body mentions "Depends on" but doesn't reference correct `kanban link` pattern.
             # False-positive avoidance: only flag when body talks about dependencies

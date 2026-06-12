@@ -48,7 +48,7 @@ Design patterns for deterministic adjudication — DAL, error registry, lattice 
 - **License:** Apache-2.0
 - **Research paper:** https://github.com/thePM001/AEP-research-paper-001
 - **Key concepts:** Deterministic Adjudication Lattice (DAL), lattice memory/attractors, error registry, 3-layer architecture, ordinal cardinal analysis
-- **What we adopted:** 6-step DAL evaluation chain, lattice memory, canonical error registry, ordinal card body template
+- **What we adopted:** Multi-step DAL evaluation chain, lattice memory, canonical error registry, ordinal card body template
 
 **When to refer:** Questions about the mathematical foundation, extending the evaluation chain, attractor theory, error registry design.
 

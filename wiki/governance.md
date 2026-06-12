@@ -66,27 +66,38 @@ bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
 
 ### 4. Evaluation chain (worker-side)
 
-Before a worker can call `kanban_complete`, it must pass the 6-step chain:
+Before a worker can call `kanban_complete`, it must pass the evaluation chain:
 ```bash
 python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace>
 ```
 
+**Cold path (coding cards):**
+
 | Step | Check | Error code |
 |------|-------|------------|
-| 1 | Every file in `Files:` has >0 changes in diff | E001 |
-| 2 | No files modified outside `Files:` (auto-reverted) | E002 |
+| 1 | Every `Files:` path has >0 diff (or prior commit with matching message + diff-tree) | E001 |
+| 2 | No unlisted file changes (auto-reverted) | E002 |
 | 3 | `Tests:` command passes | E003 |
-| 4 | Commit message matches `Commit:` line | E004 |
-| 5 | Token log entry exists | E005 |
-| 6 | At least one file has >0 diff (not zero-output) | E006 |
+| 4 | Commit message matches `Commit:` line (skipped for N/A / verification) | E004 |
+| 5 | Exact token log entry (`source=agent`, matching task_id) | E018 |
+| 6 | At least one file has >0 diff (or `already_committed`) | E006 |
+| 7 | Net line churn within budget | E017 |
+| 8 | Agent output JSON captured | E020 |
+| 9 | No destructive git ops in reflog (governance artifact resets skipped) | E019 |
+
+**Verification path (`Type: verification`):** runs steps 3 + 9 only — no coding-agent dispatch, no diff/token checks.
+
+**Policy carve-outs:** `Type: orchestrator-handoff` and `Type: verification` exempt from P001–P003.
 
 Direct `kanban_complete` without the chain is a protocol violation.
 
 ## Worker self-guard (runtime)
 
-Before spawning an agent, the worker checks: does this card have an `agent -p` block AND a `Files:` line? If not, it's an orchestrator-only card (gate, audit, root) mistakenly assigned to a worker profile. The worker completes immediately without spawning an agent — no protocol violation.
+**E014 — orchestrator-only:** If the card has **neither** an `agent -p` block **nor** a `Files:` line, complete without spawning an agent (gate, audit, root).
 
-Error code: E014 (ORCHESTRATOR_CARD_ON_WORKER).
+**Verification-only (`Type: verification`):** Run `Tests:` via `terminal()` only — no `coding_agent_invoke.sh`. Then run the evaluation chain before `kanban_complete`.
+
+Error code: E014 (ORCHESTRATOR_CARD_ON_WORKER / verification contradictions).
 
 ## Auto-progression (mechanical wave unblocking)
 
@@ -103,17 +114,17 @@ A second cron runs every 180s for proactive board management:
 bash hermes-kanban-advanced-workflow/scripts/board_keeper.sh
 ```
 
-5 functions: salvage iteration-limit cards (check worktree for commits → merge → complete), kill orphaned agent processes, unstick ready cards stalled >3 minutes, merge completed worktree branches, report board status. Designed for LLM-driven cron (`no_agent=false`).
+5 functions: salvage iteration-limit cards (check worktree for commits → merge → complete), kill orphaned agent processes, unstick ready cards stalled >3 minutes, merge completed worktree branches, report board status. Runs as **script-only** Hermes cron (`no_agent=true`, `deliver=local`).
 
 ### Cron governance (hardened in v1.1)
 
-Before execution, three layers verify crons will actually work:
+**Lifecycle:** Init/bootstrap materializes **script files** only. **Cron jobs** are created per plan at decomposition (`provision_kanban_crons.sh --create`) and removed at cleanup (`--remove`). Gateway must run for ticks; messaging platforms are optional.
 
 | Layer | When | Checks |
 |-------|------|--------|
-| `pre_dispatch_gate.sh` | Before decomposition | Scripts exist AND executable (`test -x`), hermes on PATH |
-| Standard Process steps 7–9 | After card creation | Both crons created, both verified running via `cronjob(action="list")` |
-| `validate_board.sh` check 0 | Before completing gate | Scripts executable, hermes on PATH with common-install-location fallback, both crons found in `hermes cron list` |
+| `pre_dispatch_gate.sh` | Before decomposition | Script files executable, hermes on PATH; warns if gateway down |
+| Decomposition Steps 3–5 | Before impl cards | `provision_kanban_crons.sh --create` + `--check` |
+| `validate_board.sh` check 0 | Before completing gate | `provision_kanban_crons.sh --check` (active, deliver=local, no-agent) |
 
 **Why hermes PATH matters:** Cron jobs run in a minimal environment. If `hermes` is at `~/.local/bin/hermes` but cron's PATH doesn't include `~/.local/bin`, `auto_unblock.sh` and `board_keeper.sh` will fail silently. The gate checks for this before any cards are dispatched.
 
@@ -139,7 +150,7 @@ Checks all four tiers: skills (8 files via provision.sh --check), scripts (17 fi
 
 ## Lattice memory
 
-After a successful evaluation chain run, the (task_id, files, tests, commit) tuple is cached. Subsequent workers with matching file+test hashes skip steps 1, 3, and 4 — only re-running 2 (unlisted changes), 5 (token log), and 6 (zero-output).
+After a successful evaluation chain run, the (task_id, files, tests) tuple is cached. Attractor fast-path re-runs steps 2, E018, E020, 6, E017, E019 — skipping 1, 3, 4. Verification cards use a separate short path.
 
 ## Recovery
 

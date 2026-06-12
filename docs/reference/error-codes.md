@@ -6,7 +6,7 @@ Canonical registry: `plugin/data/registry/error-codes.yaml` (bundled with the pl
 
 | Code      | Severity      | Description                                   | Retry |
 | --------- | ------------- | --------------------------------------------- | ----- |
-| E001      | error         | File not in diff                              | Yes   |
+| E001      | error         | File not in diff (allows `already_committed` when prior SHA matches message + diff-tree) | Yes   |
 | E002      | warning       | Unlisted file change (auto-reverted)          | No    |
 | E003      | error         | Test failure                                  | Yes   |
 | E004      | error         | Commit message mismatch                       | No    |
@@ -19,7 +19,7 @@ Canonical registry: `plugin/data/registry/error-codes.yaml` (bundled with the pl
 | E011      | error         | Cross-mount filesystem                        | No    |
 | E012      | warning       | Stale preflight cache                         | No    |
 | E013      | error         | Evaluation chain missing                      | No    |
-| E014      | error         | Orchestrator-only card on worker profile      | No    |
+| E014      | error         | Orchestrator-only on worker; or `Type: verification` with Files:/agent contradiction | No    |
 | E015      | error         | Test environment invalid                      | Yes   |
 | E016      | error         | Commit not reachable from staging             | No    |
 | E017      | error         | Excessive churn (>3× line budget)             | No    |

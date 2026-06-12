@@ -25,6 +25,11 @@ import re
 
 import yaml
 
+_LIB = Path(__file__).resolve().parent / "lib"
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from plan_paths import resolve_plan_file  # noqa: E402
+
 
 def run_cmd(cmd: list, timeout: int = 10) -> subprocess.CompletedProcess:
     return subprocess.run(
@@ -92,11 +97,13 @@ def generate_attestation(plan_id: str, repo_root: str,
                          preflight_result: dict = None,
                          profiles: list = None,
                          agent_block_count: int = 0,
-                         goal_cards: dict = None) -> dict:
+                         goal_cards: dict = None,
+                         plan_file: str = "") -> dict:
     """Generate attestation YAML from preflight and plan data."""
 
     attestation = {
         "plan_id": plan_id,
+        "plan_file": plan_file,
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "ttl_minutes": 120,
         "ttl_rationale": "session-scoped — profiles and plan structure are stable within a session; volatile checks (gateway, disk, memory) are re-verified by workers via preflight cache",
@@ -215,15 +222,31 @@ if __name__ == "__main__":
         with open(args.preflight_result, encoding="utf-8") as f:
             preflight = json.load(f)
 
+    # Resolve plan file (explicit flag, env, or agent-neutral search)
+    plan_file = args.plan_file or os.environ.get("KANBAN_PLAN_FILE", "")
+    if plan_file and not os.path.isabs(plan_file):
+        plan_file = os.path.join(repo_root, plan_file)
+    if not plan_file or not os.path.exists(plan_file):
+        resolved = resolve_plan_file(repo_root, args.plan_id)
+        if resolved:
+            plan_file = str(resolved)
+
     # Count agent blocks and goal-card summary
     agent_blocks = 0
     goal_summary = None
-    if args.plan_file and os.path.exists(args.plan_file):
-        agent_blocks = count_agent_blocks(args.plan_file)
-        goal_summary = summarize_goal_cards(args.plan_file)
+    if plan_file and os.path.exists(plan_file):
+        agent_blocks = count_agent_blocks(plan_file)
+        goal_summary = summarize_goal_cards(plan_file)
 
     # Check profiles
     profiles = [p.strip() for p in args.profiles.split(",") if p.strip()]
+
+    plan_file_rel = ""
+    if plan_file and os.path.exists(plan_file):
+        try:
+            plan_file_rel = str(Path(plan_file).resolve().relative_to(Path(repo_root).resolve()))
+        except ValueError:
+            plan_file_rel = plan_file
 
     attestation = generate_attestation(
         plan_id=args.plan_id,
@@ -232,6 +255,7 @@ if __name__ == "__main__":
         profiles=profiles,
         agent_block_count=agent_blocks,
         goal_cards=goal_summary,
+        plan_file=plan_file_rel,
     )
 
     os.makedirs(output_dir, exist_ok=True)

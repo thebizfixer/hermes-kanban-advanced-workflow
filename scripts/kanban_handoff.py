@@ -302,16 +302,15 @@ hermes kanban create "Gate — {plan_id}" --assignee {orchestrator_profile}
 hermes kanban block <gate_id> "Gate — awaiting links"
 ```
 
-**Immediately after gate — create crons BEFORE impl cards:**
-```
-cronjob(action="create", name="kanban-auto-unblock-1m", schedule="every 1m",
-        deliver="origin", no_agent=true, repeat=999, script="scripts/auto_unblock.sh")
-cronjob(action="create", name="kanban-board-keeper-3m", schedule="every 3m",
-        deliver="origin", no_agent=true, repeat=999, script="scripts/board_keeper.sh")
-cronjob(action="list")  # verify both job_ids show next_run_at in the future
+**Immediately after gate — create wave crons BEFORE impl cards (no messaging required):**
+```bash
+bash scripts/provision_kanban_crons.sh --create --plan-id {plan_id}
+bash scripts/provision_kanban_crons.sh --check
 ```
 
-**STOP if either cron fails to verify — do not create implementation cards.**
+Uses `deliver=local` and `no_agent=true` — gateway must run; Telegram/Discord not required.
+
+**STOP if `provision_kanban_crons.sh --check` fails — do not create implementation cards.**
 
 ### Step 3 — Decompose
 

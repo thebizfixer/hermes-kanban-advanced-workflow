@@ -44,6 +44,10 @@ bundle_path: "hermes-kanban-advanced-workflow"
 skills_output_path: ".hermes/skills/kanban-advanced"
 plan_memory_path: ".hermes/kanban/memory"
 
+# Optional extra directories to search for plan files (agent-neutral resolver).
+# Built-in defaults: .hermes/kanban/plans, .agent/plans, .cursor/plans, etc.
+# plan_search_dirs: []
+
 # ---------------------------------------------------------------------------
 # Environment / secrets  (optional)
 # ---------------------------------------------------------------------------

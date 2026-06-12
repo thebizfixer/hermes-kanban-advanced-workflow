@@ -45,7 +45,7 @@ The reconciliation checklist follows the Define → Measure → Analyze → Impr
 | **Measure** | Step 4 | Non-kanban overhead tally (env fixes, manual interventions, plan hardening) |
 | **Analyze** | Step 3 | Failure-mode taxonomy — categorize by root cause, flag categories >30%, identify token outliers >2× average |
 | **Improve** | Steps 5–6 | Codify lessons into skills, document new pitfalls, sync publishable copies |
-| **Control** | Step 7 | Archive board, remove monitoring cron, verify no orphaned processes |
+| **Control** | Step 7 | Archive board, remove wave crons + optional monitor cron, verify no orphaned processes |
 
 See the wiki page `six-sigma-mapping.md` for the full DMAIC mapping including the CTQ tree, defect metrics (DPMO, first-pass yield, process capability), and the belt model.
 
@@ -95,7 +95,9 @@ hermes kanban archive <task_ids>
 # Kill tmux watch
 tmux kill-session -t kanban-watch
 
-# Remove monitoring cron if present
+# Remove wave crons (mandatory)
+bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh --remove --plan-id <plan_id>
+# Optional walk-away monitor
 cronjob(action="remove", job_id="<id>")
 ```
 

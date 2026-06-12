@@ -94,4 +94,8 @@ else
     fi
 fi
 
+LOG_DIR="${HERMES_HOME}/kanban/logs"
+mkdir -p "$LOG_DIR"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) unblocked=$UNBLOCKED skipped=$SKIPPED errors=$ERRORS" >> "${LOG_DIR}/auto-unblock.log"
+
 exit 0

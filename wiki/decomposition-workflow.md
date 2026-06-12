@@ -56,9 +56,9 @@ Without this, triage cards may be LLM-rewritten even when you intended manual de
 0.  VERIFY DB integrity         PRAGMA integrity_check → 'ok'
 1.  CREATE root card            create root, do not block (completed immediately)
 2.  CREATE gate → block         create gate, block immediately (<1s race window)
-3.  CREATE auto-unblock cron    cronjob every 1m — BEFORE impl cards exist
-4.  CREATE board-keeper cron    cronjob every 3m — BEFORE impl cards exist
-5.  VERIFY both crons running   cronjob(action="list") — hard stop if either missing
+3.  CREATE wave crons           bash scripts/provision_kanban_crons.sh --create --plan-id <id>
+4.  (kanban_decompose Step 6 also calls --create if orchestrator skipped Steps 3–5)
+5.  VERIFY wave crons            bash scripts/provision_kanban_crons.sh --check — gateway must run; deliver=local
 6.  CREATE impl cards (stagger) create each card, block immediately; ≥1s stagger, 3s pause / 5 cards
                                  pass --gate-id to kanban_decompose.py to avoid duplicate gate
 7.  CREATE audit card           create + block (gates on all impl)

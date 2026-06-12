@@ -8,8 +8,8 @@
 #   4. Merge completed worktree branches to staging
 #   5. Report board status
 #
-# Designed to run as a Hermes cron job (no_agent=false for LLM-driven decisions).
-# The LLM receives the script output and decides which salvage actions to take.
+# Designed to run as a Hermes script-only cron (no_agent=true, deliver=local).
+# Pure bash — salvage/unstick/merge inline; no LLM required for wave progression.
 #
 # Usage:
 #   bash hermes-kanban-advanced-workflow/scripts/board_keeper.sh
@@ -372,3 +372,7 @@ fi
 
 echo ""
 echo "=== Board Keeper complete: $SALVAGE_COUNT salvaged, $ORPHAN_COUNT orphans killed, $STUCK_COUNT stuck ==="
+
+LOG_DIR="${HERMES_HOME}/kanban/logs"
+mkdir -p "$LOG_DIR"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) salvaged=$SALVAGE_COUNT orphans=$ORPHAN_COUNT stuck=$STUCK_COUNT" >> "${LOG_DIR}/board-keeper.log"

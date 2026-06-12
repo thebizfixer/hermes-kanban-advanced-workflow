@@ -14,7 +14,7 @@ Six Sigma (6σ) uses the **DMAIC** cycle — Define, Measure, Analyze, Improve, 
 | **Measure** | Execute + Token tracking | Every task logs token usage to JSONL. Failure modes classified by type. `kanban_token_report.py` generates per-plan KPI reports with orchestrator/worker/agent cost splits. |
 | **Analyze** | Reconciliation + Postmortem | Failure-mode taxonomy groups errors by root cause (protocol violation, timeout, auth, crash). Token efficiency analysis flags outliers (>2× plan average). Postmortem captures timeline and decisions. |
 | **Improve** | Skill updates + Publishable sync | Lessons codified into skill files. Pitfalls documented. Recovery scripts extended for new error patterns. Token budget thresholds adjusted. |
-| **Control** | Governance gates + Cron monitor | Evaluation chain prevents regression (6-step DAL with ALLOW/DENY). Card body policy enforces Files:/agent -p/Mode: standards. Attestation gates decomposition on preflight. Cron monitor watches for intervention triggers every 5 min. |
+| **Control** | Governance gates + wave crons + optional monitor | Evaluation chain prevents regression (multi-step DAL with ALLOW/DENY). Card body policy enforces Files:/agent -p/Mode: standards. Attestation gates decomposition on preflight. Wave crons (`auto_unblock`, `board_keeper`) run per plan; optional monitor watches for intervention triggers. |
 
 ## DMAIC in reconciliation (per-execution cycle)
 
@@ -28,7 +28,7 @@ The `kanban-advanced:kanban-reconciliation` skill runs an 8-phase DMAIC loop aft
 | **Analyze** | Categorize failures by root cause. Flag categories exceeding 30% of tasks. Identify token outliers (>2× average). | Reconciliation checklist §3 |
 | **Improve** | Apply lessons to skills. Document new pitfalls. Codify validated workflow improvements. | Skill file patches |
 | **Improve** | Sync skill changes back to publishable hermes-kanban-advanced-workflow/ source | `provision.sh` |
-| **Control** | Archive board, remove monitoring cron, verify no orphaned processes | `kanban-advanced:kanban-cleanup` |
+| **Control** | Archive board, remove wave crons + optional monitor cron, verify no orphaned processes | `kanban-advanced:kanban-cleanup` |
 | **Control** | Governance gates remain active for next plan (attestation, card policy, eval chain) | All governance scripts |
 
 ## Defect reduction metrics (Six Sigma language)

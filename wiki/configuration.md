@@ -49,7 +49,7 @@ To change binary or model: use dashboard **Coding Agent** (binary + model row) a
 
 ## Re-init and branch preservation
 
-`hermes kanban-advanced init` and dashboard **Bootstrap** refresh dispatch profiles (SOUL.md, role-only skills, verification), materialized shared skills, and cron scripts. See [[bootstrap]]. They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh dispatch profiles (SOUL.md, role-only skills, verification), materialized shared skills, and cron **script files** (not cron jobs — see [[bootstrap]]). Optional `plan_search_dirs` in overlay config extends agent-neutral plan file resolution (defaults include `.hermes/kanban/plans`, `.cursor/plans`, `.agent/plans`). They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
 
 ```bash
 hermes kanban-advanced init --project-root .                    # keeps existing branches

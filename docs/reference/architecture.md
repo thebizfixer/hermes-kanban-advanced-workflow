@@ -46,7 +46,7 @@ flowchart LR
 | Attestation | (automatic)                              | `kanban-advanced:kanban-orchestrator`   | attestation.yaml (session-scoped, 120 min) — **mandatory** |
 | Decompose   | (automatic)                              | `kanban-advanced:kanban-orchestrator`   | Card body policy validation (P001-P004)                    |
 | Execute     | `"Execute the plan"` / `"Proceed"`       | `kanban-advanced:kanban-worker`         | Preflight cache (fast path < 30s)                       |
-| Verify      | (automatic)                              | `kanban-advanced:kanban-worker`         | **Evaluation chain** (6-step DAL, ALLOW/DENY)              |
+| Verify      | (automatic)                              | `kanban-advanced:kanban-worker`         | **Evaluation chain** (multi-step DAL, ALLOW/DENY)            |
 | Audit       | (automatic)                              | `kanban-advanced:kanban-orchestrator`   | 10-gate final audit                                        |
 | Reconcile   | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-reconciliation` | Error code → recovery mapping                              |
 | Cleanup     | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-cleanup`        | Board archive + cron removal                               |

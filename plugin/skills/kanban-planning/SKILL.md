@@ -20,7 +20,16 @@ Write implementation plans that decompose cleanly into Kanban task graphs. The q
 
 ## Governance model (AGT + AEP)
 
-Plans are gated by policy before decomposition. The orchestrator runs `kanban_card_policy.py` on every card body before dispatch. Cards without `Files:`, `agent -p` block, or `Mode:` are blocked (P001/P002/P003). Plans without agent-prompt blocks are rejected at the attestation gate (Step 0c). See `kanban-advanced:kanban-orchestrator` § Step 0c and 0d.
+Plans are gated by policy before decomposition. The orchestrator runs `kanban_card_policy.py` on every card body before dispatch. Cards without `Files:`, `agent -p` block, or `Mode:` are blocked (P001/P002/P003) **except** carve-outs: `Type: orchestrator-handoff` and `Type: verification` (test-only gates — no `Files:` or agent block). Plans without agent-prompt blocks are rejected at the attestation gate (Step 0c) unless every card is a carve-out type. See `kanban-advanced:kanban-orchestrator` § Step 0c and 0d.
+
+**Verification card template:**
+```
+Type: verification
+Tests: <command>
+Commit: N/A (verification only)
+Mode: read-only
+```
+No `Files:` line and no ` ```agent` block.
 
 ## Planning stage order (mandatory)
 

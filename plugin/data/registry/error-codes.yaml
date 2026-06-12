@@ -11,8 +11,8 @@ codes:
   E001:
     code: E001_FILE_NOT_IN_DIFF
     severity: error
-    description: "File listed in card body Files: line has zero changes in git diff"
-    recovery: "Agent missed a file. Check agent output for errors. Retry with explicit file path in prompt."
+    description: "File listed in card body Files: line has zero changes in git diff baseline..HEAD"
+    recovery: "Agent missed a file, or work landed in an earlier commit — evaluation chain checks git log + diff-tree for already_committed ALLOW. Otherwise retry with explicit file path."
     source: evaluation_chain_step_1
     retry: true
 
@@ -122,8 +122,8 @@ codes:
   E014:
     code: E014_ORCHESTRATOR_CARD_ON_WORKER
     severity: error
-    description: "Card has no agent -p block and no Files: line — orchestrator-only card mistakenly assigned to worker profile"
-    recovery: "Worker must complete immediately with kanban_complete(summary='Orchestrator-only card — no agent work to do.'). Orchestrator must reassign such cards to ${orchestrator_profile}."
+    description: "Card has no agent -p block and no Files: line (orchestrator-only); or Type: verification with Files:/agent block contradiction"
+    recovery: "Orchestrator-only: kanban_complete without agent dispatch. Type: verification: run Tests: via terminal only, then eval chain — no coding_agent_invoke dispatch."
     source: worker_step_3
     retry: false
 

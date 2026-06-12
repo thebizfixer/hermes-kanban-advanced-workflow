@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from plugin.coding_agent import _coding_agent_auth_lock_path
 from plugin.coding_agent_env import (
     audit_coding_agent_prerequisites,
     dispatch_runtime_env_updates,
@@ -64,6 +65,14 @@ class TestCodingAgentEnv(unittest.TestCase):
             {"HOME": "/tmp", "ANTHROPIC_API_KEY": "sk-test"},
         )
         self.assertEqual(issues, [])
+
+    def test_auth_lock_path_under_hermes_home(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            hermes = os.path.join(tmp, ".hermes")
+            with mock.patch.dict(os.environ, {"HERMES_HOME": hermes}, clear=False):
+                lock = _coding_agent_auth_lock_path()
+            self.assertEqual(lock.parent.name, ".locks")
+            self.assertTrue(str(lock).startswith(hermes))
 
 
 if __name__ == "__main__":

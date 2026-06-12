@@ -251,7 +251,7 @@ hermes kanban dispatch --daemon
 hermes kanban watch          # live events
 ```
 
-The three scanner cards dispatch in parallel. As each completes, the auto-unblock cron (provisioned during init) detects that WS4's parents are done and promotes the formatter to `ready`. The worker runs the evaluation chain on every card — a 6-step script that checks:
+The three scanner cards dispatch in parallel. As each completes, the auto-unblock cron (provisioned at **decomposition** via `provision_kanban_crons.sh`, removed at cleanup) detects that WS4's parents are done and promotes the formatter to `ready`. The worker runs the evaluation chain on every card — deterministic checks that include file compliance, tests, token exactness, and more:
 
 1. Every file in `Files:` was actually changed
 2. No files outside `Files:` were modified
@@ -262,7 +262,7 @@ The three scanner cards dispatch in parallel. As each completes, the auto-unbloc
 
 **Agent says:**
 
-> "Start the gateway, dispatch, and watch. You'll see the three scanners run simultaneously — that's parallel decomposition. When each scanner completes, the evaluation chain verifies it — six checks, each one a script, not a prompt. Once all three parents are done, the auto-unblock cron promotes the formatter automatically. You don't lift a finger."
+> "Start the gateway, dispatch, and watch. You'll see the three scanners run simultaneously — that's parallel decomposition. When each scanner completes, the evaluation chain verifies it — deterministic script checks (file scope, tests, tokens, and more), not a prompt. Once all three parents are done, the auto-unblock cron promotes the formatter automatically. You don't lift a finger."
 
 > **If a card blocks:** "Run `hermes kanban show <task-id>`. Common causes: test failure (E003), missing token log (E005), unlisted file changes (E002). See [troubleshooting](../how-to/troubleshooting.md)."
 
