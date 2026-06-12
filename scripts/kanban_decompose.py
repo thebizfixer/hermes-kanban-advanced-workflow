@@ -114,23 +114,11 @@ def parse_plan(plan_path: str) -> dict:
     with open(plan_path, encoding="utf-8", errors="replace") as f:
         content = f.read()
 
-    # Find the Kanban optimization section (case-insensitive heading match)
-    opt_match = re.search(r'## Kanban optimization.*?(?=^## \w|\Z)', content,
-                          re.MULTILINE | re.DOTALL | re.IGNORECASE)
-    if not opt_match:
-        sys.exit("ERROR: No '## Kanban optimization' section found in plan (case-insensitive)")
-
-    section = opt_match.group(0)
-
-    # Extract card definitions (#### Card N — ...)
-    card_blocks = re.finditer(
-        r'#### (Card \d+.*?)(?=#### Card \d+|### (?:Same-provider|Line budget|Sad-path|Parent-child))',
-        section, re.DOTALL
-    )
+    section = _extract_optimization_section(content)
+    blocks = _split_card_blocks(section)
 
     cards = []
-    for match in card_blocks:
-        block = match.group(1)
+    for block in blocks:
         card = parse_card_block(block)
         if card:
             cards.append(card)
@@ -138,7 +126,66 @@ def parse_plan(plan_path: str) -> dict:
     if not cards:
         sys.exit("ERROR: No card definitions found in optimization section")
 
-    return {"cards": cards}
+    plan_id = _extract_plan_id_from_content(content) or Path(plan_path).stem.replace(".plan", "")
+    return {"cards": cards, "plan_id": plan_id}
+
+
+_CARD_HEADING_RE = re.compile(r"^#### (Card \d+.*?)$", re.MULTILINE)
+
+
+def _extract_optimization_section(content: str) -> str:
+    opt_match = re.search(
+        r"## Kanban optimization.*?(?=^## \w|\Z)",
+        content,
+        re.MULTILINE | re.DOTALL | re.IGNORECASE,
+    )
+    if not opt_match:
+        sys.exit("ERROR: No '## Kanban optimization' section found in plan (case-insensitive)")
+    return opt_match.group(0)
+
+
+def _split_card_blocks(section: str) -> list[str]:
+    """Split optimization section into card blocks by #### Card N headings."""
+    matches = list(_CARD_HEADING_RE.finditer(section))
+    if not matches:
+        return []
+    blocks: list[str] = []
+    for i, match in enumerate(matches):
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(section)
+        blocks.append(section[start:end].rstrip())
+    return blocks
+
+
+def _extract_plan_id_from_content(content: str) -> str | None:
+    m = re.search(r"^plan_id:\s*(\S+)", content, re.MULTILINE | re.IGNORECASE)
+    return m.group(1).strip() if m else None
+
+
+def _extract_markdown_field(block: str, name: str) -> str | None:
+    m = re.search(rf"\*\*{re.escape(name)}:\*\*\s*(.+)", block, re.IGNORECASE)
+    if not m:
+        return None
+    return m.group(1).strip().strip("`").strip()
+
+
+def _extract_markdown_files(block: str) -> list[str]:
+    m = re.search(r"\*\*Files:\*\*\s*(.+)", block, re.IGNORECASE)
+    if not m:
+        return []
+    raw = m.group(1).strip()
+    files: list[str] = []
+    for part in re.split(r",\s*", raw):
+        path = part.strip().strip("`").strip()
+        if path.endswith("."):
+            path = path[:-1]
+        if path:
+            files.append(path)
+    return files
+
+
+def _normalize_file_path(path: str) -> str:
+    return path.strip().strip("`").strip().rstrip(".")
 
 
 def parse_card_block(block: str) -> dict | None:
@@ -149,7 +196,9 @@ def parse_card_block(block: str) -> dict | None:
         return None
     title = title_match.group(1).strip()
 
-    # Determine card type from title
+    card_type_field = _extract_markdown_field(block, "Type")
+
+    # Determine card type from title (markdown Type: overrides at end)
     card_type = "code-gen"
     assignee = None
     is_manual = "(manual)" in title.lower() or "manual)" in title.lower()
@@ -165,17 +214,30 @@ def parse_card_block(block: str) -> dict | None:
     elif "audit" in title.lower() or "final audit" in title.lower():
         card_type = "audit"
         assignee = "orchestrator"
-    else:
-        card_type = "code-gen"
+    if card_type_field:
+        ct = card_type_field.lower()
+        if ct == "verification":
+            card_type = "verification"
+        elif "gate" in ct:
+            card_type = "gate"
+            assignee = assignee or "orchestrator"
+        elif "audit" in ct:
+            card_type = "audit"
+            assignee = assignee or "orchestrator"
+        elif "root" in ct:
+            card_type = "root"
+            assignee = assignee or "orchestrator"
 
     # Extract YAML frontmatter fields
     plan_id = _extract_field(block, r'plan_id:\s*(.+)')
     files_raw = _extract_field(block, r'files:\s*\n((?:\s{2}- .+\n?)+)')
     files = []
     if files_raw:
-        files = [f.strip().lstrip('- ') for f in files_raw.strip().split('\n') if f.strip().startswith('- ')]
-    mode = _extract_field(block, r'mode:\s*(.+)')
-    tests = _extract_field(block, r'tests:\s*(.+)')
+        files = [_normalize_file_path(f.strip().lstrip("- ")) for f in files_raw.strip().split("\n") if f.strip().startswith("- ")]
+    if not files:
+        files = _extract_markdown_files(block)
+    mode = _extract_field(block, r'mode:\s*(.+)') or _extract_markdown_field(block, "Mode")
+    tests = _extract_field(block, r'tests:\s*(.+)') or _extract_markdown_field(block, "Tests")
     commit = _extract_field(block, r'commit:\s*"?(.+?)"?\s*$')
     estimated_lines = _extract_field(block, r'estimated_lines:\s*(\d+)')
     wave = _extract_field(block, r'wave:\s*(\d+)')
@@ -198,6 +260,8 @@ def parse_card_block(block: str) -> dict | None:
 
     # Build the full card body (YAML frontmatter + agent block)
     body_lines = [f"plan_id: {plan_id or 'unknown'}"]
+    if card_type in ("gate", "audit", "root"):
+        body_lines.append("pre_existing: true")
     if files:
         body_lines.append("files:")
         for f in files:
@@ -247,6 +311,64 @@ def parse_card_block(block: str) -> dict | None:
 def _extract_field(text: str, pattern: str) -> str | None:
     m = re.search(pattern, text, re.MULTILINE)
     return m.group(1).strip() if m else None
+
+
+def _find_project_kanban_dir(start: Path) -> Path | None:
+    for parent in [start.resolve(), *start.resolve().parents]:
+        kanban = parent / ".hermes" / "kanban"
+        if kanban.is_dir():
+            return kanban
+    return None
+
+
+def update_plan_memory(
+    plan_path: str,
+    plan_id: str,
+    impl_card_count: int,
+    task_ids: dict[str, str] | None = None,
+) -> None:
+    """Refresh plan memory metadata after a successful parse/decompose."""
+    import hashlib
+    from datetime import datetime, timezone
+
+    plan_file = Path(plan_path).resolve()
+    content = plan_file.read_bytes()
+    plan_sha = hashlib.sha256(content).hexdigest()
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    mem_dir = _find_project_kanban_dir(plan_file.parent)
+    if mem_dir is None:
+        hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+        mem_dir = hermes_home / "kanban" / "memory"
+    else:
+        mem_dir = mem_dir / "memory"
+    mem_dir.mkdir(parents=True, exist_ok=True)
+    mem_path = mem_dir / f"{plan_id}.json"
+
+    data: dict = {}
+    if mem_path.is_file():
+        try:
+            data = json.loads(mem_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+
+    data.update(
+        {
+            "plan_id": plan_id,
+            "plan_path": str(plan_file),
+            "card_count": impl_card_count,
+            "optimized_at": stamp,
+            "plan_sha256": plan_sha,
+        }
+    )
+    if task_ids:
+        data["task_ids"] = list(task_ids.values())
+        data["task_ids_by_key"] = task_ids
+
+    mem_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    print(f"  Plan memory updated: {mem_path} ({impl_card_count} impl cards)")
 
 
 # ── Kanban operations ──────────────────────────────────────────────────────
@@ -682,6 +804,13 @@ def main():
     print(f"\n=== Summary ===")
     print(f"  Gate: {gate_id} (blocked — complete to release wave 1)")
     print(f"  Cards: {len(card_ids) - 1}")
+    if plan_id_for_cron and not args.dry_run:
+        update_plan_memory(
+            args.plan or args.cards_yaml or "",
+            plan_id_for_cron,
+            len(impl_cards),
+            {k: v for k, v in card_ids.items() if k not in ("gate", "root", "audit")},
+        )
     if args.json:
         print(json.dumps({"gate": gate_id, "cards": card_ids}, indent=2))
     else:

@@ -12,7 +12,7 @@ codes:
     code: E001_FILE_NOT_IN_DIFF
     severity: error
     description: "File listed in card body Files: line has zero changes in git diff baseline..HEAD"
-    recovery: "Agent missed a file, or work landed in an earlier commit — evaluation chain checks git log + diff-tree for already_committed ALLOW. Otherwise retry with explicit file path."
+    recovery: "Agent missed a file, or work landed in an earlier commit — evaluation chain checks git log + diff-tree for already_committed ALLOW. Cards with pre_existing: true use merge-base diff against origin/{working_branch}. Otherwise retry with explicit file path."
     source: evaluation_chain_step_1
     retry: true
 

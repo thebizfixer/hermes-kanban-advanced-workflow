@@ -7,24 +7,47 @@
 #   bash scripts/auto_unblock.sh
 #   bash scripts/auto_unblock.sh --dry-run    (report only, no unblock)
 #   bash scripts/auto_unblock.sh --json       (machine-readable output)
+#   bash scripts/auto_unblock.sh --stagger-sec 30   (sleep between unblocks — OAuth wave safety)
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/kanban_logs.sh
+source "$SCRIPT_DIR/lib/kanban_logs.sh"
+# shellcheck source=lib/kanban_cli_parse.sh
+source "$SCRIPT_DIR/lib/kanban_cli_parse.sh"
+
 # ── HERMES_HOME resolution (cross-platform) ────────────────────────────
-# Hermes Agent canonical resolution: $HERMES_HOME → ~/.hermes (default).
-# Cron scheduler sets HERMES_HOME in the environment; CLI users may rely on
-# the default. Export it so child `hermes` processes find kanban.db.
-# Ref: https://hermes-agent.nousresearch.com/docs/reference/environment-variables
 export HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 
 DRY_RUN=false
 JSON_OUT=false
-for arg in "$@"; do
-    case "$arg" in
-        --dry-run) DRY_RUN=true ;;
-        --json) JSON_OUT=true ;;
+STAGGER_SEC="${KANBAN_UNBLOCK_STAGGER_SEC:-0}"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) DRY_RUN=true; shift ;;
+        --json) JSON_OUT=true; shift ;;
+        --stagger-sec) STAGGER_SEC="${2:-0}"; shift 2 ;;
+        *) shift ;;
     esac
 done
+
+# Optional OAuth pre-warm before releasing a wave (Cursor agent binary only).
+if [[ "$DRY_RUN" != true && "${KANBAN_PREWARM_ON_UNBLOCK:-1}" != "0" ]]; then
+    # shellcheck source=lib/coding_agent_env.sh
+    source "$SCRIPT_DIR/lib/coding_agent_env.sh"
+    # shellcheck source=lib/coding_agent_auth_lock.sh
+    source "$SCRIPT_DIR/lib/coding_agent_auth_lock.sh"
+    if [[ -f "${REPO_ROOT:-$(pwd)}/.env" ]]; then
+        set -a
+        # shellcheck disable=SC1091
+        source "${REPO_ROOT:-$(pwd)}/.env"
+        set +a
+    fi
+    if [[ "${KANBAN_CODING_AGENT:-}" == "agent" ]]; then
+        prewarm_coding_agent_auth >/dev/null 2>&1 || true
+    fi
+fi
 
 UNBLOCKED=0
 SKIPPED=0
@@ -49,7 +72,7 @@ for tid in $BLOCKED_LIST; do
     fi
 
     # Extract parent IDs
-    PARENTS=$(echo "$DETAIL" | grep "parents:" | grep -oP 't_\w+' || true)
+    PARENTS=$(echo "$DETAIL" | grep "parents:" | kanban_extract_task_ids)
 
     # If no parents, skip — unblocking parentless blocked cards is the orchestrator's job
     if [ -z "$PARENTS" ]; then
@@ -75,6 +98,9 @@ for tid in $BLOCKED_LIST; do
             if hermes kanban unblock "$tid" 2>/dev/null; then
                 ((UNBLOCKED++)) || true
                 RESULTS+="{\"task\":\"$tid\",\"status\":\"unblocked\",\"parents_done\":true}"$'\n'
+                if [[ "$STAGGER_SEC" =~ ^[0-9]+$ && "$STAGGER_SEC" -gt 0 ]]; then
+                    sleep "$STAGGER_SEC"
+                fi
             else
                 ((ERRORS++)) || true
                 RESULTS+="{\"task\":\"$tid\",\"status\":\"error\",\"reason\":\"unblock command failed\"}"$'\n'
@@ -94,8 +120,8 @@ else
     fi
 fi
 
-LOG_DIR="${HERMES_HOME}/kanban/logs"
+LOG_DIR="$(kanban_logs_dir "$(pwd)")"
 mkdir -p "$LOG_DIR"
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) unblocked=$UNBLOCKED skipped=$SKIPPED errors=$ERRORS" >> "${LOG_DIR}/auto-unblock.log"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) unblocked=$UNBLOCKED skipped=$SKIPPED errors=$ERRORS stagger=${STAGGER_SEC}" >> "${LOG_DIR}/auto-unblock.log"
 
 exit 0

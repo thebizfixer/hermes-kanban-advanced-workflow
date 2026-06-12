@@ -149,6 +149,35 @@ Mode: read-only
         self.assertFalse(passed)
         self.assertIn("verification_only", reason)
 
+    def test_pre_existing_allows_merge_base_diff(self) -> None:
+        path = os.path.join(self.repo, "src", "foo.py")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("v2\n")
+        _git(self.repo, "add", "src/foo.py")
+        _git(self.repo, "commit", "-m", "feat: pre-work")
+
+        body = "plan_id: p1\npre_existing: true\nfiles:\n  - src/foo.py\n"
+        ok, err = chain.step_1_file_compliance(
+            ["src/foo.py"],
+            "HEAD~1",
+            self.repo,
+            card_body=body,
+            working_branch="main",
+        )
+        self.assertTrue(ok, err)
+        self.assertIsNone(err)
+
+    def test_diff_range_env_override(self) -> None:
+        prev = os.environ.get("KANBAN_EVAL_BASELINE")
+        try:
+            os.environ["KANBAN_EVAL_BASELINE"] = "HEAD~2"
+            self.assertEqual(chain._diff_range("HEAD~1", self.repo), "HEAD~2..HEAD")
+        finally:
+            if prev is None:
+                os.environ.pop("KANBAN_EVAL_BASELINE", None)
+            else:
+                os.environ["KANBAN_EVAL_BASELINE"] = prev
+
 
 if __name__ == "__main__":
     unittest.main()

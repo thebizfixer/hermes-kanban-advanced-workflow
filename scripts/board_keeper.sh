@@ -24,6 +24,8 @@ export HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/kanban_logs.sh
+source "$SCRIPT_DIR/lib/kanban_logs.sh"
 # shellcheck source=lib/kanban_config.sh
 source "$SCRIPT_DIR/lib/kanban_config.sh"
 
@@ -74,7 +76,7 @@ echo "=== Board Keeper @ $(date -u +%H:%M:%S) ==="
 echo ""
 
 # ── Heartbeat for watchdog monitoring ──────────────────────────────────
-HEARTBEAT_FILE="${KANBAN_HEARTBEAT_FILE:-$HOME/.hermes/kanban/logs/board_keeper_heartbeat}"
+HEARTBEAT_FILE="${KANBAN_HEARTBEAT_FILE:-$(kanban_logs_dir "$REPO_ROOT")/board_keeper_heartbeat}"
 mkdir -p "$(dirname "$HEARTBEAT_FILE")" 2>/dev/null || true
 date -u +%s > "$HEARTBEAT_FILE" 2>/dev/null || true
 
@@ -373,6 +375,25 @@ fi
 echo ""
 echo "=== Board Keeper complete: $SALVAGE_COUNT salvaged, $ORPHAN_COUNT orphans killed, $STUCK_COUNT stuck ==="
 
-LOG_DIR="${HERMES_HOME}/kanban/logs"
+LOG_DIR="$(kanban_logs_dir "$REPO_ROOT")"
 mkdir -p "$LOG_DIR"
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) salvaged=$SALVAGE_COUNT orphans=$ORPHAN_COUNT stuck=$STUCK_COUNT" >> "${LOG_DIR}/board-keeper.log"
+
+# Cron staleness probe: warn when active cards exist but wave crons never ticked.
+ACTIVE=$((RUNNING + READY + BLOCKED + TODO))
+if [[ "$ACTIVE" -gt 0 ]]; then
+  AU_LOG="${LOG_DIR}/auto-unblock.log"
+  GW_OK=false
+  if hermes cron status 2>/dev/null | grep -qiE 'running|active'; then
+    GW_OK=true
+  elif hermes gateway status 2>/dev/null | grep -qiE 'running|active'; then
+    GW_OK=true
+  fi
+  if [[ ! -f "$AU_LOG" ]] || [[ -z "$(find "$AU_LOG" -mmin -3 2>/dev/null)" ]]; then
+    if [[ "$GW_OK" != true ]]; then
+      warn "Gateway not running — wave crons will not tick (hermes gateway start)"
+    else
+      warn "auto-unblock log stale >3m with $ACTIVE active cards — verify cron --workdir and gateway"
+    fi
+  fi
+fi

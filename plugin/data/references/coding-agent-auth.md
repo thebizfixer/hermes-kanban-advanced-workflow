@@ -128,13 +128,15 @@ ls -la "${HERMES_HOME:-$HOME/.hermes}/.locks/coding-agent-auth.lock"
 
 ### Pre-warm before decomposition (Option A)
 
-`pre_dispatch_gate.sh` calls `prewarm_coding_agent_auth()` after other checks pass — one serialized `agent -p "echo ok" --trust` under the flock so parallel workers read a fresh `auth.json` instead of racing refresh.
+`pre_dispatch_gate.sh` calls `prewarm_coding_agent_auth()` after other checks pass — one serialized `agent -p "echo ok" --trust` under the flock so parallel workers read a fresh `auth.json` instead of racing refresh. When `KANBAN_CODING_AGENT=agent`, pre-warm is **blocking** (FAIL stops decomposition). Other coding binaries keep pre-warm as WARN-only.
+
+`auto_unblock.sh` may pre-warm once per tick when `KANBAN_PREWARM_ON_UNBLOCK=1` (default). Use `--stagger-sec 30` (or `KANBAN_UNBLOCK_STAGGER_SEC`) when releasing parallel wave-1 cards.
 
 **Operator check:**
 
 ```bash
 bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
-# Expect: [GATE] coding_agent_auth_prewarm ... PASS (or WARN if binary is not agent)
+# Expect: [GATE] coding_agent_auth_prewarm ... PASS when KANBAN_CODING_AGENT=agent
 ```
 
 ## Worktree script bootstrap (chicken-and-egg)

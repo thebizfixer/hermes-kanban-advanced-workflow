@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from plugin.coding_agent import (
     CODING_AGENT_MODEL_AUTO,
@@ -160,7 +161,9 @@ Tip: use --model <id>
         self.assertIn("timed out", msg.lower())
         self.assertIn("oauth", msg.lower())
 
-    def test_agent_probe_runs_before_json_smoke(self) -> None:
+    @patch("plugin.coding_agent.binary_on_path", return_value=True)
+    @patch("plugin.coding_agent.shutil.which", return_value="/usr/bin/agent")
+    def test_agent_probe_runs_before_json_smoke(self, _which, _on_path) -> None:
         calls: list[list[str]] = []
 
         def _run(cmd, timeout=90):

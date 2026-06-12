@@ -23,6 +23,8 @@ ACTION=""
 PLAN_ID=""
 DRY_RUN=false
 JSON_OUT=false
+HEADLESS=false
+WORKDIR=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,6 +32,8 @@ while [[ $# -gt 0 ]]; do
     --plan-id) PLAN_ID="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     --json) JSON_OUT=true; shift ;;
+    --headless) HEADLESS=true; shift ;;
+    --workdir) WORKDIR="${2:-}"; shift 2 ;;
     -h|--help)
       sed -n '1,12p' "$0"
       exit 0
@@ -41,6 +45,20 @@ done
 if [[ -z "$ACTION" ]]; then
   echo "[provision_kanban_crons] specify --create, --remove, or --check" >&2
   exit 2
+fi
+
+if [[ -z "$WORKDIR" ]]; then
+  WORKDIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+fi
+
+if [[ "$HEADLESS" == true && "$ACTION" == "create" ]]; then
+  echo "[provision_kanban_crons] headless mode — cron jobs not created."
+  echo "  Manual loop (from repo root):"
+  echo "    while hermes kanban list 2>/dev/null | grep -qE '⊘|●|▶'; do"
+  echo "      bash ${HERMES_HOME}/scripts/auto_unblock.sh --stagger-sec \${KANBAN_UNBLOCK_STAGGER_SEC:-30}"
+  echo "      sleep 60"
+  echo "    done"
+  exit 0
 fi
 
 _memory_path() {
@@ -124,13 +142,15 @@ _create_job() {
   local schedule="$1"
   local name="$2"
   local script="$3"
+  local workdir_args=()
+  [[ -n "$WORKDIR" ]] && workdir_args=(--workdir "$WORKDIR")
   local existing
   existing="$(_find_job_id_by_name "$name")"
   if [[ -n "$existing" ]]; then
     if [[ "$DRY_RUN" == true ]]; then
       echo "[provision_kanban_crons] [dry-run] would reuse job $existing ($name)"
     else
-      hermes cron edit "$existing" --deliver local --no-agent --script "$script" --repeat 999 >/dev/null 2>&1 || true
+      hermes cron edit "$existing" --deliver local --no-agent --script "$script" --repeat 999 "${workdir_args[@]}" >/dev/null 2>&1 || true
       echo "[provision_kanban_crons] reused job $existing ($name)"
     fi
     printf '%s' "$existing"
@@ -147,7 +167,8 @@ _create_job() {
     --no-agent \
     --script "$script" \
     --deliver local \
-    --repeat 999 2>&1)" || {
+    --repeat 999 \
+    "${workdir_args[@]}" 2>&1)" || {
     echo "[provision_kanban_crons] create failed for $name: $out" >&2
     return 1
   }

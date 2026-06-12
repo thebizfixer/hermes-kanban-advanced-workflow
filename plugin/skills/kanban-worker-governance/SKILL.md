@@ -37,7 +37,7 @@ Canonical: `plugin/data/registry/error-codes.yaml`. **Tier:** T1=self-serve BB |
 
 | Code | Sev | Tier | Recovery |
 |------|-----|------|----------|
-| E001 | error | T1 | Widen `--baseline` or re-dispatch; `find_prior_commit` ALLOW |
+| E001 | error | T1 | Widen `--baseline` / set `KANBAN_EVAL_BASELINE=origin/staging` or `merge-base:origin/main`; `pre_existing: true` uses merge-base diff; `find_prior_commit` ALLOW |
 | E002 | warn | T1 | Auto-reverted; add to `Files:` if intentional |
 | E003 | error | T1 | Fix tests/imports/deps (`E015` if env) |
 | E004 | error | T1 | Amend commit to match `Commit:` |

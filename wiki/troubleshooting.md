@@ -432,10 +432,11 @@ Then repeat **execute the plan**. Plugin reference: `plugin/data/references/prof
 **Checks (in order):**
 
 1. **Gateway running** — `hermes gateway status` or `hermes cron status`. Crons tick inside the gateway process; CLI chat alone does not fire them.
-2. **Wave crons exist** — `hermes cron list` must show `kanban-auto-unblock-1m` and `kanban-board-keeper-3m` as `[active]` with `Deliver: local`.
+2. **Wave crons exist** — `hermes cron list` must show `kanban-auto-unblock-1m` and `kanban-board-keeper-3m` as `[active]` with `Deliver: local`. Jobs must include `--workdir <repo-root>` (re-create with `provision_kanban_crons.sh --create --workdir "$(git rev-parse --show-toplevel)"` if logs never update).
 3. **Created per plan** — jobs are provisioned at decomposition (`provision_kanban_crons.sh --create`), **not** at init. Re-run create during an active plan if missing.
-4. **Logs** — `tail -f $HERMES_HOME/kanban/logs/auto-unblock.log` (and `board-keeper.log`). Empty lines on no-op ticks are normal.
+4. **Logs** — prefer project `.hermes/kanban/logs/auto-unblock.log` (SSOT); falls back to `$HERMES_HOME/kanban/logs/` when no project kanban dir. `board_keeper.sh` warns when logs are stale >3m while cards are active.
 5. **Messaging optional** — missing Telegram/Discord does **not** stop script crons (`deliver=local`).
+6. **Headless / no gateway** — `provision_kanban_crons.sh --create --headless` prints a manual loop; run `auto_unblock.sh --stagger-sec 30` every 60s while cards are active.
 
 **Cleanup:** If plan ended but crons still listed → `bash scripts/provision_kanban_crons.sh --remove --plan-id <id>`.
 

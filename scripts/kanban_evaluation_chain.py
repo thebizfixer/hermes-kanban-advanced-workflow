@@ -126,17 +126,85 @@ def find_attractor(memory: dict, files: List[str], tests_cmd: str, workspace: st
 
 # ── Evaluation steps ───────────────────────────────────────────────────
 
+def resolve_diff_baseline(baseline: str, workspace: str) -> str:
+    """Resolve git diff left-hand ref (A in A..HEAD)."""
+    if baseline.startswith("merge-base:"):
+        ref = baseline.split(":", 1)[1]
+        result = subprocess.run(
+            ["git", "merge-base", "HEAD", ref],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=workspace,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    if ".." in baseline:
+        return baseline.split("..", 1)[0]
+    return baseline
+
+
+def _effective_baseline(baseline: str) -> str:
+    override = os.environ.get("KANBAN_EVAL_BASELINE", "").strip()
+    return override or baseline
+
+
+def _diff_range(baseline: str, workspace: str) -> str:
+    """Return git diff range (A..HEAD or explicit A..B)."""
+    effective = _effective_baseline(baseline)
+    if ".." in effective:
+        return effective
+    base = resolve_diff_baseline(effective, workspace)
+    return f"{base}..HEAD"
+
+
+def _card_pre_existing(card_body: str) -> bool:
+    return bool(re.search(r"(?m)^pre_existing:\s*true\s*$", card_body, re.IGNORECASE))
+
+
 def step_1_file_compliance(
     files: List[str],
     baseline: str,
     workspace: str,
     commit_line: str = "",
+    card_body: str = "",
+    working_branch: str = "main",
 ) -> Tuple[bool, Optional[str]]:
     """Every file in card Files: must have >0 changes in git diff (or prior commit)."""
     if not files:
         return True, None
+    files = [f.strip().rstrip(".") for f in files if f.strip()]
+    diff_range = _diff_range(baseline, workspace)
+
+    if _card_pre_existing(card_body) and files:
+        mb = subprocess.run(
+            ["git", "merge-base", "HEAD", f"origin/{working_branch}"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=workspace,
+        )
+        if mb.returncode == 0 and mb.stdout.strip():
+            mb_range = f"{mb.stdout.strip()}..HEAD"
+            mb_result = subprocess.run(
+                ["git", "diff", "--stat", mb_range],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                cwd=workspace,
+            )
+            for f in files:
+                if f in mb_result.stdout:
+                    continue
+                return False, "E001_FILE_NOT_IN_DIFF"
+            print("[E001] ALLOW — pre_existing (merge-base diff)")
+            return True, None
+
     result = subprocess.run(
-        ["git", "diff", "--stat", f"{baseline}..HEAD"],
+        ["git", "diff", "--stat", diff_range],
         capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         cwd=workspace,
@@ -144,7 +212,9 @@ def step_1_file_compliance(
     for f in files:
         if f in result.stdout:
             continue
-        prior = find_prior_commit(commit_line, files, workspace, baseline)
+        prior = find_prior_commit(
+            commit_line, files, workspace, resolve_diff_baseline(_effective_baseline(baseline), workspace)
+        )
         if prior:
             print(f"[E001] ALLOW — already_committed:{prior[:8]}")
             continue
@@ -154,8 +224,9 @@ def step_1_file_compliance(
 
 def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, task_id: str = "") -> Tuple[bool, Optional[str]]:
     """Any modified file not in Files: gets reverted."""
+    diff_range = _diff_range(baseline, workspace)
     result = subprocess.run(
-        ["git", "diff", "--name-only", f"{baseline}..HEAD"],
+        ["git", "diff", "--name-only", diff_range],
         capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         cwd=workspace,
@@ -184,7 +255,7 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
             return False, "E002_REVERT_FAILED"
         # Double-check: verify no unlisted changes remain
         result2 = subprocess.run(
-            ["git", "diff", "--name-only", f"{baseline}..HEAD"],
+            ["git", "diff", "--name-only", diff_range],
             capture_output=True, text=True,
             encoding="utf-8", errors="replace",
             cwd=workspace,
@@ -388,8 +459,9 @@ def step_6_zero_output(
     """At least one Files: file must have >0 diff (or prior commit covers scope)."""
     if not files:
         return True, None
+    diff_range = _diff_range(baseline, workspace)
     result = subprocess.run(
-        ["git", "diff", "--stat", f"{baseline}..HEAD"],
+        ["git", "diff", "--stat", diff_range],
         capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         cwd=workspace,
@@ -397,7 +469,9 @@ def step_6_zero_output(
     any_change = any(f in result.stdout for f in files)
     if any_change:
         return True, None
-    prior = find_prior_commit(commit_line, files, workspace, baseline)
+    prior = find_prior_commit(
+        commit_line, files, workspace, resolve_diff_baseline(_effective_baseline(baseline), workspace)
+    )
     if prior:
         print(f"[E006] ALLOW — already_committed:{prior[:8]}")
         return True, None
@@ -412,8 +486,9 @@ def step_excessive_churn(
     Extracts total insertions + deletions from git diff --stat.
     Default estimate: 200 lines (generous for a single-card change).
     """
+    diff_range = _diff_range(baseline, workspace)
     result = subprocess.run(
-        ["git", "diff", "--shortstat", f"{baseline}..HEAD"],
+        ["git", "diff", "--shortstat", diff_range],
         capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         cwd=workspace,
@@ -451,6 +526,8 @@ def run_chain(task_id: str, workspace: str, card_body: str,
 
     registry = load_error_registry(registry_path)
     parsed = parse_card_body(card_body)
+    working_branch = os.environ.get("KANBAN_WORKING_BRANCH", "main").strip() or "main"
+    baseline = _effective_baseline(baseline)
     _lib = os.path.join(os.path.dirname(__file__), "lib")
     if _lib not in sys.path:
         sys.path.insert(0, _lib)
@@ -513,7 +590,8 @@ def run_chain(task_id: str, workspace: str, card_body: str,
     # Cold path: run all steps
     steps = [
         ("Files: compliance", lambda: step_1_file_compliance(
-            parsed["files"], baseline, workspace, parsed.get("commit", "")
+            parsed["files"], baseline, workspace, parsed.get("commit", ""),
+            card_body=card_body, working_branch=working_branch,
         )),
         ("Unlisted changes", lambda: step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id)),
         ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace)),

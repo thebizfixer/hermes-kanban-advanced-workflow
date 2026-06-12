@@ -117,6 +117,15 @@ if [ -f "$REPO_ROOT/.env" ]; then
   set +a
 fi
 ensure_coding_agent_home 2>/dev/null || true
-warn "coding_agent_auth_prewarm" "prewarm_coding_agent_auth"
+CODING_AGENT="${KANBAN_CODING_AGENT:-}"
+if [[ "$CODING_AGENT" == "agent" ]]; then
+  check "coding_agent_auth_prewarm" "prewarm_coding_agent_auth"
+else
+  warn "coding_agent_auth_prewarm" "prewarm_coding_agent_auth"
+fi
+
+if [[ -f "${PLAN_MEMORY_PATH}/${PLAN_ID}.json" ]]; then
+  warn "plan_memory_fresh" "python3 ${BUNDLE_PATH}/scripts/lib/plan_memory_gate_check.py --memory ${PLAN_MEMORY_PATH}/${PLAN_ID}.json --plan '${PLAN_REL}' --repo-root '${REPO_ROOT}' --bundle-scripts '${BUNDLE_PATH}/scripts'"
+fi
 
 echo "[GATE] PASSED — proceed to decomposition"

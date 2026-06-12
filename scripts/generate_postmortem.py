@@ -36,6 +36,7 @@ SECTION_TITLES = (
     "Skill Updates Needed",
     "Token Economics",
     "Learning Summary",
+    "Operator Ground Truth (manual)",
 )
 
 FAILURE_KINDS = (
@@ -327,8 +328,43 @@ def _discover_event_table(conn: sqlite3.Connection) -> tuple[str, dict[str, str]
     return None
 
 
-def load_task_history(db_path: Path, plan_id: str) -> tuple[list[TaskRecord], list[str]]:
+def load_plan_memory_task_ids(project_root: Path, plan_id: str) -> tuple[set[str] | None, str]:
+    """Return task IDs from plan memory when available (strict postmortem scoping)."""
+    candidates = [
+        project_root / ".hermes" / "kanban" / "memory" / f"{plan_id}.json",
+        _hermes_home() / "kanban" / "memory" / f"{plan_id}.json",
+    ]
+    for path in candidates:
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        raw_ids = data.get("task_ids")
+        if isinstance(raw_ids, list) and raw_ids:
+            return {str(item) for item in raw_ids}, f"scoped via plan memory task_ids (`{path}`)"
+        by_key = data.get("task_ids_by_key")
+        if isinstance(by_key, dict) and by_key:
+            return {str(v) for v in by_key.values()}, f"scoped via plan memory task_ids_by_key (`{path}`)"
+    return None, ""
+
+
+def load_task_history(
+    db_path: Path, plan_id: str, project_root: Path | None = None
+) -> tuple[list[TaskRecord], list[str]]:
     notes: list[str] = []
+    root = project_root or _project_root()
+    task_id_filter, filter_note = load_plan_memory_task_ids(root, plan_id)
+    if filter_note:
+        notes.append(filter_note)
+    elif not task_id_filter:
+        notes.append(
+            "No plan memory task_ids — falling back to exact plan_id match in metadata/body "
+            "(substring plan_id match disabled)."
+        )
     if not db_path.exists():
         notes.append(f"Kanban DB not found at `{db_path}` — task history inferred from token log only.")
         return [], notes
@@ -360,16 +396,19 @@ def load_task_history(db_path: Path, plan_id: str) -> tuple[list[TaskRecord], li
             body = str(_row_value(row, body_col, ""))
             metadata = _row_value(row, meta_col, None)
             row_plan = str(_row_value(row, plan_col, "") or _extract_plan_id(body, metadata))
-            matched = (
-                row_plan == plan_id
-                or plan_id in body
-                or f"plan_id: {plan_id}" in body
-            )
+            task_id = str(_row_value(row, id_col, "unknown"))
+            if task_id_filter is not None:
+                matched = task_id in task_id_filter
+            else:
+                matched = (
+                    row_plan == plan_id
+                    or bool(PLAN_ID_RE.search(body) and _extract_plan_id(body, metadata) == plan_id)
+                )
             if not matched:
                 continue
 
             task = TaskRecord(
-                task_id=str(_row_value(row, id_col, "unknown")),
+                task_id=task_id,
                 title=str(_row_value(row, title_col, "")),
                 status=str(_row_value(row, status_col, "unknown") or "unknown"),
                 profile=str(_row_value(row, profile_col, "")),
@@ -799,11 +838,19 @@ def build_report(
     lines.append("")
 
     # 8. Learning Summary
-    lines.extend(["## 8. Learning Summary", ""])
-    lines.append(
-        f"- Plan `{plan_id}` finished with **{success_rate:.1f}%** task success and "
-        f"**{intervention_rate:.1f}%** intervention rate ({intervention_count} interventions)."
+    lines.extend(
+        [
+            "## 8. Learning Summary",
+            "",
+            f"- Plan `{plan_id}` finished with **{success_rate:.1f}%** task success and "
+            f"**{intervention_rate:.1f}%** intervention rate ({intervention_count} interventions).",
+        ]
     )
+    if source_notes:
+        confidence = "high" if any("scoped via plan memory" in n for n in source_notes) else "medium"
+        if any("inferred from token log only" in n for n in source_notes):
+            confidence = "low"
+        lines.append(f"- **Data confidence:** {confidence} — see Data notes at top of report.")
     if failure_rows:
         top_mode = max(failure_rows.items(), key=lambda item: len(item[1]))[0]
         lines.append(
@@ -821,6 +868,20 @@ def build_report(
         "- Read sections 5–6 before writing the next plan; update kanban skills when a pitfall repeats across runs."
     )
     lines.append("")
+    lines.extend(
+        [
+            "## 9. Operator Ground Truth (manual)",
+            "",
+            "_Fill after the run — automated metrics can mis-count when plan memory or intervention JSONL is incomplete._",
+            "",
+            "- **Cards completed (operator):** _e.g. 12/12_",
+            "- **Wall-clock hours:** _e.g. 3.5h_",
+            "- **Manual intervention rate:** _e.g. 75% (6/8 impl cards)_",
+            "- **Interventions (operator count):** _e.g. 11 vs automated counter_",
+            "- **Notes:** _OAuth races, cron never ticked, salvage paths, etc._",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -891,7 +952,7 @@ def main(argv: list[str] | None = None) -> int:
     if not scope_violations:
         source_notes.append("No scope violations logged — E002 ran without unlisted file changes, or scope violation logging not yet active for this plan.")
 
-    tasks, db_notes = load_task_history(db_path, plan_id)
+    tasks, db_notes = load_task_history(db_path, plan_id, _project_root())
     source_notes.extend(db_notes)
     tasks = _merge_tasks_with_tokens(tasks, token_entries, plan_id)
 
