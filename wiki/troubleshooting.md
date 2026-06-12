@@ -50,7 +50,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> -
 **Symptom:** Worker completed agent run but task blocked with `E00x`.
 
 **Fix:** See the specific error:
-- E001: Agent missed a file. Check agent output, retry with explicit path.
+- E001: Agent missed a file in the current diff. If work was already committed (re-run, salvage, or rebase), the chain should ALLOW via `find_prior_commit` (searches up to 64 commits). If you still see E001 with a matching commit in `git log`, update plugin and re-run eval chain.
 - E002: Agent modified unlisted files (auto-reverted). Add files to `Files:` if intentional.
 - E003: Tests failed. Review diff, fix code, re-run agent.
 - E004: Commit message mismatch. Amend commit or update `Commit:` line.
@@ -65,9 +65,9 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> -
 
 **Root cause:** Bootstrap or **Update Plugin** was run while cards were in flight, or only the git checkout was updated without rematerializing skills/scripts. Workers load profile skills from disk — stale copies persist until reprovisioned.
 
-**Also check `scripts/lib/`:** `coding_agent_invoke.sh` sources `$HERMES_HOME/scripts/lib/coding_agent_env.sh`. Older plugin versions materialized the top-level invoke script but skipped `lib/`, causing `No such file or directory` when workers fell back to `$HERMES_HOME/scripts/coding_agent_invoke.sh`. **Update Plugin**, `hermes kanban-advanced init`, or `provision.sh` now sync `lib/coding_agent_env.sh` alongside the invoke script.
+**Also check `scripts/lib/`:** `coding_agent_invoke.sh` and `worktree_setup.sh` source helpers from `$HERMES_HOME/scripts/lib/` (`coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `kanban_config.sh`, …). Older plugin versions materialized only top-level scripts, causing exit 127 in workers. **Update Plugin**, `hermes kanban-advanced init`, or `provision.sh` sync the full list in `plugin/script_materialize.py`.
 
-**Worktree provisioning (`.worktreeinclude`):** Card worktrees under `/tmp/wt-*` only contain tracked git files. Init merges **kanban** paths into `.worktreeinclude` (overlay, memory, invoke scripts). **Application** paths (`.env`, `.venv/`, `node_modules/`) are **operator responsibility** — add them yourself based on what cards run. See [operator-provisioning.md](../plugin/data/references/operator-provisioning.md). Symptom: worker resolves `bundle_path` from overlay yaml but `coding_agent_invoke.sh` or `kanban-config.yaml` is missing inside the worktree → exit 127. Fix: re-run **Bootstrap** / `hermes kanban-advanced init`, commit `.worktreeinclude`, **Update Plugin**, restart gateway.
+**Worktree provisioning (`.worktreeinclude`):** Card worktrees under `/tmp/wt-*` only contain tracked git files. Init merges **kanban** paths into `.worktreeinclude` (overlay, memory, invoke scripts). **Application** paths (`.env`, `.venv/`, `node_modules/`) are **operator responsibility** — add them yourself based on what cards run. See [operator-provisioning.md](../plugin/data/references/operator-provisioning.md). Symptom: worker resolves `bundle_path` from overlay yaml but `coding_agent_invoke.sh` or `kanban-config.yaml` is missing inside the worktree → exit 127. **Chicken-and-egg:** `worktree_setup.sh` must be invoked from `$HERMES_HOME/scripts/` or the main repo bundle — not a cwd-relative path inside an empty worktree. Fix: re-run **Bootstrap** / `hermes kanban-advanced init`, commit `.worktreeinclude`, **Update Plugin**, restart gateway.
 
 **Fix (reset provisioning — pause dispatch first):**
 
@@ -381,7 +381,7 @@ Then repeat **execute the plan**. Plugin reference: `plugin/data/references/prof
 
 **Symptom:** Preflight and single-shot `check_coding_agent_cli.py` pass; some worker cards fail auth while others succeed.
 
-**Fix:** Update plugin (materializes `coding_agent_auth_lock.sh`). Restart gateway. Verify lock file under `$HERMES_HOME/.locks/`. See [coding-agent auth](../plugin/data/references/coding-agent-auth.md) § Concurrent OAuth refresh race.
+**Fix:** Update plugin (materializes `coding_agent_auth_lock.sh` + pre-warm in `pre_dispatch_gate.sh`). Restart gateway. Verify lock file under `$HERMES_HOME/.locks/`. Re-run `pre_dispatch_gate.sh` before decomposition so OAuth pre-warms once. See [coding-agent auth](../plugin/data/references/coding-agent-auth.md) § Concurrent OAuth refresh race.
 
 ### Crons not firing (blocked cards stuck)
 

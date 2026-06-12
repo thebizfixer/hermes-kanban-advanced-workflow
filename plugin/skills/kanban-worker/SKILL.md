@@ -114,8 +114,8 @@ fi
 - `git status --short` — should be clean or contain only expected artifacts
 - Disk space > 1 GB (E007 if not)
 - Working directory matches repo root (E011 if cross-mount)
-- **Agent block guard (E014):** If the card has **neither** an `agent -p` block **nor** a `Files:` line, this is an orchestrator-only card (gate, audit, root) — do NOT spawn an agent; `kanban_complete(summary="Orchestrator-only card — no agent work to do.")`.
-- **Verification-only (`Type: verification`):** Do NOT run `coding_agent_invoke.sh` smoke or dispatch. Run `Tests:` via `terminal()`, then run the evaluation chain (mandatory before `kanban_complete`). Set `metadata.verification` to the test command on complete. Skip Step 3 smoke for verification cards.
+- **Verification-only (takes precedence):** If the card has `Type: verification`, `Commit: N/A`, or `verification only` in the commit line — **even when an `agent -p` block is present** — this is a supervisor-worker card. Do NOT run `coding_agent_invoke.sh` smoke or dispatch. Run `Tests:` via `terminal()`, then run the evaluation chain (mandatory before `kanban_complete`). Set `metadata.verification` to the test command on complete. Skip Step 3 smoke for verification cards.
+- **Agent block guard (E014):** If the card has **neither** an `agent -p` block **nor** a `Files:` line (and is not verification-only above), this is an orchestrator-only card (gate, audit, root) — do NOT spawn an agent; `kanban_complete(summary="Orchestrator-only card — no agent work to do.")`.
 
 **Correct sequence within Step 3 (mandatory order):**
 
@@ -123,10 +123,16 @@ fi
 # 1. Start heartbeat thread FIRST — before worktree creation, before any I/O that can hang
 start_heartbeat_thread
 
-# 2. Call worktree_setup.sh — get the worktree path (reads working_branch/trigger_branch from config)
-WORKTREE_OUTPUT=$(bash hermes-kanban-advanced-workflow/scripts/worktree_setup.sh \
+# 2. Call worktree_setup.sh from main repo / HERMES_HOME (never cwd-relative inside worktree)
+REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel)}"
+# shellcheck source=scripts/lib/kanban_bundle.sh
+source "${HERMES_HOME:-$HOME/.hermes}/scripts/lib/kanban_bundle.sh" 2>/dev/null \
+  || source "$REPO_ROOT/hermes-kanban-advanced-workflow/scripts/lib/kanban_bundle.sh"
+WORKTREE_SETUP="$(_resolve_kanban_script worktree_setup.sh "$REPO_ROOT")"
+[ -n "$WORKTREE_SETUP" ] || WORKTREE_SETUP="$REPO_ROOT/hermes-kanban-advanced-workflow/scripts/worktree_setup.sh"
+WORKTREE_OUTPUT=$(bash "$WORKTREE_SETUP" \
   --task-id "$HERMES_KANBAN_TASK" \
-  --repo-root "${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel)}")
+  --repo-root "$REPO_ROOT")
 eval "$WORKTREE_OUTPUT"
 cd "$WORKTREE_PATH"
 
@@ -198,7 +204,9 @@ Per-binary flags: `plugin/data/references/coding-agent-cli-invocation.md`. **Cur
 
 ### Step 4 — Handoff to coding agent
 
-**Dispatch mechanism (mandatory):** Use the **`terminal()`** tool to run the coding CLI. Do **not** use `execute_code` (cannot host 900s subprocesses). Do **not** call bare `coding_agent_invoke.sh` without a resolved path (exit 127). If dispatch fails, `kanban_block` with evidence — **never** fall back to direct coding.
+**Skip Step 4 entirely for verification-only cards** (`Type: verification`, `Commit: N/A`, or `verification only` in commit line) — even if an `agent -p` block is present. Run `Tests:` via `terminal()`, then the evaluation chain, then `kanban_complete`. Do not dispatch the coding agent.
+
+**Dispatch mechanism (mandatory for code-gen cards):** Use the **`terminal()`** tool to run the coding CLI. Do **not** use `execute_code` (cannot host 900s subprocesses). Do **not** call bare `coding_agent_invoke.sh` without a resolved path (exit 127). If dispatch fails, `kanban_block` with evidence — **never** fall back to direct coding.
 
 Do NOT construct the prompt from scratch. Extract the fenced `agent` block from the card body, prepend governance + memory brief, then dispatch via the shared invoke script. Start the heartbeat thread before the agent call.
 

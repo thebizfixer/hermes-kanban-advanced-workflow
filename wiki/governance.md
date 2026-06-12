@@ -95,9 +95,9 @@ Direct `kanban_complete` without the chain is a protocol violation.
 
 **E014 — orchestrator-only:** If the card has **neither** an `agent -p` block **nor** a `Files:` line, complete without spawning an agent (gate, audit, root).
 
-**Verification-only (`Type: verification`):** Run `Tests:` via `terminal()` only — no `coding_agent_invoke.sh`. Then run the evaluation chain before `kanban_complete`.
+**Verification-only (`Type: verification`):** Takes precedence over any `agent -p` block at runtime — run `Tests:` via `terminal()` only, no `coding_agent_invoke.sh`, then the evaluation chain before `kanban_complete`. At decomposition, `validate_board.sh` rejects verification cards that still carry `Files:` or `agent` blocks (use `Type: verification` + `Tests:` only).
 
-Error code: E014 (ORCHESTRATOR_CARD_ON_WORKER / verification contradictions).
+Error code: E014 (ORCHESTRATOR_CARD_ON_WORKER / verification contradictions on malformed cards).
 
 ## Auto-progression (mechanical wave unblocking)
 

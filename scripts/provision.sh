@@ -314,12 +314,12 @@ copy_all_references
 copy_bootstrap
 
 # ── Sync cron scripts to the path crons resolve ─────────────────────
-# auto_unblock.sh and board_keeper.sh live in the bundle's scripts/ dir,
-# but crons resolve script="scripts/<name>.sh" relative to
-# $HERMES_HOME/scripts/. Sync them so crons don't pick up stale copies.
+# Governance scripts live in the bundle's scripts/ dir, but workers and crons
+# resolve script="scripts/<name>.sh" relative to $HERMES_HOME/scripts/.
+# Sync them so dispatch does not pick up stale copies.
 CRON_SCRIPTS_DIR="${HERMES_HOME}/scripts"
 mkdir -p "$CRON_SCRIPTS_DIR"
-for script in auto_unblock.sh board_keeper.sh coding_agent_invoke.sh; do
+for script in auto_unblock.sh board_keeper.sh coding_agent_invoke.sh worktree_setup.sh install_pre_push_hook.sh install_pre_commit_hook.sh; do
     if [ -f "${BUNDLE_PATH}/scripts/${script}" ]; then
         case "$MODE" in
             apply)
@@ -342,7 +342,7 @@ done
 # coding_agent_invoke.sh sources $HERMES_HOME/scripts/lib/coding_agent_env.sh
 LIB_SCRIPTS_DIR="${CRON_SCRIPTS_DIR}/lib"
 mkdir -p "$LIB_SCRIPTS_DIR"
-for libscript in coding_agent_env.sh coding_agent_auth_lock.sh plan_paths.sh plan_paths.py; do
+for libscript in coding_agent_env.sh coding_agent_auth_lock.sh kanban_config.sh kanban_bundle.sh worktree_include.sh plan_paths.sh plan_paths.py; do
     if [ -f "${BUNDLE_PATH}/scripts/lib/${libscript}" ]; then
         case "$MODE" in
             apply)

@@ -147,6 +147,7 @@ def find_prior_commit(
     files: List[str],
     workspace: str,
     baseline: str = "HEAD~1",
+    max_lookback: int = 64,
 ) -> Optional[str]:
     """Return SHA when an earlier commit matches message and touches all Files: paths."""
     if not commit_line or not files:
@@ -154,9 +155,9 @@ def find_prior_commit(
     if _VERIFICATION_COMMIT_RE.search(commit_line):
         return None
 
-    def _search(rev_range: str) -> Optional[str]:
+    def _search(*rev_args: str) -> Optional[str]:
         log = subprocess.run(
-            ["git", "log", "--format=%H %s", rev_range],
+            ["git", "log", "--format=%H %s", *rev_args],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -179,4 +180,6 @@ def find_prior_commit(
     found = _search(f"{baseline}..HEAD")
     if found:
         return found
-    return _search("HEAD")
+    if max_lookback > 0:
+        return _search(f"-n{max_lookback}")
+    return None

@@ -126,6 +126,25 @@ ls -la "${HERMES_HOME:-$HOME/.hermes}/.locks/coding-agent-auth.lock"
 - One smoke retry after auth failure may succeed if a peer refreshed credentials.
 - Complements (does not replace) `pre_dispatch_gate` pre-warm smoke before decomposition.
 
+### Pre-warm before decomposition (Option A)
+
+`pre_dispatch_gate.sh` calls `prewarm_coding_agent_auth()` after other checks pass — one serialized `agent -p "echo ok" --trust` under the flock so parallel workers read a fresh `auth.json` instead of racing refresh.
+
+**Operator check:**
+
+```bash
+bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
+# Expect: [GATE] coding_agent_auth_prewarm ... PASS (or WARN if binary is not agent)
+```
+
+## Worktree script bootstrap (chicken-and-egg)
+
+Workers must invoke `worktree_setup.sh` by **absolute path** from the main checkout or `$HERMES_HOME/scripts/` — not a cwd-relative `hermes-kanban-advanced-workflow/scripts/...` path inside an empty worktree.
+
+Init / **Update Plugin** materializes `worktree_setup.sh` (+ hook installers and `lib/kanban_bundle.sh`) to `$HERMES_HOME/scripts/`. `worktree_setup.sh` then copies `.worktreeinclude` paths from the **main repo** into each card worktree before smoke tests.
+
+If workers report missing `worktree_setup.sh` or exit 127: re-run **Bootstrap** / **Update Plugin**, restart gateway, confirm `.worktreeinclude` is committed.
+
 ## Related
 
 - Headless flags: `coding-agent-cli-invocation.md`

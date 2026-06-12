@@ -9,11 +9,17 @@ HERMES_SCRIPT_NAMES = (
     "board_keeper.sh",
     "token_tracker.py",
     "coding_agent_invoke.sh",
+    "worktree_setup.sh",
+    "install_pre_push_hook.sh",
+    "install_pre_commit_hook.sh",
 )
 
 LIB_SCRIPT_NAMES = (
     "coding_agent_env.sh",
     "coding_agent_auth_lock.sh",
+    "kanban_config.sh",
+    "kanban_bundle.sh",
+    "worktree_include.sh",
     "plan_paths.sh",
 )
 

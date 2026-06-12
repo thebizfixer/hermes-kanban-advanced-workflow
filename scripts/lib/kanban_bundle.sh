@@ -32,3 +32,26 @@ _resolve_kanban_bundle_root() {
 
     return 1
 }
+
+_resolve_kanban_script() {
+    local script_name="$1"
+    local repo_root="${2:-${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}"
+    local candidate bundle
+
+    for candidate in \
+        "${HERMES_HOME:-}/scripts/${script_name}" \
+        "${KANBAN_WORKFLOW_DIR:-}/scripts/${script_name}"; do
+        if [ -n "$candidate" ] && [ -f "$candidate" ]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    bundle="$(_resolve_kanban_bundle_root "$repo_root" 2>/dev/null || true)"
+    if [ -n "$bundle" ] && [ -f "$bundle/scripts/${script_name}" ]; then
+        printf '%s\n' "$bundle/scripts/${script_name}"
+        return 0
+    fi
+
+    return 1
+}

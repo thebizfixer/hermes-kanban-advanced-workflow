@@ -31,3 +31,18 @@ run_with_coding_agent_auth_lock() {
   fi
   flock -w "$CODING_AGENT_AUTH_LOCK_WAIT_SECONDS" "$lockfile" "$@"
 }
+
+# Option A pre-warm: refresh Cursor OAuth once before parallel worker dispatch.
+prewarm_coding_agent_auth() {
+  local binary="${KANBAN_CODING_AGENT:-agent}"
+  case "$binary" in
+    agent) ;;
+    *) return 0 ;;
+  esac
+  if ! command -v "$binary" >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "[coding_agent_auth_lock] pre-warming Cursor OAuth token…" >&2
+  run_with_coding_agent_auth_lock "$binary" -p "echo ok" --trust --output-format json >/dev/null 2>&1 \
+    || return $?
+}

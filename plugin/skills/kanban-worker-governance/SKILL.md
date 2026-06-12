@@ -25,7 +25,7 @@ Canonical source: `plugin/data/registry/error-codes.yaml`
 
 | Code | Severity | What it catches | Recovery |
 |------|----------|----------------|----------|
-| E001 | error | File in scope has zero changes | Agent missed a file — retry with explicit path |
+| E001 | error | File in scope has zero changes in current diff | If work landed in an earlier commit (re-run, salvage, rebase), chain ALLOWs via `find_prior_commit` (up to 64 commits). Otherwise retry with explicit path |
 | E002 | warning | Unlisted file modified | Auto-reverted — add file to scope if intentional |
 | E003 | error | Tests failed or didn't run | Fix test failures, imports, or install test deps |
 | E004 | error | Commit message mismatch | Amend commit to match `Commit:` line |
@@ -43,7 +43,7 @@ Canonical source: `plugin/data/registry/error-codes.yaml`
 The Cursor background indexing service logs `[unauthenticated] Error` during normal operation. Workers that grep worker.log for `unauthenticated` will false-positive block on every card. Auth smoke: `bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh smoke`. Cursor failures with `Workspace Trust Required` mean `--trust` was omitted — not missing JSON support.
 
 ### `[escalation:coding_agent:auth]` — stale OAuth, not protocol violation
-When `agent status` shows logged in but `agent -p "say ok" --trust` fails or times out, the OAuth token in `~/.config/cursor/auth.json` is likely expired. Block with `[escalation:coding_agent:auth]` — **do not** use `[escalation:coding_agent:attempt:N]` (that implies retryable dispatch). Operator fix: `agent login`, delete `.hermes/kanban/preflight_cache.json`, re-run `preflight.sh` / `pre_dispatch_gate.sh`. Preflight now runs `check_coding_agent_cli.py` before decomposition.
+When `agent status` shows logged in but `agent -p "say ok" --trust` fails or times out, the OAuth token in `~/.config/cursor/auth.json` is likely expired. Block with `[escalation:coding_agent:auth]` — **do not** use `[escalation:coding_agent:attempt:N]` (that implies retryable dispatch). Operator fix: `agent login`, delete `.hermes/kanban/preflight_cache.json`, re-run `preflight.sh` / `pre_dispatch_gate.sh` (gate pre-warms OAuth once after checks pass). Parallel workers serialize refresh via `flock` on `$HERMES_HOME/.locks/coding-agent-auth.lock`. Preflight runs `check_coding_agent_cli.py` before decomposition.
 
 ### CURSOR_API_KEY is a decoy env var
 Cursor CLI authenticates via OAuth token in `~/.config/cursor/auth.json`, not the env var. Setting `CURSOR_API_KEY` has no effect.

@@ -41,6 +41,8 @@ When project-local `.hermes/` exists (typical project-scoped layout):
 
 `worktree_setup.sh` copies these from the **main checkout** into each card worktree (`/tmp/wt-*`). Commit `.worktreeinclude` after init.
 
+**Bootstrap path:** Workers call `worktree_setup.sh` from `$HERMES_HOME/scripts/` (materialized at init / Update Plugin) or the plugin bundle — never from inside an empty worktree. See [coding-agent-auth.md](coding-agent-auth.md) § Worktree script bootstrap.
+
 **External `HERMES_HOME`** (`~/.hermes` separate from repo): plugin still adds overlay paths; invoke scripts are reached via `$HERMES_HOME` env, not worktree copy.
 
 ---

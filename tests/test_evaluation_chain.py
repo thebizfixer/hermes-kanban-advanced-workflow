@@ -58,6 +58,24 @@ class TestEvaluationChain(unittest.TestCase):
         )
         self.assertIsNotNone(sha)
 
+    def test_find_prior_commit_lookback_beyond_baseline(self) -> None:
+        path = os.path.join(self.repo, "src", "foo.py")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("v2\n")
+        _git(self.repo, "add", "src/foo.py")
+        _git(self.repo, "commit", "-m", "feat: layer0 url dedup")
+
+        for i in range(4):
+            _git(self.repo, "commit", "--allow-empty", "-m", f"chore: filler {i}")
+
+        sha = find_prior_commit(
+            "feat: layer0 url dedup",
+            ["src/foo.py"],
+            self.repo,
+            "HEAD~1",
+        )
+        self.assertIsNotNone(sha)
+
     def test_find_prior_commit_denies_message_only(self) -> None:
         path = os.path.join(self.repo, "src", "bar.py")
         with open(path, "w", encoding="utf-8") as f:

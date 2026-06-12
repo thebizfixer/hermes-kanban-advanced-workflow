@@ -8,7 +8,9 @@ Every governance script is in `scripts/`.  All paths below use `${bundle_path}/s
 bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 ```
 
-Single gate before decomposition. Runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py`) → attestation → card policy present → plan memory seeded → DB integrity → **cron scripts executable** → **hermes on PATH**.  Replaces the old multi-step Steps 0a–0e.  Fails on any blocking check with a specific error.
+Single gate before decomposition. Runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py`) → attestation → card policy present → plan memory seeded → DB integrity → **materialized scripts executable** (`auto_unblock.sh`, `board_keeper.sh`, `worktree_setup.sh` under `$HERMES_HOME/scripts/`) → **hermes on PATH**.  Replaces the old multi-step Steps 0a–0e.  Fails on any blocking check with a specific error.
+
+After all blocking checks pass, runs **`coding_agent_auth_prewarm`** (non-blocking WARN): one serialized Cursor `agent -p "echo ok" --trust` under `flock` so parallel workers inherit a fresh `auth.json`. See `plugin/data/references/coding-agent-auth.md` § Pre-warm before decomposition.
 
 Added checks in v1.1: `test -x` (not just `test -f`) for cron scripts, and hermes PATH verification so crons can invoke `hermes kanban` commands.
 
@@ -99,7 +101,9 @@ bash scripts/worktree_setup.sh \
   --repo-root .
 ```
 
-Atomic worktree lifecycle: prune stale entries → create/reuse worktree → cross-platform workspace trust → install pre-push and pre-commit hooks. Reads `working_branch` and `trigger_branch` from config (no hardcoded fallbacks). Outputs `WORKTREE_PATH=<path>` on stdout.
+Atomic worktree lifecycle: prune stale entries → create/reuse worktree → copy `.worktreeinclude` paths from main repo → cross-platform workspace trust → install pre-push and pre-commit hooks. Reads `working_branch` and `trigger_branch` from config (no hardcoded fallbacks). Outputs `WORKTREE_PATH=<path>` on stdout.
+
+Workers resolve the script via `_resolve_kanban_script` in `scripts/lib/kanban_bundle.sh` — prefer `$HERMES_HOME/scripts/worktree_setup.sh` (materialized at init / Update Plugin), then plugin bundle. Do not use a cwd-relative path inside an empty worktree.
 
 ### `coding_agent_invoke.sh`
 
@@ -134,7 +138,13 @@ bash hermes-kanban-advanced-workflow/scripts/provision.sh          # materialize
 bash hermes-kanban-advanced-workflow/scripts/provision.sh --check  # verify no drift
 ```
 
-Syncs canonical skill files from `plugin/skills/` to `$HERMES_HOME/skills/kanban-advanced/`.  Applies overlay patches from `.hermes/kanban-overrides/patches/`.  `--check` mode exits non-zero if materialized files have drifted from canonical.
+Syncs canonical skill files from `plugin/skills/` to `$HERMES_HOME/skills/kanban-advanced/`.  Applies overlay patches from `.hermes/kanban-overrides/patches/`.  Also syncs governance scripts to `$HERMES_HOME/scripts/`:
+
+| Top-level | `lib/` |
+|-----------|--------|
+| `auto_unblock.sh`, `board_keeper.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py` |
+
+Init / dashboard **Update Plugin** use the same list via `plugin/script_materialize.py`. `--check` mode exits non-zero if materialized files have drifted from canonical.
 
 ## Decomposition (`kanban_decompose.py`)
 

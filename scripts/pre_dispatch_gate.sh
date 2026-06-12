@@ -88,7 +88,7 @@ check "kanban_db" \
   "python3 -c \"import sqlite3; db=sqlite3.connect('${HERMES_HOME}/kanban.db'); assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'\""
 
 check "cron_scripts" \
-  "test -x ${HERMES_HOME}/scripts/auto_unblock.sh && test -x ${HERMES_HOME}/scripts/board_keeper.sh"
+  "test -x ${HERMES_HOME}/scripts/auto_unblock.sh && test -x ${HERMES_HOME}/scripts/board_keeper.sh && test -x ${HERMES_HOME}/scripts/worktree_setup.sh"
 
 check "cron_hermes_path" \
   "PATH=\"${HOME}/.local/bin:${PATH}\" command -v hermes >/dev/null 2>&1"
@@ -102,4 +102,19 @@ if [ "$FAILURES" -gt 0 ]; then
   echo "[GATE] BLOCKED — fix failures before dispatching"
   exit 1
 fi
+
+# Pre-warm Cursor OAuth once so parallel workers inherit a fresh access token.
+# shellcheck source=lib/coding_agent_env.sh
+source "$SCRIPT_DIR/lib/coding_agent_env.sh"
+# shellcheck source=lib/coding_agent_auth_lock.sh
+source "$SCRIPT_DIR/lib/coding_agent_auth_lock.sh"
+if [ -f "$REPO_ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$REPO_ROOT/.env"
+  set +a
+fi
+ensure_coding_agent_home 2>/dev/null || true
+warn "coding_agent_auth_prewarm" "prewarm_coding_agent_auth"
+
 echo "[GATE] PASSED — proceed to decomposition"
