@@ -488,7 +488,7 @@
               "Bootstrap to run hermes kanban-advanced init with the following parameters. Save any parameter changes to plugin configuration after editing any field."
             ) : null
           ),
-          React.createElement("div", { className: "flex flex-wrap items-center justify-start gap-2" },
+          React.createElement("div", { className: "ml-auto flex flex-wrap items-center justify-end gap-2" },
             React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping || pluginUpdating, size: "sm" },
               bootstrapping ? "Running…" : "Bootstrap"
             ),
