@@ -473,6 +473,22 @@ def _check_plugin_git_status(*, fetch: bool = True) -> dict:
     return base
 
 
+def _plugin_git_status_after_update(install_dir: Path, git_exe: str) -> dict:
+    """Return up-to-date plugin git fields without fetch — for POST /update response."""
+    _cache_set(f"git_behind:{install_dir}", 0)
+    hermes_home = resolve_hermes_home()
+    local = _git_local_change_count(install_dir, git_exe)
+    return {
+        "hermes_home": str(hermes_home),
+        "plugin_install_path": str(install_dir),
+        "plugin_can_update": True,
+        "plugin_up_to_date": True,
+        "plugin_behind": 0,
+        "plugin_update_available": False,
+        "plugin_local_changes": local if local is not None else 0,
+    }
+
+
 def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
     project_root = resolve_project_root()
     config = _read_config(project_root)
@@ -932,7 +948,12 @@ async def update_plugin():
     if behind_before == 0:
         output.append("   OK Already up to date")
         _invalidate_status_cache()
-        return {"success": True, "unchanged": True, "output": output}
+        return {
+            "success": True,
+            "unchanged": True,
+            "output": output,
+            **_plugin_git_status_after_update(install_dir, git_exe),
+        }
 
     try:
         ok, err = _git_sync_to_upstream(install_dir, git_exe, output)
@@ -970,4 +991,9 @@ async def update_plugin():
 
     output.append("OK Plugin updated")
     _invalidate_status_cache()
-    return {"success": True, "unchanged": False, "output": output}
+    return {
+        "success": True,
+        "unchanged": False,
+        "output": output,
+        **_plugin_git_status_after_update(install_dir, git_exe),
+    }

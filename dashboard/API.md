@@ -88,7 +88,7 @@ Use `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` to popul
 
 When `config_exists` is false, the dashboard shows the bootstrap form.
 
-The status banner shows **Initialized (Up-to-date)** or **Initialized (Update Plugin)** when `plugin_can_update` is true. **Update Plugin** calls `POST /api/plugins/kanban-advanced/update` (git pull in `plugin_install_path`, then re-materialize skills and cron scripts). Disabled when up to date.
+The status banner shows **Initialized (Up-to-date)** or **Initialized (Update Plugin)** when `plugin_can_update` is true. **Update Plugin** calls `POST /api/plugins/kanban-advanced/update` (git pull in `plugin_install_path`, then re-materialize skills and cron scripts). On success the UI applies the response plugin-git fields immediately — it does **not** re-run `GET /status?git_fetch=1`. Disabled when up to date.
 
 Use `project_root` to confirm the API resolved the correct repo (especially after `hermes update` or when multiple clones are on disk). If it points at the plugin install tree, set `KANBAN_PROJECT_ROOT` to your application repo before opening the tab.
 
@@ -191,11 +191,16 @@ Git-pull the plugin install checkout, refresh materialized skills/scripts under 
     "Already up to date.",
     "   OK 11 skills -> ...",
     "OK Plugin updated"
-  ]
+  ],
+  "plugin_up_to_date": true,
+  "plugin_behind": 0,
+  "plugin_update_available": false,
+  "plugin_local_changes": 0,
+  "plugin_can_update": true
 }
 ```
 
-When already up to date, `unchanged` is `true` and pull is skipped.
+When already up to date, `unchanged` is `true` and pull is skipped. Successful responses always include `plugin_up_to_date: true` so the dashboard can show **Up-to-date** without a follow-up git fetch.
 
 **Local changes in the install dir:** `plugin_install_path` is a read-only mirror of upstream on every platform (Linux, macOS, Windows native, WSL). If `git status` shows local modifications (line-ending drift, editor saves, or edits in the install tree), the update endpoint discards them with `git reset --hard` and `git clean -fd` before pull, then falls back to `git reset --hard <upstream>` if `pull --ff-only` still fails. Edit your **project** repo or fork — not the Hermes plugin install directory.
 

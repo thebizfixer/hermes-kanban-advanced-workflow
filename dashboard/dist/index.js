@@ -81,6 +81,17 @@
     try { sessionStorage.removeItem(STATUS_SESSION_KEY); } catch (e) {}
   }
 
+  function applyPluginGitStatus(prev, fields) {
+    if (!fields) return prev;
+    var next = Object.assign({}, prev || {});
+    ["plugin_can_update", "plugin_up_to_date", "plugin_behind", "plugin_update_available", "plugin_local_changes"].forEach(function (key) {
+      if (fields[key] != null) next[key] = fields[key];
+    });
+    if (fields.hermes_home) next.hermes_home = fields.hermes_home;
+    if (fields.plugin_install_path) next.plugin_install_path = fields.plugin_install_path;
+    return next;
+  }
+
   function mergeStatusFields(base, extra) {
     if (!extra) return base;
     if (!base) return extra;
@@ -319,17 +330,19 @@
         if (r.error) {
           addLines(["ERROR: " + r.error], "line-err");
           if (r.output) addLines(r.output);
-        } else {
-          if (r.output) {
-            var outLines = Array.isArray(r.output) ? r.output : String(r.output).split("\n");
-            addLines(outLines);
-          }
-          addLines([r.unchanged ? "OK Plugin already up to date" : "OK Plugin updated"], "line-ok");
+          setPluginUpdating(false);
+          return;
         }
-        // Keep "Updating…" until the status refresh settles so the button
-        // never flickers back to "Update Plugin" mid-transition.
-        return reloadStatus();
-      }).then(function () {
+        if (r.output) {
+          var outLines = Array.isArray(r.output) ? r.output : String(r.output).split("\n");
+          addLines(outLines);
+        }
+        addLines([r.unchanged ? "OK Plugin already up to date" : "OK Plugin updated"], "line-ok");
+        setStatus(function (prev) {
+          var next = applyPluginGitStatus(prev, r);
+          writeSessionStatus(next, { probed: true });
+          return next;
+        });
         setPluginUpdating(false);
       }).catch(function (e) {
         addLines(["ERROR: " + e.message], "line-err");
