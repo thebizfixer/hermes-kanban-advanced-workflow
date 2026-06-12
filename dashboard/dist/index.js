@@ -339,13 +339,14 @@
 
     function initializedLabel() {
       if (!statusInitialized) return "Not initialized";
+      if (statusProbing) return "Initialized (Checking for updates)";
       if (status && status.plugin_can_update && status.plugin_up_to_date === true) return "Initialized (Up-to-date)";
       if (status && status.plugin_can_update && status.plugin_update_available) return "Initialized (Update Plugin)";
       return "Initialized";
     }
 
     var pluginUpdateDisabled = !status || !status.plugin_can_update || status.plugin_up_to_date === true
-      || pluginUpdating || bootstrapping;
+      || pluginUpdating || bootstrapping || statusProbing;
 
     // ── Model selector ──
     function openModelPicker(profileName) {
@@ -472,9 +473,9 @@
 
       // ── Status banner with inline buttons ──
       React.createElement(Card, { className: statusError ? "border-red-500/30" : statusInitialized ? "border-green-500/30" : "" },
-        React.createElement(CardContent, { className: "flex items-start gap-3 py-4" },
+        React.createElement(CardContent, { className: "flex flex-wrap items-start gap-x-3 gap-y-3 py-4" },
           React.createElement(StatusDot, { status: statusError ? "error" : statusInitialized ? "ok" : "warn" }),
-          React.createElement("div", { className: "flex-1 min-w-0 space-y-1" },
+          React.createElement("div", { className: "min-w-[min(100%,16rem)] max-w-2xl space-y-1" },
             React.createElement("p", { className: "text-sm font-medium" },
               statusError ? "Cannot reach API" : initializedLabel()
             ),
@@ -486,39 +487,36 @@
             !statusError ? React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
               "Bootstrap to run hermes kanban-advanced init with the following parameters. Save any parameter changes to plugin configuration after editing any field."
             ) : null
-          )
-        ),
-        React.createElement("div", { className: "flex flex-wrap items-center gap-2 px-6 pb-4 -mt-1" },
-          React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping || pluginUpdating, size: "sm" },
-            bootstrapping ? "Running…" : "Bootstrap"
           ),
-          statusInitialized ? React.createElement(Button, { variant: "outline", size: "sm", onClick: runSave, disabled: bootstrapping || pluginUpdating },
-            "Save"
-          ) : null,
-          status && status.plugin_can_update ? React.createElement(Button, {
-            variant: "outline",
-            size: "sm",
-            onClick: runPluginUpdate,
-            disabled: pluginUpdateDisabled
-          },
-            pluginUpdating
-              ? React.createElement("span", { className: "flex items-center gap-1.5" },
-                  React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
-                  "Updating…"
-                )
-              : "Update Plugin"
-          ) : null
+          React.createElement("div", { className: "flex flex-wrap items-center justify-start gap-2" },
+            React.createElement(Button, { onClick: runBootstrap, disabled: bootstrapping || pluginUpdating, size: "sm" },
+              bootstrapping ? "Running…" : "Bootstrap"
+            ),
+            statusInitialized ? React.createElement(Button, { variant: "outline", size: "sm", onClick: runSave, disabled: bootstrapping || pluginUpdating },
+              "Save"
+            ) : null,
+            status && status.plugin_can_update ? React.createElement(Button, {
+              variant: "outline",
+              size: "sm",
+              onClick: runPluginUpdate,
+              disabled: pluginUpdateDisabled
+            },
+              pluginUpdating
+                ? React.createElement("span", { className: "flex items-center gap-1.5" },
+                    React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
+                    "Updating…"
+                  )
+                : "Update Plugin"
+            ) : null
+          )
         )
       ),
 
-      // ── Two-column grid ──
-      React.createElement("div", { className: "grid grid-cols-2 gap-4" },
-
-        // Left column
-        React.createElement("div", { className: "space-y-4" },
+      // ── Two-column grid (row 1: Project | Coding Agent; row 2: Profiles | Governance) ──
+      React.createElement("div", { className: "grid grid-cols-2 gap-4 items-stretch" },
 
           // Project
-          React.createElement(Card, null,
+          React.createElement(Card, { className: "h-full" },
             React.createElement(CardHeader, null,
               React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Project")
             ),
@@ -536,12 +534,52 @@
             )
           ),
 
-          // Profiles
-          React.createElement(Card, null,
+          // Coding agent
+          React.createElement(Card, { className: "h-full" },
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Coding Agent")
+            ),
+            React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Binary on PATH"),
+                React.createElement("select", {
+                  value: codingAgent,
+                  onChange: function (e) { setCodingAgent(e.target.value); },
+                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                },
+                  CODING_AGENTS.map(function (a) {
+                    return React.createElement("option", { key: a.value, value: a.value }, a.label);
+                  })
+                ),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" },
+                  "Workers dispatch this binary. ",
+                  React.createElement("a", { href: "https://github.com/thebizfixer/hermes-kanban-advanced-workflow/blob/main/docs/reference/coding-agents.md", target: "_blank", className: "underline" }, "Supported agents")
+                )
+              ),
+              codingAgent === "__custom__" ? React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Custom binary name"),
+                React.createElement(Input, { value: customAgent, onChange: function (e) { setCustomAgent(e.target.value); }, placeholder: "e.g. my-agent", className: "h-9" })
+              ) : null,
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Model"),
+                React.createElement("div", {
+                  className: "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm cursor-pointer hover:bg-accent/5 transition-colors",
+                  onClick: openCodingAgentModelPicker
+                },
+                  React.createElement("span", { className: "font-mono truncate" }, codingAgentModel || "auto"),
+                  codingAgentBadge(status && status.coding_agent_cli, codingAgentModel)
+                ),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Click to change model. Use auto for the CLI default. Save or Bootstrap to apply.")
+              )
+            )
+          ),
+
+          // Profiles (stretched to match Governance & Tuning row height)
+          React.createElement(Card, { className: "h-full flex flex-col" },
             React.createElement(CardHeader, null,
               React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Profiles")
             ),
-            React.createElement(CardContent, { className: "space-y-2" },
+            React.createElement(CardContent, { className: "flex flex-col flex-1 space-y-2" },
               (function () {
                 var dispatch = (status && status.dispatch_profiles) || { orchestrator: "kanban-advanced-orchestrator", worker: "kanban-advanced-worker" };
                 var rows = [
@@ -559,11 +597,40 @@
                   );
                 });
               })(),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-1" }, "Created by bootstrap if missing. Model config copied from current profile. Click profile to change model.")
+              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-auto pt-2" }, "Created by bootstrap if missing. Model config copied from current profile. Click profile to change model.")
             )
           ),
-          // ── Model picker modal (dropdown menu) ──
-          editingProfile ? React.createElement("div", {
+
+          // Governance + orchestrator tuning
+          React.createElement(Card, { className: "h-full" },
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Governance & Tuning")
+            ),
+            React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Governance profile"),
+                React.createElement("select", {
+                  value: policyProfile,
+                  onChange: function (e) { setPolicyProfile(e.target.value); },
+                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                },
+                  POLICY_PROFILES.map(function (p) {
+                    return React.createElement("option", { key: p.value, value: p.value }, p.label);
+                  })
+                ),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Controls card policy, evaluation chain, and validation gates. Use strict for walk-away execution.")
+              ),
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Max turns"),
+                React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for plan decomposition. Default is 90.")
+              )
+            )
+          )
+      ),
+
+      // ── Model picker modal (dropdown menu) ──
+      editingProfile ? React.createElement("div", {
             className: "fixed inset-0 z-[100] flex items-center justify-center bg-background/85 backdrop-blur-sm p-4",
             onClick: function (e) { if (e.target === e.currentTarget) setEditingProfile(null); }
           },
@@ -628,80 +695,7 @@
                 )
               )
             )
-          ) : null
-        ),
-
-        // Right column
-        React.createElement("div", { className: "space-y-4" },
-
-          // Coding agent
-          React.createElement(Card, null,
-            React.createElement(CardHeader, null,
-              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Coding Agent")
-            ),
-            React.createElement(CardContent, { className: "space-y-4" },
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Binary on PATH"),
-                React.createElement("select", {
-                  value: codingAgent,
-                  onChange: function (e) { setCodingAgent(e.target.value); },
-                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                },
-                  CODING_AGENTS.map(function (a) {
-                    return React.createElement("option", { key: a.value, value: a.value }, a.label);
-                  })
-                ),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" },
-                  "Workers dispatch this binary. ",
-                  React.createElement("a", { href: "https://github.com/thebizfixer/hermes-kanban-advanced-workflow/blob/main/docs/reference/coding-agents.md", target: "_blank", className: "underline" }, "Supported agents")
-                )
-              ),
-              codingAgent === "__custom__" ? React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Custom binary name"),
-                React.createElement(Input, { value: customAgent, onChange: function (e) { setCustomAgent(e.target.value); }, placeholder: "e.g. my-agent", className: "h-9" })
-              ) : null,
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Model"),
-                React.createElement("div", {
-                  className: "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm cursor-pointer hover:bg-accent/5 transition-colors",
-                  onClick: openCodingAgentModelPicker
-                },
-                  React.createElement("span", { className: "font-mono truncate" }, codingAgentModel || "auto"),
-                  codingAgentBadge(status && status.coding_agent_cli, codingAgentModel)
-                ),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Click to change model. Use auto for the CLI default. Save or Bootstrap to apply.")
-              )
-            )
-          ),
-
-          // Governance + orchestrator tuning
-          React.createElement(Card, null,
-            React.createElement(CardHeader, null,
-              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Governance & Tuning")
-            ),
-            React.createElement(CardContent, { className: "space-y-4" },
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Governance profile"),
-                React.createElement("select", {
-                  value: policyProfile,
-                  onChange: function (e) { setPolicyProfile(e.target.value); },
-                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                },
-                  POLICY_PROFILES.map(function (p) {
-                    return React.createElement("option", { key: p.value, value: p.value }, p.label);
-                  })
-                ),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Controls card policy, evaluation chain, and validation gates. Use strict for walk-away execution.")
-              ),
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Max turns"),
-                React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for plan decomposition. Default is 90.")
-              )
-            )
-          )
-        )
-      ),
+          ) : null,
 
       editingCodingAgentModel ? React.createElement("div", {
         className: "fixed inset-0 z-[100] flex items-center justify-center bg-background/85 backdrop-blur-sm p-4",
