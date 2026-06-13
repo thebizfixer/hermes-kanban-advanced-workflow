@@ -42,12 +42,25 @@ Environment:
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 import time
 import tempfile
 from pathlib import Path
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+from lib.plan_parse import (  # noqa: E402
+    _extract_markdown_field,
+    _extract_markdown_files,
+    _extract_optimization_section,
+    _extract_plan_id_from_content,
+    _split_card_blocks,
+    parse_card_block,
+    parse_plan,
+)
 
 # ── CLI ────────────────────────────────────────────────────────────────────
 
@@ -107,210 +120,6 @@ def parse_yaml_cards(yaml_path: str) -> dict:
         cards.append(card)
 
     return {"cards": cards, "plan_id": data.get("plan_id", "")}
-
-
-def parse_plan(plan_path: str) -> dict:
-    """Parse card definitions from a plan's Kanban optimization section."""
-    with open(plan_path, encoding="utf-8", errors="replace") as f:
-        content = f.read()
-
-    section = _extract_optimization_section(content)
-    blocks = _split_card_blocks(section)
-
-    cards = []
-    for block in blocks:
-        card = parse_card_block(block)
-        if card:
-            cards.append(card)
-
-    if not cards:
-        sys.exit("ERROR: No card definitions found in optimization section")
-
-    plan_id = _extract_plan_id_from_content(content) or Path(plan_path).stem.replace(".plan", "")
-    return {"cards": cards, "plan_id": plan_id}
-
-
-_CARD_HEADING_RE = re.compile(r"^#### (Card \d+.*?)$", re.MULTILINE)
-
-
-def _extract_optimization_section(content: str) -> str:
-    opt_match = re.search(
-        r"## Kanban optimization.*?(?=^## \w|\Z)",
-        content,
-        re.MULTILINE | re.DOTALL | re.IGNORECASE,
-    )
-    if not opt_match:
-        sys.exit("ERROR: No '## Kanban optimization' section found in plan (case-insensitive)")
-    return opt_match.group(0)
-
-
-def _split_card_blocks(section: str) -> list[str]:
-    """Split optimization section into card blocks by #### Card N headings."""
-    matches = list(_CARD_HEADING_RE.finditer(section))
-    if not matches:
-        return []
-    blocks: list[str] = []
-    for i, match in enumerate(matches):
-        start = match.start()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(section)
-        blocks.append(section[start:end].rstrip())
-    return blocks
-
-
-def _extract_plan_id_from_content(content: str) -> str | None:
-    m = re.search(r"^plan_id:\s*(\S+)", content, re.MULTILINE | re.IGNORECASE)
-    return m.group(1).strip() if m else None
-
-
-def _extract_markdown_field(block: str, name: str) -> str | None:
-    m = re.search(rf"\*\*{re.escape(name)}:\*\*\s*(.+)", block, re.IGNORECASE)
-    if not m:
-        return None
-    return m.group(1).strip().strip("`").strip()
-
-
-def _extract_markdown_files(block: str) -> list[str]:
-    m = re.search(r"\*\*Files:\*\*\s*(.+)", block, re.IGNORECASE)
-    if not m:
-        return []
-    raw = m.group(1).strip()
-    files: list[str] = []
-    for part in re.split(r",\s*", raw):
-        path = part.strip().strip("`").strip()
-        if path.endswith("."):
-            path = path[:-1]
-        if path:
-            files.append(path)
-    return files
-
-
-def _normalize_file_path(path: str) -> str:
-    return path.strip().strip("`").strip().rstrip(".")
-
-
-def parse_card_block(block: str) -> dict | None:
-    """Parse a single card definition block into a structured dict."""
-    # Extract title from heading
-    title_match = re.match(r'#### (Card \d+.*?)(?:\s*\(.*?\))?\s*$', block, re.MULTILINE)
-    if not title_match:
-        return None
-    title = title_match.group(1).strip()
-
-    card_type_field = _extract_markdown_field(block, "Type")
-
-    # Determine card type from title (markdown Type: overrides at end)
-    card_type = "code-gen"
-    assignee = None
-    is_manual = "(manual)" in title.lower() or "manual)" in title.lower()
-    if "ROOT" in title or "root" in title.lower():
-        card_type = "root"
-        assignee = "orchestrator"
-    elif "Gate" in title or "gate" in title.lower():
-        card_type = "gate"
-        assignee = "orchestrator"
-    elif is_manual:
-        card_type = "manual"
-        assignee = "orchestrator"
-    elif "audit" in title.lower() or "final audit" in title.lower():
-        card_type = "audit"
-        assignee = "orchestrator"
-    if card_type_field:
-        ct = card_type_field.lower()
-        if ct == "verification":
-            card_type = "verification"
-        elif "gate" in ct:
-            card_type = "gate"
-            assignee = assignee or "orchestrator"
-        elif "audit" in ct:
-            card_type = "audit"
-            assignee = assignee or "orchestrator"
-        elif "root" in ct:
-            card_type = "root"
-            assignee = assignee or "orchestrator"
-
-    # Extract YAML frontmatter fields
-    plan_id = _extract_field(block, r'plan_id:\s*(.+)')
-    files_raw = _extract_field(block, r'files:\s*\n((?:\s{2}- .+\n?)+)')
-    files = []
-    if files_raw:
-        files = [_normalize_file_path(f.strip().lstrip("- ")) for f in files_raw.strip().split("\n") if f.strip().startswith("- ")]
-    if not files:
-        files = _extract_markdown_files(block)
-    mode = _extract_field(block, r'mode:\s*(.+)') or _extract_markdown_field(block, "Mode")
-    tests = _extract_field(block, r'tests:\s*(.+)') or _extract_markdown_field(block, "Tests")
-    commit = _extract_field(block, r'commit:\s*"?(.+?)"?\s*$')
-    estimated_lines = _extract_field(block, r'estimated_lines:\s*(\d+)')
-    wave = _extract_field(block, r'wave:\s*(\d+)')
-    wave_parent = _extract_field(block, r'wave_parent:\s*(.+)')
-    ordinal_parent = _extract_field(block, r'ordinal_parent:\s*(.+)')
-    workspace = _extract_field(block, r'workspace:\s*(.+)')
-    branch = _extract_field(block, r'branch:\s*(.+)')
-    card_assignee = _extract_field(block, r'assignee:\s*(.+)')
-
-    if card_assignee:
-        assignee = card_assignee
-    elif not assignee:
-        assignee = "worker" if card_type == "code-gen" else "orchestrator"
-
-    # Extract agent block body
-    agent_body = None
-    agent_match = re.search(r'```agent\s*\n(.*?)```', block, re.DOTALL)
-    if agent_match:
-        agent_body = agent_match.group(1).strip()
-
-    # Build the full card body (YAML frontmatter + agent block)
-    body_lines = [f"plan_id: {plan_id or 'unknown'}"]
-    if card_type in ("gate", "audit", "root"):
-        body_lines.append("pre_existing: true")
-    if files:
-        body_lines.append("files:")
-        for f in files:
-            body_lines.append(f"  - {f}")
-    body_lines.append(f"mode: {mode or 'modify-only'}")
-    if tests:
-        body_lines.append(f"tests: {tests}")
-    if commit:
-        body_lines.append(f"commit: \"{commit}\"")
-    if estimated_lines:
-        body_lines.append(f"estimated_lines: {estimated_lines}")
-
-    if agent_body:
-        body_lines.append("")
-        body_lines.append("---")
-        body_lines.append("```agent")
-        body_lines.append(agent_body)
-        body_lines.append("```")
-
-    full_body = "\n".join(body_lines)
-
-    # Determine card key for dependency matching
-    key_match = re.search(r'(card\d+)', title.lower().replace(' ', '').replace('-', ''))
-    card_key = key_match.group(1) if key_match else title.lower().replace(' ', '_')
-
-    return {
-        "key": card_key,
-        "title": title,
-        "type": card_type,
-        "assignee": assignee,
-        "plan_id": plan_id or "",
-        "files": files,
-        "mode": mode or "modify-only",
-        "tests": tests or "",
-        "commit": commit or "",
-        "estimated_lines": int(estimated_lines) if estimated_lines else 0,
-        "wave": int(wave) if wave else 1,
-        "wave_parent": wave_parent.strip() if wave_parent else None,
-        "ordinal_parent": ordinal_parent.strip() if ordinal_parent else None,
-        "workspace": workspace,
-        "branch": branch,
-        "body": full_body,
-        "agent_body": agent_body,
-    }
-
-
-def _extract_field(text: str, pattern: str) -> str | None:
-    m = re.search(pattern, text, re.MULTILINE)
-    return m.group(1).strip() if m else None
 
 
 def _find_project_kanban_dir(start: Path) -> Path | None:

@@ -49,11 +49,16 @@ REQUIRED_SCRIPTS=(
     validate_board.sh
     validate_config.py
     verify_anchors.sh
+    verify_anchors.py
     verify_goal_cards.py
     verify_optimization.sh
     worktree_audit.sh
     lib/governance_profile.py
     lib/governance_profile.sh
+    lib/plan_parse.py
+    lib/cli_output_parse.py
+    lib/kanban_cli_parse.sh
+    lib/kanban_logs.sh
 )
 
 for script in "${REQUIRED_SCRIPTS[@]}"; do

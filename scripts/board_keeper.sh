@@ -24,6 +24,7 @@ export HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_PARSE="$SCRIPT_DIR/lib/cli_output_parse.py"
 # shellcheck source=lib/kanban_logs.sh
 source "$SCRIPT_DIR/lib/kanban_logs.sh"
 # shellcheck source=lib/kanban_config.sh
@@ -96,7 +97,7 @@ echo "Summary: $DONE done · $RUNNING running · $READY ready · $BLOCKED blocke
 
 echo ""
 echo "--- Orphaned agents ---"
-ORPHANS=$(ps aux 2>/dev/null | grep 'kanban task t_' | grep -v grep | grep -oP 't_\w+' | sort -u || true)
+ORPHANS=$(ps aux 2>/dev/null | grep 'kanban task t_' | grep -v grep | python3 "$CLI_PARSE" task-ids 2>/dev/null | sort -u || true)
 ORPHAN_COUNT=0
 for tid in $ORPHANS; do
     if ! hermes kanban show "$tid" &>/dev/null 2>&1; then
@@ -197,7 +198,7 @@ READY_IDS=$(hermes kanban list 2>/dev/null | grep '▶' | awk '{print $2}')
 STUCK_COUNT=0
 for tid in $READY_IDS; do
     # Check how long it's been ready
-    CREATED=$(hermes kanban show "$tid" 2>/dev/null | grep "created" | head -1 | grep -oP '\d{4}-\d{2}-\d{2} \d{2}:\d{2}' || true)
+    CREATED=$(hermes kanban show "$tid" 2>/dev/null | python3 "$CLI_PARSE" created 2>/dev/null || true)
     if [ -n "$CREATED" ]; then
         CREATED_EPOCH=$(date -d "$CREATED" +%s 2>/dev/null || true)
         NOW_EPOCH=$(date +%s)
@@ -226,7 +227,7 @@ echo "--- Max-retries check ---"
 ALL_CARD_IDS=$(hermes kanban list 2>/dev/null | awk '{print $2}' | grep -E '^t_' || true)
 RETRY_ISSUES=0
 for tid in $ALL_CARD_IDS; do
-    MAX_RETRIES=$(hermes kanban show "$tid" 2>/dev/null | grep "max-retries:" | head -1 | grep -oP '\d+' || echo "0")
+    MAX_RETRIES=$(hermes kanban show "$tid" 2>/dev/null | python3 "$CLI_PARSE" max-retries 2>/dev/null || echo "0")
     if [ "$MAX_RETRIES" -gt 2 ] 2>/dev/null || [ "$MAX_RETRIES" -eq 0 ] 2>/dev/null; then
         CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
         warn "Card $tid ($CARD_NAME) has max-retries=$MAX_RETRIES (should be ≤2)"

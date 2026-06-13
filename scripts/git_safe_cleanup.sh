@@ -44,6 +44,7 @@ case "$_fs_type" in
 esac
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_PARSE="$SCRIPT_DIR/lib/cli_output_parse.py"
 # shellcheck source=lib/kanban_config.sh
 source "$SCRIPT_DIR/lib/kanban_config.sh"
 
@@ -148,7 +149,7 @@ WT_IN_USE=0
 while IFS= read -r wt_line; do
     [[ -z "$wt_line" ]] && continue
     WT_PATH=$(echo "$wt_line" | awk '{print $1}')
-    WT_BRANCH=$(echo "$wt_line" | grep -oP '\[.*?\]' | tr -d '[]' || echo "detached")
+    WT_BRANCH=$(python3 "$CLI_PARSE" worktree-branch --text "$wt_line" 2>/dev/null || echo "detached")
 
     ((WT_COUNT++))
     echo "Worktree: $WT_PATH  [$WT_BRANCH]"

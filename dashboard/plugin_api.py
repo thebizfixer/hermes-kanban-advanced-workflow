@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 from threading import Lock
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -54,9 +54,15 @@ from plugin.coding_agent import (  # noqa: E402
     normalize_coding_agent_model,
 )
 from plugin.hermes_model_config import (  # noqa: E402
+    apply_model_config_to_profile,
+    apply_reasoning_effort_to_profile,
     copy_active_model_to_profile,
+    parse_profile_update_payload,
     read_model_config_from_config_show,
+    read_reasoning_effort_from_config_show,
+    recommended_reasoning_effort_for_profile,
     profile_has_model_config,
+    seed_default_reasoning_effort_for_profile,
 )
 from plugin.profile_bootstrap import (  # noqa: E402
     dispatch_profile_names,
@@ -190,6 +196,15 @@ def _max_turns_from_config_show(stdout: str) -> int:
     return int(mt.group(1)) if mt else 90
 
 
+def _invalidate_profile_probe_cache(profile: str) -> None:
+    with _status_cache_lock:
+        _status_cache.pop(f"model_reachable:{profile}", None)
+
+
+def _profile_exists_in_hermes(profile: str, profiles_output: str) -> bool:
+    return profile in profiles_output
+
+
 def _check_profiles(
     project_root: Path | None = None,
     *,
@@ -198,6 +213,11 @@ def _check_profiles(
 ) -> dict:
     result = {}
     config_show_cache = config_show_cache or {}
+    if project_root is None:
+        project_root = resolve_project_root()
+    worker_profile, orchestrator_profile, _ = resolve_dispatch_profiles(
+        read_overlay_config(overlay_path(project_root))
+    )
     try:
         r = _run([HERMES_BIN, "profile", "list"])
         profiles_output = r.stdout
@@ -206,11 +226,19 @@ def _check_profiles(
 
     for profile in _dispatch_profile_list(project_root):
         info: dict = {
-            "exists": profile in profiles_output,
+            "exists": _profile_exists_in_hermes(profile, profiles_output),
             "has_model": False,
             "model": "",
             "provider": "",
             "model_reachable": None,
+            "reasoning_effort": "medium",
+            "reasoning_effort_configured": False,
+            "reasoning_effort_source": "default",
+            "recommended_reasoning_effort": recommended_reasoning_effort_for_profile(
+                profile,
+                orchestrator_profile=orchestrator_profile,
+                worker_profile=worker_profile,
+            ),
         }
         if info["exists"]:
             stdout = _profile_config_show(
@@ -222,6 +250,9 @@ def _check_profiles(
                 info["model"] = model_cfg.get("default", "")
             if model_cfg.get("provider"):
                 info["provider"] = model_cfg["provider"]
+
+            reasoning = read_reasoning_effort_from_config_show(stdout)
+            info.update(reasoning)
 
             if info["has_model"] and probe_models:
                 cache_key = f"model_reachable:{profile}"
@@ -565,6 +596,94 @@ async def coding_agent_models(request: Request):
     return list_models_for_binary(binary, _run_coding_agent_cli)
 
 
+@router.put("/profiles/{profile_name}")
+async def put_profile_settings(profile_name: str, request: Request):
+    """PUT /api/plugins/kanban-advanced/profiles/{profile_name}"""
+    profile = profile_name.strip()
+    if not profile:
+        raise HTTPException(status_code=400, detail="profile_name is required")
+
+    project_root = resolve_project_root()
+    config = _read_config(project_root)
+    worker_profile, orchestrator_profile, _ = resolve_dispatch_profiles(config)
+    allowed = {worker_profile, orchestrator_profile}
+    if profile not in allowed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Profile must be a dispatch profile: {', '.join(sorted(allowed))}",
+        )
+
+    try:
+        r = _run([HERMES_BIN, "profile", "list"])
+        profiles_output = r.stdout
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if not _profile_exists_in_hermes(profile, profiles_output):
+        raise HTTPException(status_code=404, detail=f"Hermes profile not found: {profile}")
+
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
+
+    stdout = _profile_config_show(profile)
+    existing_model = read_model_config_from_config_show(stdout)
+    try:
+        payload = parse_profile_update_payload(body, existing_model=existing_model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    hermes_home = resolve_hermes_home(project_root)
+    env = _hermes_subprocess_env(hermes_home)
+
+    if payload.get("model"):
+        model_cfg = {
+            "default": payload["model"],
+            "provider": payload.get("provider", ""),
+        }
+        ok, err = apply_model_config_to_profile(
+            _run, HERMES_BIN, profile, model_cfg, env=env
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=500,
+                detail=err or "Failed to update profile model",
+            )
+
+    if payload.get("reasoning_effort"):
+        ok, err = apply_reasoning_effort_to_profile(
+            _run,
+            HERMES_BIN,
+            profile,
+            payload["reasoning_effort"],
+            env=env,
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=500,
+                detail=err or "Failed to update agent.reasoning_effort",
+            )
+
+    _invalidate_profile_probe_cache(profile)
+
+    stdout = _profile_config_show(profile)
+    model_cfg = read_model_config_from_config_show(stdout)
+    reasoning = read_reasoning_effort_from_config_show(stdout)
+    return {
+        "ok": True,
+        "profile": profile,
+        "model": {
+            "provider": model_cfg.get("provider", ""),
+            "default": model_cfg.get("default", ""),
+        },
+        "reasoning_effort": reasoning.get("reasoning_effort", "medium"),
+        "reasoning_effort_configured": reasoning.get(
+            "reasoning_effort_configured", False
+        ),
+    }
+
+
 def _append_coding_agent_cli_log(
     output: list[str],
     binary: str,
@@ -697,6 +816,18 @@ async def init(request: Request):
                     output.append(f"   !  Skipped: active profile has no model in config.yaml")
             except Exception as e:
                 output.append(f"   !  Skipped: {e}")
+
+    # Reasoning effort defaults (agent.reasoning_effort) when unset
+    for profile in dispatch_profiles:
+        seed_default_reasoning_effort_for_profile(
+            _run,
+            HERMES_BIN,
+            profile,
+            orchestrator_profile=orchestrator_profile,
+            worker_profile=worker_profile,
+            env=init_env,
+            log=output.append,
+        )
 
     # Max turns
     current_turns = _get_max_turns(project_root)

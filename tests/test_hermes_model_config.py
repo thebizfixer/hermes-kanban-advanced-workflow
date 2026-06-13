@@ -7,12 +7,19 @@ import unittest
 from pathlib import Path
 
 from plugin.hermes_model_config import (
+    DEFAULT_REASONING_EFFORT,
+    apply_reasoning_effort_to_profile,
     config_path_from_show,
     normalize_provider_id,
+    normalize_reasoning_effort,
     parse_model_section,
+    parse_profile_update_payload,
     profile_has_model_config,
     read_model_config_from_config_show,
     read_model_config_from_yaml,
+    read_reasoning_effort_from_yaml,
+    recommended_reasoning_effort_for_profile,
+    seed_default_reasoning_effort_for_profile,
 )
 
 
@@ -91,6 +98,131 @@ class TestHermesModelConfig(unittest.TestCase):
             {"provider": "Nous Portal", "default": "stepfun/step-3.7-flash:free"}
         )
         self.assertEqual(cfg["provider"], "nous")
+
+    def test_normalize_reasoning_effort(self) -> None:
+        self.assertEqual(normalize_reasoning_effort("HIGH"), "high")
+        self.assertIsNone(normalize_reasoning_effort("turbo"))
+
+    def test_read_reasoning_effort_from_yaml_agent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text(
+                "agent:\n  reasoning_effort: high\n",
+                encoding="utf-8",
+            )
+            info = read_reasoning_effort_from_yaml(path)
+            self.assertEqual(info["reasoning_effort"], "high")
+            self.assertTrue(info["reasoning_effort_configured"])
+            self.assertEqual(info["reasoning_effort_source"], "agent")
+
+    def test_read_reasoning_effort_from_yaml_legacy_thinking(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text(
+                "model:\n  thinking: low\n",
+                encoding="utf-8",
+            )
+            info = read_reasoning_effort_from_yaml(path)
+            self.assertEqual(info["reasoning_effort"], "low")
+            self.assertEqual(info["reasoning_effort_source"], "legacy_model_thinking")
+
+    def test_read_reasoning_effort_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("model:\n  default: gpt-5\n", encoding="utf-8")
+            info = read_reasoning_effort_from_yaml(path)
+            self.assertEqual(info["reasoning_effort"], DEFAULT_REASONING_EFFORT)
+            self.assertFalse(info["reasoning_effort_configured"])
+
+    def test_recommended_reasoning_effort_for_profile(self) -> None:
+        self.assertEqual(
+            recommended_reasoning_effort_for_profile(
+                "kanban-advanced-orchestrator",
+                orchestrator_profile="kanban-advanced-orchestrator",
+                worker_profile="kanban-advanced-worker",
+            ),
+            "high",
+        )
+        self.assertEqual(
+            recommended_reasoning_effort_for_profile(
+                "kanban-advanced-worker",
+                orchestrator_profile="kanban-advanced-orchestrator",
+                worker_profile="kanban-advanced-worker",
+            ),
+            "medium",
+        )
+
+    def test_parse_profile_update_payload_reasoning_only(self) -> None:
+        payload = parse_profile_update_payload(
+            {"reasoning_effort": "high"},
+            existing_model={"default": "gpt-5", "provider": "openrouter"},
+        )
+        self.assertEqual(payload["reasoning_effort"], "high")
+        self.assertNotIn("model", payload)
+
+    def test_parse_profile_update_payload_requires_provider_for_new_model(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_profile_update_payload({"model": "gpt-5"}, existing_model={})
+
+    def test_apply_reasoning_effort_to_profile(self) -> None:
+        calls: list[list[str]] = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+
+            class Result:
+                returncode = 0
+                stdout = ""
+                stderr = ""
+
+            return Result()
+
+        ok, err = apply_reasoning_effort_to_profile(
+            fake_run, "hermes", "kanban-advanced-worker", "medium"
+        )
+        self.assertTrue(ok)
+        self.assertEqual(err, "")
+        self.assertEqual(
+            calls[0],
+            [
+                "hermes",
+                "-p",
+                "kanban-advanced-worker",
+                "config",
+                "set",
+                "agent.reasoning_effort",
+                "medium",
+            ],
+        )
+
+    def test_seed_default_reasoning_effort_for_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.yaml"
+            path.write_text("model:\n  default: gpt-5\n", encoding="utf-8")
+            show_stdout = f"Config: {path}\n"
+            calls: list[list[str]] = []
+
+            def fake_run(cmd, **kwargs):
+                calls.append(cmd)
+
+                class Result:
+                    returncode = 0
+                    stdout = show_stdout
+                    stderr = ""
+
+                return Result()
+
+            seeded = seed_default_reasoning_effort_for_profile(
+                fake_run,
+                "hermes",
+                "kanban-advanced-orchestrator",
+                orchestrator_profile="kanban-advanced-orchestrator",
+                worker_profile="kanban-advanced-worker",
+            )
+            self.assertEqual(seeded, "high")
+            self.assertTrue(
+                any("agent.reasoning_effort" in c for c in calls),
+            )
 
 
 if __name__ == "__main__":

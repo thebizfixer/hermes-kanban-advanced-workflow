@@ -315,10 +315,15 @@ python hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan
 
 Verifies goal-card acceptance criteria, scenario tags, and budget limits before attestation. Counts structured YAML (`workstreams[].goal_card`) and standalone `goal_card: true` lines under `###` sections only — **not** markdown table prose containing `` `goal_card: true` ``.
 
-## Anchor verification (`verify_anchors.sh`)
+## Anchor verification (`verify_anchors.py` / `verify_anchors.sh`)
 
 ```bash
-bash hermes-kanban-advanced-workflow/scripts/verify_anchors.sh
+python3 hermes-kanban-advanced-workflow/scripts/verify_anchors.py --plan <plan>.md
+# or: bash hermes-kanban-advanced-workflow/scripts/verify_anchors.sh --plan <plan>.md
 ```
 
-Verifies plan anchor points (line numbers, function names, file paths) against current HEAD.
+Parses plan markdown for line-number anchors (`L123`, backtick file paths, `**File:**`) and verifies against current HEAD. Implementation is Python (`scripts/lib/plan_parse.py`); the `.sh` entrypoint is a thin wrapper for skill/cron compatibility.
+
+## Plan parsing SSOT (`scripts/lib/plan_parse.py`)
+
+Shared by `kanban_decompose.py`, `verify_optimization.sh` (card ordinals / workstream checks), and `plan_memory_gate_check.py`. Portable on GNU and BSD grep hosts — no `grep -P`.

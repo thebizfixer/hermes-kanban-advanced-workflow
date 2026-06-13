@@ -1,0 +1,1 @@
+E:/repo/.hermes/worktrees/wt-1  abc1234 [feature/kanban-card-1]  /path

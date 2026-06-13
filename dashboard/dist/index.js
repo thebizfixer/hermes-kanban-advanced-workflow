@@ -132,6 +132,16 @@
   function apiInit(data) { return apiFetch("/api/plugins/kanban-advanced/init", { method: "POST", body: JSON.stringify(data) }); }
   function apiSave(data) { return apiFetch("/api/plugins/kanban-advanced/save", { method: "POST", body: JSON.stringify(data) }); }
   function apiPluginUpdate() { return apiFetch("/api/plugins/kanban-advanced/update", { method: "POST" }); }
+  function apiPutProfile(profileName, data) {
+    return apiFetch("/api/plugins/kanban-advanced/profiles/" + encodeURIComponent(profileName), {
+      method: "PUT",
+      body: JSON.stringify(data)
+    });
+  }
+
+  var REASONING_EFFORT_LEVELS = [
+    "none", "low", "minimal", "medium", "high", "xhigh"
+  ];
 
   var POLICY_PROFILES = [
     { value: "balanced", label: "balanced — block violations (default)" },
@@ -190,6 +200,8 @@
     var _useState19 = useState(null), codingAgentModelOptions = _useState19[0], setCodingAgentModelOptions = _useState19[1];
     var _useState20 = useState(""), codingAgentModelQuery = _useState20[0], setCodingAgentModelQuery = _useState20[1];
     var _useState21 = useState(null), pendingCodingAgentModel = _useState21[0], setPendingCodingAgentModel = _useState21[1];
+    var _useState22 = useState("medium"), pendingReasoningEffort = _useState22[0], setPendingReasoningEffort = _useState22[1];
+    var _useState23 = useState("medium"), initialReasoningEffort = _useState23[0], setInitialReasoningEffort = _useState23[1];
 
     function resolvedCodingBinary() {
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
@@ -364,6 +376,11 @@
     // ── Model selector ──
     function openModelPicker(profileName) {
       setEditingProfile(profileName);
+      var profileInfo = status && status.profiles && status.profiles[profileName];
+      var effort = (profileInfo && profileInfo.reasoning_effort) || "medium";
+      setPendingReasoningEffort(effort);
+      setInitialReasoningEffort(effort);
+      setSelectedModel(null);
       if (!modelOptions) {
         apiFetch("/api/model/options").then(function (opts) {
           setModelOptions(opts);
@@ -391,18 +408,37 @@
       setPendingCodingAgentModel(null);
     }
 
-    function setProfileModel(profileName, provider, model) {
+    function profileEffortSuffix(info) {
+      if (!info || !info.reasoning_effort) return "";
+      if (info.reasoning_effort === "medium" && info.reasoning_effort_configured === false) return "";
+      return " · " + info.reasoning_effort;
+    }
+
+    function profileApplyEnabled() {
+      var reasoningDirty = pendingReasoningEffort !== initialReasoningEffort;
+      return Boolean(selectedModel) || reasoningDirty;
+    }
+
+    function applyProfileSettings(profileName) {
+      var body = {};
+      if (selectedModel) {
+        body.provider = selectedModel.provider;
+        body.model = selectedModel.model;
+      }
+      if (pendingReasoningEffort !== initialReasoningEffort) {
+        body.reasoning_effort = pendingReasoningEffort;
+      }
+      if (!Object.keys(body).length) return;
+
       setChangingModel(true);
-      apiFetch("/api/profiles/" + encodeURIComponent(profileName) + "/model", {
-        method: "PUT",
-        body: JSON.stringify({ provider: provider, model: model })
-      }).then(function () {
+      apiPutProfile(profileName, body).then(function () {
         setEditingProfile(null);
+        setSelectedModel(null);
         setChangingModel(false);
         reloadStatus();
       }).catch(function (e) {
         setChangingModel(false);
-        addLines(["ERROR setting model: " + e.message], "line-err");
+        addLines(["ERROR updating profile: " + e.message], "line-err");
       });
     }
 
@@ -440,26 +476,28 @@
 
     function profileBadge(info) {
       var inConfig = info && info.exists && info.has_model;
+      var effort = profileEffortSuffix(info);
       var dotColor, labelText, labelColor;
+      var modelLabel = (info && info.model) || "?";
       if (!inConfig) {
         dotColor = "#ef4444";
         labelText = info && info.exists ? "no model" : "not found";
         labelColor = "#f87171";
       } else if (info.model_reachable === true) {
         dotColor = "#22c55e";
-        labelText = "reachable (" + (info.model || "?") + ")";
+        labelText = "reachable (" + modelLabel + effort + ")";
         labelColor = "#22c55e";
       } else if (info.model_reachable === false) {
         dotColor = "#eab308";
-        labelText = "auth stale (" + (info.model || "?") + ")";
+        labelText = "auth stale (" + modelLabel + effort + ")";
         labelColor = "#eab308";
       } else if (statusProbing) {
         dotColor = "#94a3b8";
-        labelText = "checking (" + (info.model || "?") + ")";
+        labelText = "checking (" + modelLabel + effort + ")";
         labelColor = "#94a3b8";
       } else {
         dotColor = "#eab308";
-        labelText = "configured (" + (info.model || "?") + ")";
+        labelText = "configured (" + modelLabel + effort + ")";
         labelColor = "#eab308";
       }
       return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "6px" } },
@@ -612,7 +650,7 @@
                   );
                 });
               })(),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-auto pt-2" }, "Created by bootstrap if missing. Model config copied from current profile. Click profile to change model.")
+              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-auto pt-2" }, "Created by bootstrap if missing. Click a profile to change model and reasoning effort.")
             )
           ),
 
@@ -653,19 +691,16 @@
               className: "relative w-full max-w-sm border border-border bg-card shadow-2xl flex flex-col overflow-hidden",
               onClick: function (e) { e.stopPropagation(); }
             },
-              // Close button
               React.createElement("button", {
                 onClick: function () { setEditingProfile(null); setSelectedModel(null); },
                 className: "absolute right-2 top-2 w-7 h-7 flex items-center justify-center rounded-md hover:bg-accent/20 text-muted-foreground hover:text-foreground transition-colors z-10",
                 "aria-label": "Close"
               }, "✕"),
 
-              // Header
               React.createElement("header", { className: "p-4 pb-3 border-b border-border" },
-                React.createElement("h2", { className: "text-sm font-semibold tracking-wide" }, "Change model — " + editingProfile)
+                React.createElement("h2", { className: "text-sm font-semibold tracking-wide" }, "Profile settings — " + editingProfile)
               ),
 
-              // Dropdown list
               React.createElement("div", { className: "overflow-y-auto max-h-64" },
                 !modelOptions ? React.createElement("div", { className: "p-4 text-xs text-muted-foreground" }, "Loading…")
                 : modelOptions.error ? React.createElement("div", { className: "p-4 text-xs text-red-400" }, "Could not load")
@@ -697,16 +732,49 @@
                   })
               ),
 
-              // Footer
+              React.createElement("div", { className: "border-t border-border px-4 py-3 space-y-2" },
+                React.createElement(Label, { className: "text-xs", htmlFor: "profile-reasoning-effort" }, "Reasoning effort"),
+                React.createElement("select", {
+                  id: "profile-reasoning-effort",
+                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm",
+                  value: pendingReasoningEffort,
+                  "aria-label": "Reasoning effort for " + editingProfile,
+                  "aria-describedby": "profile-reasoning-hint profile-reasoning-footnote",
+                  onChange: function (e) { setPendingReasoningEffort(e.target.value); }
+                },
+                  REASONING_EFFORT_LEVELS.map(function (level) {
+                    return React.createElement("option", { key: level, value: level }, level);
+                  })
+                ),
+                React.createElement("p", {
+                  id: "profile-reasoning-hint",
+                  className: "text-[11px] text-muted-foreground"
+                },
+                  "Recommended for this role: ",
+                  React.createElement("span", { className: "font-medium text-foreground" },
+                    (status && status.profiles && status.profiles[editingProfile]
+                      && status.profiles[editingProfile].recommended_reasoning_effort) || "medium"
+                  ),
+                  ". Applies to new sessions on this profile."
+                ),
+                React.createElement("p", {
+                  id: "profile-reasoning-footnote",
+                  className: "text-[11px] text-muted-foreground leading-snug"
+                }, "Supported on providers with extended thinking (e.g. OpenRouter, Nous Portal). Other providers may ignore this setting.")
+              ),
+
               React.createElement("footer", { className: "border-t border-border p-3 flex items-center justify-between gap-2" },
-                React.createElement("span", { className: "text-[11px] text-muted-foreground" }, selectedModel ? selectedModel.model : "Select a model"),
-                React.createElement("div", { className: "flex items-center gap-1.5" },
+                React.createElement("span", { className: "text-[11px] text-muted-foreground truncate" },
+                  (selectedModel ? selectedModel.model : ((status && status.profiles && status.profiles[editingProfile] && status.profiles[editingProfile].model) || "current model"))
+                  + " · " + pendingReasoningEffort
+                ),
+                React.createElement("div", { className: "flex items-center gap-1.5 shrink-0" },
                   React.createElement(Button, { variant: "outline", size: "sm", onClick: function () { setEditingProfile(null); setSelectedModel(null); } }, "Cancel"),
                   React.createElement(Button, {
                     size: "sm",
-                    disabled: !selectedModel || changingModel,
-                    onClick: function () { if (selectedModel) setProfileModel(editingProfile, selectedModel.provider, selectedModel.model); }
-                  }, changingModel ? "…" : "Switch")
+                    disabled: !profileApplyEnabled() || changingModel,
+                    onClick: function () { applyProfileSettings(editingProfile); }
+                  }, changingModel ? "…" : "Apply")
                 )
               )
             )

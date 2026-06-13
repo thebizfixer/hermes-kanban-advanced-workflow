@@ -23,7 +23,8 @@ PLAN=""
 STRICT=false
 PROFILE_OVERRIDE=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ANCHOR_SCRIPT="$SCRIPT_DIR/verify_anchors.sh"
+ANCHOR_SCRIPT="$SCRIPT_DIR/verify_anchors.py"
+PLAN_PARSE="$SCRIPT_DIR/lib/plan_parse.py"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -83,8 +84,8 @@ PLAN_DIR=$(dirname "$PLAN")
 
 # ── 1. Anchor points verified ───────────────────────────────────────────
 echo "1. Anchor points verified"
-if [[ -x "$ANCHOR_SCRIPT" ]]; then
-    ANCHOR_OUTPUT=$(bash "$ANCHOR_SCRIPT" --plan "$PLAN" 2>&1) || ANCHOR_EXIT=$?
+if [[ -x "$ANCHOR_SCRIPT" ]] || [[ -f "$ANCHOR_SCRIPT" ]]; then
+    ANCHOR_OUTPUT=$(python3 "$ANCHOR_SCRIPT" --plan "$PLAN" 2>&1) || ANCHOR_EXIT=$?
     ANCHOR_FAILS=$(echo "$ANCHOR_OUTPUT" | grep -c '✗ FAIL' || true)
     ANCHOR_WARNS=$(echo "$ANCHOR_OUTPUT" | grep -c '⚠ WARN' || true)
     if [[ ${ANCHOR_FAILS:-0} -gt 0 ]]; then
@@ -157,22 +158,7 @@ fi
 
 # ── 6. Contradictions checked ───────────────────────────────────────────
 echo "6. Cross-section contradictions checked"
-# Heuristic: check if two sections reference the same file with conflicting directives
-SAME_FILE_COUNT=0
-CONFLICT_FLAG=0
-# Extract Files: references from each section
-while IFS= read -r section; do
-    SECTION_FILES=$(echo "$section" | grep -oP 'Files:\s*\K[^.]*' | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sort -u)
-    for f in $SECTION_FILES; do
-        [[ -z "$f" ]] && continue
-        # Check if this file appears in multiple workstreams
-        APPEARANCES=$(echo "$PLAN_CONTENT" | grep -c "Files:.*$f" || true)
-        if [[ "$APPEARANCES" -gt 1 ]]; then
-            # Not necessarily a conflict — but flag for review
-            CONFLICT_FLAG=1
-        fi
-    done
-done <<< "$(echo "$PLAN_CONTENT" | awk '/^### Workstream/,/^---$|^### Workstream|^## /')"
+CONFLICT_FLAG=$(python3 "$PLAN_PARSE" workstream-conflict --plan "$PLAN" 2>/dev/null || echo "0")
 
 if [[ "$CONFLICT_FLAG" -eq 1 ]]; then
     check_warn "Same file appears in multiple workstreams — verify no conflicting changes. Run verify_contradictions.sh if available."
@@ -284,25 +270,16 @@ else
     if [[ "${BAD_LABELS:-0}" -gt 0 ]]; then
         check_fail "Kanban optimization uses non-standard headings ($BAD_LABELS) — use #### Card 1, Card 2, … integers only"
     else
-        mapfile -t APPEAR_ORDER < <(echo "$OPT_SECTION" | grep -oP '^#### Card \K\d+' || true)
-        if [[ ${#APPEAR_ORDER[@]} -eq 0 ]]; then
+        ORDINAL_JSON=$(python3 "$PLAN_PARSE" card-ordinals --plan "$PLAN" --json 2>/dev/null || echo '{"ordinals":[],"error":"parse failed"}')
+        ORDINAL_ERR=$(echo "$ORDINAL_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('error') or '')" 2>/dev/null || echo "parse failed")
+        APPEAR_ORDER=($(echo "$ORDINAL_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(' '.join(str(x) for x in d.get('ordinals',[])))" 2>/dev/null || true))
+        if [[ -n "$ORDINAL_ERR" ]]; then
+            check_fail "Card ordinals out of sequence: $ORDINAL_ERR"
+        elif [[ ${#APPEAR_ORDER[@]} -eq 0 ]]; then
             check_fail "Kanban optimization has no '#### Card N' headings"
         else
-            ORDINAL_FAIL=""
-            expected=1
-            for n in "${APPEAR_ORDER[@]}"; do
-                if [[ "$n" -ne "$expected" ]]; then
-                    ORDINAL_FAIL="expected Card $expected next, found Card $n (arrange cards first, then renumber 1..N in file order)"
-                    break
-                fi
-                ((expected++))
-            done
-            if [[ -n "$ORDINAL_FAIL" ]]; then
-                check_fail "Card ordinals out of sequence: $ORDINAL_FAIL"
-            else
-                last="${APPEAR_ORDER[-1]}"
-                check_pass "Kanban optimization: Card 1..$last sequential (${#APPEAR_ORDER[@]} cards, dispatch order)"
-            fi
+            last="${APPEAR_ORDER[-1]}"
+            check_pass "Kanban optimization: Card 1..$last sequential (${#APPEAR_ORDER[@]} cards, dispatch order)"
         fi
     fi
 fi

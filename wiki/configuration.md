@@ -95,35 +95,38 @@ Preflight §5 checks this. Missing config → PR001 error, blocking.
 
 ### Thinking / reasoning effort
 
+Hermes stores reasoning effort per profile as **`agent.reasoning_effort`** (`none` | `low` | `minimal` | `medium` | `high` | `xhigh`). Default when unset: `medium`. Toggle at runtime in chat with `/reasoning [level]`.
+
 Set the reasoning effort per profile based on its role:
 
-| Profile | Thinking | Rationale |
-|---------|----------|-----------|
+| Profile | Reasoning effort | Rationale |
+|---------|------------------|-----------|
 | **kanban-advanced-orchestrator** | `high` | Plans, audits, reconciles — needs depth over speed |
 | **kanban-advanced-worker** | `medium` | Supervises agents, runs eval chain — balance of speed and accuracy |
-| **Coding agent** | `low` / off | Code generation — speed over depth; the worker verifies output |
+| **Coding agent** | model / CLI default | Code generation — speed over depth; the worker verifies output |
 
-Dispatch profiles are created by init with `--no-skills` (no Hermes bundled skills). SOUL and role skills: [[bootstrap]].
+Dispatch profiles are created by init with `--no-skills` (no Hermes bundled skills). SOUL and role skills: [[bootstrap]]. Bootstrap seeds orchestrator/worker defaults when `agent.reasoning_effort` is absent.
 
-Configure in each profile's `config.yaml`:
-```yaml
-# kanban-advanced-orchestrator
-model:
-  default: <model-name>
-  provider: <provider-name>
-  thinking: high
+**Dashboard:** Kanban-Advanced tab → **Profiles** → click a profile → set model and **Reasoning effort** in the modal. See [`docs/reference/dashboard-profile-reasoning.md`](../docs/reference/dashboard-profile-reasoning.md).
 
-# kanban-advanced-worker
-model:
-  default: <model-name>
-  provider: <provider-name>
-  thinking: medium
-
-# coding agent (passed via agent -p --thinking or equivalent)
-# agent -p "..." --thinking low
+**CLI:**
+```bash
+hermes config set agent.reasoning_effort high --profile kanban-advanced-orchestrator
+hermes config set agent.reasoning_effort medium --profile kanban-advanced-worker
 ```
 
-If the coding agent CLI doesn't support a `--thinking` flag, set it via the model configuration or use a model optimized for speed rather than deep reasoning.
+Example `config.yaml` fragment:
+```yaml
+agent:
+  reasoning_effort: high
+model:
+  default: <model-name>
+  provider: <provider-name>
+```
+
+Legacy `model.thinking` is read for display only if present; new writes use `agent.reasoning_effort`.
+
+Coding-agent binary reasoning is separate — configure via model choice or vendor CLI/config, not Hermes profile fields.
 
 **For parallel fan-out with multiple providers, see [[provider-strategy]].**
 

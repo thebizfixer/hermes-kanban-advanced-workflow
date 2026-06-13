@@ -46,8 +46,27 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
   "policy_profile": "balanced",
   "max_turns": 180,
   "profiles": {
-    "orchestrator": { "exists": true, "has_model": true, "model": "deepseek-v4-pro" },
-    "worker": { "exists": true, "has_model": true, "model": "deepseek-v4-pro" }
+    "kanban-advanced-orchestrator": {
+      "exists": true,
+      "has_model": true,
+      "model": "anthropic/claude-opus-4.6",
+      "provider": "openrouter",
+      "model_reachable": true,
+      "reasoning_effort": "high",
+      "reasoning_effort_configured": true,
+      "reasoning_effort_source": "agent",
+      "recommended_reasoning_effort": "high"
+    },
+    "kanban-advanced-worker": {
+      "exists": true,
+      "has_model": true,
+      "model": "anthropic/claude-sonnet-4.6",
+      "provider": "openrouter",
+      "reasoning_effort": "medium",
+      "reasoning_effort_configured": false,
+      "reasoning_effort_source": "default",
+      "recommended_reasoning_effort": "medium"
+    }
   },
   "gateway": {
     "running": true,
@@ -78,13 +97,55 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
 | `plugin_update_available` | `true` when `plugin_behind > 0` |
 | `plugin_local_changes` | Porcelain dirty count in `plugin_install_path`; `null` when not checkable |
 
-`profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
+`profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. `profiles.*.reasoning_effort` reflects `agent.reasoning_effort` from the profile `config.yaml` (or Hermes default `medium` when unset). `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
 
 **Bootstrap limitation:** Init/Save smoke is **advisory** — HTTP 200 / successful init can return with `! coding CLI auth/model check failed` in `output`. Bootstrap writes `KANBAN_CODING_AGENT*` and `HOME` to `.env` but **does not** add vendor API keys. **Preflight** and **pre-dispatch gate** block decomposition when headless auth fails. See `plugin/data/references/coding-agent-auth.md`.
 
 **Operator provisioning:** Init merges kanban paths into `.worktreeinclude` only — not application `.env`, `.venv/`, or `node_modules/`. See `plugin/data/references/operator-provisioning.md`.
 
-Use `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` to populate the dashboard model picker. See `docs/reference/coding-agents.md` and `plugin/data/references/coding-agent-cli-invocation.md`.
+Use `GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent` to populate the dashboard coding-agent model picker. See `docs/reference/coding-agents.md` and `plugin/data/references/coding-agent-cli-invocation.md`.
+
+Profile **reasoning effort** display and modal editing: [`docs/reference/dashboard-profile-reasoning.md`](../docs/reference/dashboard-profile-reasoning.md).
+
+## `PUT /api/plugins/kanban-advanced/profiles/{profile_name}`
+
+See [`docs/reference/dashboard-profile-reasoning.md`](../docs/reference/dashboard-profile-reasoning.md) for full contract.
+
+Update a dispatch profile's Hermes model and/or `agent.reasoning_effort`. Writes via `hermes -p <profile> config set` (same durability as the Hermes dashboard model picker).
+
+**Path:** `profile_name` must be a configured dispatch profile (`kanban-advanced-orchestrator` or `kanban-advanced-worker` by default).
+
+**Request body** (JSON; at least one field required):
+
+```json
+{
+  "provider": "openrouter",
+  "model": "anthropic/claude-opus-4.6",
+  "reasoning_effort": "high"
+}
+```
+
+| Field | Behavior |
+|-------|----------|
+| `model` | Sets `model.default`. Requires `provider` when the profile has no existing provider. |
+| `provider` | Sets `model.provider` (normalized to canonical Hermes provider IDs). |
+| `reasoning_effort` | Sets `agent.reasoning_effort` (`none`, `low`, `minimal`, `medium`, `high`, `xhigh`). |
+
+**Response 200:**
+
+```json
+{
+  "ok": true,
+  "profile": "kanban-advanced-orchestrator",
+  "model": { "provider": "openrouter", "default": "anthropic/claude-opus-4.6" },
+  "reasoning_effort": "high",
+  "reasoning_effort_configured": true
+}
+```
+
+**Errors:** `400` invalid body/level; `404` unknown or non-dispatch profile; `500` `hermes config set` failure (upgrade Hermes if `agent.reasoning_effort` is unsupported).
+
+Invalidates cached `model_reachable` probe for that profile. Changes apply to **new** `hermes -p` sessions on that profile.
 
 When `config_exists` is false, the dashboard shows the bootstrap form.
 

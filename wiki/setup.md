@@ -34,13 +34,13 @@
 
    **Re-init after `hermes update`:** Safe to run again — existing `working_branch` / `trigger_branch` are preserved unless you pass `--working-branch`. Bootstrap re-seeds dispatch profile SOUL/skills and re-verifies. To change the integration branch later, edit the overlay or use dashboard **Save** (not Bootstrap). If the dashboard shows the wrong branch, set `KANBAN_PROJECT_ROOT` to your app repo — see [[troubleshooting]].
 
-4. **Configure thinking effort per role** (optional, after bootstrap — see [[configuration]]):
-   - **kanban-advanced-orchestrator** → `thinking: high` (planning, auditing, reconciling)
-   - **kanban-advanced-worker** → `thinking: medium` (supervision, eval chain)
-   - **Coding agent** → `thinking: low` or off (code generation, speed over depth)
+4. **Configure reasoning effort per role** (optional — bootstrap seeds defaults when unset; dashboard **Profiles** modal also works — see [[configuration]]):
+   - **kanban-advanced-orchestrator** → `high` (planning, auditing, reconciling)
+   - **kanban-advanced-worker** → `medium` (supervision, eval chain)
+   - **Coding agent** → separate from Hermes profiles; use model/CLI defaults for workers
    ```bash
-   hermes config set model.thinking high --profile kanban-advanced-orchestrator
-   hermes config set model.thinking medium --profile kanban-advanced-worker
+   hermes config set agent.reasoning_effort high --profile kanban-advanced-orchestrator
+   hermes config set agent.reasoning_effort medium --profile kanban-advanced-worker
    ```
    Verify each dispatch profile has a valid `config.yaml` with a `model:` block:
    ```bash

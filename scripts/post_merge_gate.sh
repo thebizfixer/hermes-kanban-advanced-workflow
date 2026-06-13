@@ -5,6 +5,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_PARSE="$SCRIPT_DIR/lib/cli_output_parse.py"
 # shellcheck source=lib/kanban_config.sh
 source "$SCRIPT_DIR/lib/kanban_config.sh"
 # shellcheck source=lib/plan_paths.sh
@@ -31,7 +32,7 @@ echo "[MERGE-GATE] Running gate tests..."
 PLAN_FILE="$(resolve_plan_file "$REPO_ROOT" "$PLAN_ID" "" 2>/dev/null || true)"
 if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
   # Parse test commands from the plan
-  TEST_CMDS=$(grep -oP 'pytest[^`"]+' "$PLAN_FILE" 2>/dev/null | head -5 || true)
+  TEST_CMDS=$(python3 "$CLI_PARSE" pytest-cmds --file "$PLAN_FILE" 2>/dev/null || true)
   if [ -n "$TEST_CMDS" ]; then
     cd backend
     source .venv/bin/activate 2>/dev/null || true

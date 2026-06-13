@@ -21,10 +21,15 @@ LIB_SCRIPT_NAMES = (
     "kanban_bundle.sh",
     "worktree_include.sh",
     "plan_paths.sh",
+    "kanban_cli_parse.sh",
+    "kanban_logs.sh",
 )
 
 LIB_PYTHON_NAMES = (
     "plan_paths.py",
+    "plan_parse.py",
+    "cli_output_parse.py",
+    "governance_profile.py",
 )
 
 

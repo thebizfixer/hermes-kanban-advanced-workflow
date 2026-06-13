@@ -30,11 +30,33 @@ check "wiki dir" "test -d wiki"
 check "tests dir" "test -d tests"
 
 echo ""
-echo "=== Lib helpers (portable) ==="
-check "kanban_logs.sh" "test -f scripts/lib/kanban_logs.sh"
-check "kanban_cli_parse.sh" "test -f scripts/lib/kanban_cli_parse.sh"
-check "plan_memory_gate_check.py" "test -f scripts/lib/plan_memory_gate_check.py"
-check "no grep -oP in auto_unblock.sh" "! grep -q 'grep -oP' scripts/auto_unblock.sh"
+echo "=== Platform-neutral parsing ==="
+check "plan_parse.py" "test -f scripts/lib/plan_parse.py"
+check "cli_output_parse.py" "test -f scripts/lib/cli_output_parse.py"
+check "verify_anchors.py" "test -f scripts/verify_anchors.py"
+if command -v rg >/dev/null 2>&1; then
+  if rg 'grep -oP|grep -P' scripts/ --glob '!sanity_check.sh' 2>/dev/null \
+      | rg -v '(#.*grep -P|no grep -P|"""SSOT)' | rg -q .; then
+    echo "  [no grep -P in scripts/] FAIL"
+    rg 'grep -oP|grep -P' scripts/ --glob '!sanity_check.sh' 2>/dev/null \
+      | rg -v '(#.*grep -P|no grep -P|"""SSOT)' || true
+    FAIL=$((FAIL + 1))
+  else
+    echo "  [no grep -P in scripts/] PASS"
+    PASS=$((PASS + 1))
+  fi
+else
+  if grep -rE 'grep -oP|grep -P' scripts/ --exclude=sanity_check.sh 2>/dev/null \
+      | grep -vE '(#.*grep -P|no grep -P|"""SSOT)' >/dev/null 2>&1; then
+    echo "  [no grep -P in scripts/] FAIL"
+    grep -rE 'grep -oP|grep -P' scripts/ --exclude=sanity_check.sh 2>/dev/null \
+      | grep -vE '(#.*grep -P|no grep -P|"""SSOT)' || true
+    FAIL=$((FAIL + 1))
+  else
+    echo "  [no grep -P in scripts/] PASS"
+    PASS=$((PASS + 1))
+  fi
+fi
 check "auto_unblock uses kanban_cli_parse" "grep -q 'kanban_cli_parse.sh' scripts/auto_unblock.sh"
 
 echo ""

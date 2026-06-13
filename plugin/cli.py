@@ -47,6 +47,8 @@ from .hermes_model_config import (
     profile_has_model_config,
     read_active_model_config,
     read_model_config_from_config_show,
+    read_reasoning_effort_from_config_show,
+    seed_default_reasoning_effort_for_profile,
 )
 from .profile_bootstrap import (
     dispatch_profile_names,
@@ -319,6 +321,28 @@ def _handle_init(args) -> int:
                 print(f"   OK continuing")
             else:
                 print(f"   !  Skipped. Configure later: hermes -p {profile} model")
+
+    print()
+    print("1a-ii. Seeding default reasoning effort (when unset)...")
+    for profile in dispatch_profiles:
+        seeded = seed_default_reasoning_effort_for_profile(
+            _run,
+            HERMES_BIN,
+            profile,
+            orchestrator_profile=orchestrator_profile,
+            worker_profile=worker_profile,
+            log=print,
+        )
+        if seeded is None:
+            try:
+                r = _run([HERMES_BIN, "-p", profile, "config", "show"])
+                info = read_reasoning_effort_from_config_show(r.stdout)
+                if info.get("reasoning_effort_configured"):
+                    print(
+                        f"   OK {profile}: reasoning_effort = {info['reasoning_effort']}"
+                    )
+            except Exception:
+                print(f"   !  {profile}: could not read reasoning_effort")
 
     # ── 1b. Max turns ────────────────────────────────────────────────
     print()

@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/kanban_config.sh
+CLI_PARSE="$SCRIPT_DIR/lib/cli_output_parse.py"
 source "$SCRIPT_DIR/lib/kanban_config.sh"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
@@ -44,7 +44,7 @@ for tid in $CARD_IDS; do
     fi
     
     # Extract commit hash from completion summary
-    COMMIT=$(echo "$BODY" | grep -oP 'Commit \K[0-9a-f]{7,40}' | head -1 || true)
+    COMMIT=$(python3 "$CLI_PARSE" commit-hash --text "$BODY" 2>/dev/null || true)
     if [ -z "$COMMIT" ]; then
         # Some cards (benchmark, audit) have no commits — skip
         TITLE=$(echo "$BODY" | grep "Task $tid:" | head -1)

@@ -131,3 +131,6 @@ No special configuration needed. All scripts run natively under `bash`.
 - **Memory detection (`/proc/meminfo`, `free`):** Linux-only. `preflight.sh` uses
   `vm_stat` + `sysctl hw.pagesize` on macOS for an equivalent available-memory
   estimate. On Windows, Git Bash provides `free`.
+- **`grep -P` / PCRE:** Not supported by macOS BSD `grep`. Plan and CLI parsing
+  use `scripts/lib/plan_parse.py` and `scripts/lib/cli_output_parse.py` (no
+  `grep -oP` in governance scripts; enforced by `scripts/sanity_check.sh`).

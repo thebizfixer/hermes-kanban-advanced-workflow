@@ -16,6 +16,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CLI_PARSE="$SCRIPT_DIR/lib/cli_output_parse.py"
 
 PROFILE_OVERRIDE=""
 while [[ $# -gt 0 ]]; do
@@ -210,7 +211,7 @@ PENDING_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
     STATUS=$(hermes kanban show "$tid" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}')
     [[ "$STATUS" == "done" ]] && continue
-    PARENTS=$(hermes kanban show "$tid" 2>/dev/null | grep "parents:" | head -1 | grep -oP 't_\w+' || true)
+    PARENTS=$(hermes kanban show "$tid" 2>/dev/null | python3 "$CLI_PARSE" parents 2>/dev/null || true)
     for parent in $PARENTS; do
         PSTATUS=$(hermes kanban show "$parent" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}')
         if [[ "$PSTATUS" != "done" ]]; then
@@ -241,7 +242,7 @@ done
 echo "7. Max-retries â‰¤2 (mandatory)"
 RETRY_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    MAX_RETRIES=$(hermes kanban show "$tid" 2>/dev/null | grep "max-retries:" | head -1 | grep -oP '\d+' || echo "0")
+    MAX_RETRIES=$(hermes kanban show "$tid" 2>/dev/null | python3 "$CLI_PARSE" max-retries 2>/dev/null || echo "0")
     if [ "$MAX_RETRIES" -gt 2 ] 2>/dev/null || [ "$MAX_RETRIES" -eq 0 ] 2>/dev/null; then
         CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
         if governance_warnings_block; then
@@ -256,7 +257,7 @@ done
 
 # â”€â”€ 8. Orphaned agent processes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 echo "8. Orphaned agent check"
-ORPHANS=$(ps aux | grep 'kanban task t_' | grep -v grep | awk '{print $NF}' | grep -oP 't_\w+' | sort -u || true)
+ORPHANS=$(ps aux | grep 'kanban task t_' | grep -v grep | awk '{print $NF}' | python3 "$CLI_PARSE" task-ids 2>/dev/null | sort -u || true)
 ORPHAN_ISSUES=0
 for tid in $ORPHANS; do
     if ! hermes kanban show "$tid" &>/dev/null; then
