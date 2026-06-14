@@ -150,7 +150,7 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$F
 | --- | --- | --- |
 | Dashboard **Coding Agent** dot | External CLI smoke (`say ok`) | Project root / API process |
 | Dashboard **profile** dots | Hermes LLM backend (`hermes chat -q "say ok"`) | Hermes profile config — **not** the coding CLI |
-| Preflight / pre-dispatch gate | `check_coding_agent_cli.py` (configured binary; 45s default, Cursor also runs plain `--trust` probe first) | Project root before decomposition |
+| Preflight / pre-dispatch gate | `check_coding_agent_cli.py` (configured binary; **15s** default fast smoke, single plain `--trust` probe for Cursor; use `--full` for 180s dashboard parity) | Project root before decomposition |
 | Worker Step 3 | `coding_agent_invoke.sh smoke` | Card **worktree** after `worktree_setup.sh` |
 | Worker Step 4 | `coding_agent_invoke.sh dispatch` | Same worktree; full prompt + stdout capture |
 

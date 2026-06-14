@@ -120,7 +120,7 @@ def main() -> int:
     last_stderr = ""
     timed_out = False
 
-    def run_capture(cmd: list[str], timeout: int = 90):
+    def run_capture(cmd: list[str], timeout: int = AUTH_PROBE_TIMEOUT_SECONDS):
         nonlocal last_stdout, last_stderr, timed_out
         try:
             result = _run(cmd, timeout, env)
@@ -133,8 +133,11 @@ def main() -> int:
             last_stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else ""
             raise
 
+    fast = not args.full
     try:
-        reachable = smoke_test_coding_agent(binary, model, run_capture, timeout=timeout)
+        reachable = smoke_test_coding_agent(
+            binary, model, run_capture, timeout=timeout, fast=fast
+        )
     except subprocess.TimeoutExpired:
         reachable = False
 
@@ -152,6 +155,11 @@ def main() -> int:
         timed_out=timed_out,
         run=run_capture,
     )
+    if timed_out and not args.full:
+        detail += (
+            " Override (audit-noted): export PREFLIGHT_SKIP_CODING_AGENT_CLI=1 "
+            "and re-run preflight/handoff."
+        )
     print(detail, file=sys.stderr)
     return 1
 

@@ -172,12 +172,30 @@ Tip: use --model <id>
                 return SimpleNamespace(returncode=0, stdout="ok", stderr="")
             return SimpleNamespace(returncode=0, stdout='{"is_error":false}', stderr="")
 
-        result = smoke_test_coding_agent("agent", CODING_AGENT_MODEL_AUTO, _run)
+        result = smoke_test_coding_agent(
+            "agent", CODING_AGENT_MODEL_AUTO, _run, fast=False
+        )
         self.assertTrue(result)
         self.assertGreaterEqual(len(calls), 2)
         self.assertNotIn("--output-format", calls[0])
         self.assertIn("--trust", calls[0])
         self.assertIn("--output-format", calls[1])
+
+    @patch("plugin.coding_agent.binary_on_path", return_value=True)
+    @patch("plugin.coding_agent.shutil.which", return_value="/usr/bin/agent")
+    def test_agent_fast_smoke_single_plain_probe(self, _which, _on_path) -> None:
+        calls: list[list[str]] = []
+
+        def _run(cmd, timeout=15):
+            calls.append(list(cmd))
+            return SimpleNamespace(returncode=0, stdout="ok", stderr="")
+
+        result = smoke_test_coding_agent(
+            "agent", CODING_AGENT_MODEL_AUTO, _run, fast=True
+        )
+        self.assertTrue(result)
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("--output-format", calls[0])
 
 
 class TestCodingAgentSmokeLive(unittest.TestCase):

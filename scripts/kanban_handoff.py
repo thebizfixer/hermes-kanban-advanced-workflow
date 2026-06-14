@@ -252,6 +252,21 @@ def _parse_gate_result(stdout: str, stderr: str) -> tuple[int, int] | None:
     return int(m.group(1)), int(m.group(2))
 
 
+_CODING_AGENT_CLI_SKIP_HINT = (
+    " If the coding-agent CLI check is blocking, export "
+    "PREFLIGHT_SKIP_CODING_AGENT_CLI=1 and retry."
+)
+
+
+def _gate_timeout_hint(message: str) -> str:
+    lowered = message.lower()
+    if "timeout" in lowered or "timed out" in lowered or "124" in lowered:
+        return _CODING_AGENT_CLI_SKIP_HINT
+    if "coding_agent_cli" in lowered or "coding agent cli" in lowered:
+        return _CODING_AGENT_CLI_SKIP_HINT
+    return ""
+
+
 def _run_pre_dispatch_gate(
     plan_id: str,
     repo_root: Path,
@@ -291,9 +306,14 @@ def _run_pre_dispatch_gate(
             return stamp, gate_script
         summary = (r.stdout + r.stderr).strip().splitlines()
         reason = next((l for l in summary if l.strip()), "non-zero exit").strip()[:120]
-        return f"FAILED at {ts}: {reason}", gate_script
+        hint = _gate_timeout_hint(reason + " " + r.stdout + r.stderr)
+        return f"FAILED at {ts}: {reason}{hint}", gate_script
+    except subprocess.TimeoutExpired as exc:
+        hint = _gate_timeout_hint(str(exc))
+        return f"UNKNOWN (error: gate timed out after 120s){hint}", gate_script
     except Exception as exc:
-        return f"UNKNOWN (error: {exc})", gate_script
+        hint = _gate_timeout_hint(str(exc))
+        return f"UNKNOWN (error: {exc}){hint}", gate_script
 
 
 def _list_cards() -> list[dict]:

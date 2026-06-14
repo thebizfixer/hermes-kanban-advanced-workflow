@@ -73,7 +73,7 @@ warn "preflight" \
   "bash ${BUNDLE_PATH}/scripts/preflight.sh 2>/dev/null | python3 -c \"import json,sys; d=json.load(sys.stdin); assert d['status'] in ('pass','degraded')\""
 
 check "coding_agent_cli" \
-  "cd \"${REPO_ROOT}\" && PYTHONPATH=\"${REPO_ROOT}\" python3 ${BUNDLE_PATH}/scripts/check_coding_agent_cli.py"
+  "cd \"${REPO_ROOT}\" && PYTHONPATH=\"${REPO_ROOT}\" python3 ${BUNDLE_PATH}/scripts/check_coding_agent_cli.py --timeout ${PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT:-15}"
 
 check "attestation" \
   "python3 ${BUNDLE_PATH}/scripts/kanban_attestation.py '${PLAN_ID}' --verify 2>/dev/null | grep -q PASS"

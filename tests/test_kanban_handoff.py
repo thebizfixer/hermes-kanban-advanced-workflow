@@ -41,6 +41,18 @@ class TestKanbanHandoff(unittest.TestCase):
         parsed = handoff._parse_gate_result(out, "")
         self.assertEqual(parsed, (0, 2))
 
+    def test_gate_timeout_hint_on_timeout_message(self) -> None:
+        self.assertIn("PREFLIGHT_SKIP_CODING_AGENT_CLI", handoff._gate_timeout_hint("timed out"))
+
+    def test_gate_timeout_hint_on_coding_agent_failure(self) -> None:
+        self.assertIn(
+            "PREFLIGHT_SKIP_CODING_AGENT_CLI",
+            handoff._gate_timeout_hint("coding_agent_cli smoke failed"),
+        )
+
+    def test_gate_timeout_hint_absent_for_unrelated(self) -> None:
+        self.assertEqual(handoff._gate_timeout_hint("attestation missing"), "")
+
     @unittest.skipUnless(os.name == "nt", "MSYS path conversion is Windows-specific")
     def test_bash_path_windows_drive(self) -> None:
         path = handoff.Path("E:/Projects/foo/scripts/pre_dispatch_gate.sh")

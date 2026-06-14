@@ -248,7 +248,7 @@ check_coding_agent_cli_reachability() {
   # Hermes profile model_reachability pings the LLM backend for dispatch profiles.
   # Workers dispatch a separate coding-agent CLI (Cursor agent, Claude, Codex, …).
   # This check must pass before decomposition — dashboard green dot is not enough.
-  local probe_timeout="${PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT:-45}"
+  local probe_timeout="${PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT:-15}"
   local binary="${KANBAN_CODING_AGENT:-}"
   local out="" rc=0
 
@@ -276,7 +276,11 @@ check_coding_agent_cli_reachability() {
     return
   fi
 
-  out="$(cd "$REPO_ROOT" && PYTHONPATH="$REPO_ROOT" python3 "$SCRIPT_DIR/check_coding_agent_cli.py" --timeout "$probe_timeout" 2>&1)" \
+  local wall_timeout=$((probe_timeout + 5))
+
+  out="$(run_with_timeout "$wall_timeout" sh -c \
+    "cd \"${REPO_ROOT}\" && PYTHONPATH=\"${REPO_ROOT}\" python3 \"${SCRIPT_DIR}/check_coding_agent_cli.py\" --timeout \"${probe_timeout}\"" \
+    2>&1)" \
     || rc=$?
 
   if [[ $rc -eq 0 ]]; then
@@ -285,6 +289,9 @@ check_coding_agent_cli_reachability() {
   elif [[ $rc -eq 2 ]]; then
     record_check "coding_agent_cli_reachability" "fail" "blocking" \
       "Coding agent binary '${binary}' not on PATH"
+  elif [[ $rc -eq 124 ]]; then
+    record_check "coding_agent_cli_reachability" "fail" "blocking" \
+      "Coding agent CLI (${binary}) smoke timed out after ${probe_timeout}s — fix auth or export PREFLIGHT_SKIP_CODING_AGENT_CLI=1 (audit-noted override)"
   else
     record_check "coding_agent_cli_reachability" "fail" "blocking" \
       "${out:-Coding agent CLI (${binary}) smoke failed — see docs: wiki/troubleshooting.md § Cursor OAuth}"

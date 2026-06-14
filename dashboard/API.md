@@ -19,7 +19,7 @@ Returns current initialization state and config values.
 | `probe` | `0` | When `1`, run reachability probes on the slow path: (1) each **Hermes dispatch profile** via `hermes -p <profile> chat -q "say ok"`; (2) the **coding CLI** via `build_smoke_argv` / `smoke_test_coding_agent` (same contract as `scripts/coding_agent_invoke.sh smoke`). Skipped by default for fast tab loads. |
 | `git_fetch` | `0` | When `1`, run `git fetch origin` before computing `plugin_behind`. Skipped by default; uses a short-lived server cache or local `rev-list` only. |
 
-The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetch=1`** in the background. Returning to the tab in the same browser session reuses **sessionStorage** for the last full payload when probe results are younger than ~3 minutes.
+The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetch=1`** in the background when reachability has not yet passed this browser session. Returning to the tab reuses **sessionStorage**: if the last probe was **all green** (Hermes profile dots + coding CLI), subsequent tab loads skip `probe=1` and only refresh config/git fields via the fast path. Non-green or never-probed sessions always run the full probe. **Save**, **Bootstrap**, and **Update Plugin** invalidate session cache and re-probe.
 
 **Response:**
 ```json

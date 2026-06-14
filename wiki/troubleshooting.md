@@ -182,6 +182,31 @@ hermes -p kanban-advanced-worker chat -q "say ok"
 
 Refresh dashboard with probe enabled (`GET .../status?probe=1`).
 
+### Preflight / handoff hangs on coding-agent CLI smoke
+
+**Symptom:** `kanban_handoff.py` or `pre_dispatch_gate.sh` stalls at `check_coding_agent_cli.py` when Cursor `agent` is installed but headless auth is broken or hangs.
+
+**Fix:**
+
+```bash
+# Diagnose (fast mode — 15s default)
+PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+
+# Slow cold start
+PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT=120 python3 .../check_coding_agent_cli.py
+# or
+PYTHONPATH=. python3 .../check_coding_agent_cli.py --full
+```
+
+**Audit-noted skip** (decomposition only — fix auth before execute):
+
+```bash
+export PREFLIGHT_SKIP_CODING_AGENT_CLI=1
+python3 hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan ...
+```
+
+Handoff and preflight failure messages include this hint when a timeout is detected.
+
 ### "Coding agent smoke failed" / E020 / `Workspace Trust Required`
 
 **Symptom:** Worker blocks at Step 3 or E020. Dashboard **Coding Agent** dot may still be green. Cursor stderr shows `Workspace Trust Required`, or smoke exits non-zero from the worktree.

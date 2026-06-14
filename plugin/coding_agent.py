@@ -23,7 +23,7 @@ from plugin.coding_agent_env import (
 CODING_AGENT_MODEL_AUTO = "auto"
 SMOKE_PROMPT = "say ok"
 SMOKE_TIMEOUT_SECONDS = 180
-AUTH_PROBE_TIMEOUT_SECONDS = 45
+AUTH_PROBE_TIMEOUT_SECONDS = 15
 
 
 @dataclass(frozen=True)
@@ -478,6 +478,7 @@ def smoke_test_coding_agent(
     run: Callable[..., object],
     *,
     timeout: int = SMOKE_TIMEOUT_SECONDS,
+    fast: bool = False,
 ) -> bool | None:
     if not binary_on_path(binary):
         return None
@@ -499,10 +500,35 @@ def smoke_test_coding_agent(
                     stderr=getattr(probe, "stderr", "") or "",
                     json_attempt=False,
                 )
+                if fast:
+                    if probe_ok is True:
+                        return True
+                    return False
                 if probe_ok is False:
                     return False
             except subprocess.TimeoutExpired:
                 return False
+
+        if fast:
+            argv = build_smoke_argv(
+                binary,
+                model,
+                json_output=binary in {"agent", "claude", "codex", "gemini"},
+            )
+            fast_timeout = min(timeout, AUTH_PROBE_TIMEOUT_SECONDS)
+            result = _run_binary_command(
+                argv,
+                run,
+                timeout=fast_timeout,
+                use_auth_lock=(binary == "agent"),
+            )
+            return _interpret_smoke_result(
+                binary,
+                returncode=getattr(result, "returncode", 1),
+                stdout=getattr(result, "stdout", "") or "",
+                stderr=getattr(result, "stderr", "") or "",
+                json_attempt="--output-format" in argv,
+            )
 
         json_argv = build_smoke_argv(binary, model, json_output=True)
         result = _run_binary_command(

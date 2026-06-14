@@ -51,7 +51,6 @@
     });
   }
   var STATUS_SESSION_KEY = "kanban-advanced-status-v1";
-  var STATUS_PROBE_MAX_AGE_MS = 3 * 60 * 1000;
 
   function readSessionStatus() {
     try {
@@ -69,12 +68,39 @@
     opts = opts || {};
     try {
       var prev = readSessionStatus();
+      var probeGreen = opts.probeGreen;
+      if (probeGreen == null && opts.probed && data) {
+        probeGreen = statusProbeAllGreen(data);
+      } else if (opts.keepProbeGreen && prev) {
+        probeGreen = prev.probeGreen;
+      } else if (probeGreen == null && prev) {
+        probeGreen = !!prev.probeGreen;
+      }
       sessionStorage.setItem(STATUS_SESSION_KEY, JSON.stringify({
         data: data,
         at: Date.now(),
-        probedAt: opts.probed ? Date.now() : (opts.keepProbedAt || (prev && prev.probedAt) || 0)
+        probedAt: opts.probed ? Date.now() : (opts.keepProbedAt || (prev && prev.probedAt) || 0),
+        probeGreen: !!probeGreen
       }));
     } catch (e) {}
+  }
+
+  function statusProbeAllGreen(s) {
+    if (!s || s.error) return false;
+    var cli = s.coding_agent_cli || {};
+    if (cli.on_path === false) return false;
+    if (cli.on_path && cli.model_reachable !== true) return false;
+    var profiles = s.profiles || {};
+    for (var k in profiles) {
+      if (!Object.prototype.hasOwnProperty.call(profiles, k)) continue;
+      var p = profiles[k];
+      if (p && p.exists && p.has_model && p.model_reachable !== true) return false;
+    }
+    return true;
+  }
+
+  function sessionProbeGreenCached(cached) {
+    return !!(cached && cached.probedAt && cached.probeGreen);
   }
 
   function invalidateSessionStatus() {
@@ -231,16 +257,21 @@
     function loadStatus(opts) {
       opts = opts || {};
       var cached = opts.skipCache ? null : readSessionStatus();
-      var probeFresh = cached && cached.probedAt
-        && (Date.now() - cached.probedAt < STATUS_PROBE_MAX_AGE_MS);
-      var needProbe = opts.full !== false && (opts.forceFull || !probeFresh);
+      var sessionGreen = sessionProbeGreenCached(cached);
+      var needProbe = opts.full !== false && (
+        opts.forceFull ||
+        !sessionGreen && (!(cached && cached.probedAt) || !cached.probeGreen)
+      );
 
       setLoading(true);
       return apiStatus().then(function (s) {
         var merged = cached && cached.data ? mergeStatusFields(cached.data, s) : s;
         setStatus(merged);
         applyStatusToForm(merged);
-        writeSessionStatus(merged, { keepProbedAt: probeFresh ? cached.probedAt : 0 });
+        writeSessionStatus(merged, {
+          keepProbedAt: sessionGreen ? cached.probedAt : 0,
+          keepProbeGreen: sessionGreen
+        });
         setLoading(false);
 
         if (!needProbe) return merged;

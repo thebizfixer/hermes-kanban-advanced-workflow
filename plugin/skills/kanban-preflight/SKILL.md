@@ -202,7 +202,7 @@ PYTHONPATH=. python3 ${bundle_path}/scripts/check_coding_agent_cli.py
 PYTHONPATH=. python3 ${bundle_path}/scripts/check_coding_agent_cli.py --full
 ```
 
-**Env knobs:** `PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT` (default `45`), `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` (audit-noted skip).
+**Env knobs:** `PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT` (default `15`), `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` (audit-noted skip — surfaced in handoff/preflight timeout errors).
 
 **Runtime env:** `HOME` must be set for gateway workers (OAuth paths). Init/Save writes `HOME=` to `.env`; `coding_agent_invoke.sh` sources `scripts/lib/coding_agent_env.sh`. See `plugin/data/references/coding-agent-auth.md`.
 

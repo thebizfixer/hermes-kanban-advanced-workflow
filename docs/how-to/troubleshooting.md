@@ -23,6 +23,7 @@ bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 | Cursor `agent status` OK but smoke fails / `[escalation:coding_agent:auth]` | Often missing `HOME` in gateway workers, not stale OAuth — see [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
 | Bootstrap passed but preflight blocks on coding agent | Bootstrap smoke is **advisory** — add API keys or vendor login, run `check_coding_agent_cli.py` — [coding-agent auth](../../plugin/data/references/coding-agent-auth.md) |
 | Dashboard profile yellow "model unreachable" (not coding agent) | Hermes provider token/model for dispatch profile — re-auth provider; separate from Cursor CLI — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
+| Handoff/preflight hangs on coding-agent CLI smoke | Fast probe is 15s; fix auth or `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` — [wiki/troubleshooting.md](../../wiki/troubleshooting.md) |
 | Tests pass locally but fail in card worktree | Add `.env` / `.venv/` / `node_modules/` to `.worktreeinclude` — [operator provisioning](../../plugin/data/references/operator-provisioning.md) |
 | `required_secrets` preflight fails | Fill vars in main repo `.env`; mirror to worktree if coding agent runs those tests |
 
