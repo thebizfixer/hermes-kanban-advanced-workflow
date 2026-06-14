@@ -88,7 +88,7 @@ If smoke works at project root but fails in the worktree with exit 127 on `codin
 1. **Prerequisites** (`audit_coding_agent_prerequisites`) — fast fail: `HOME`, missing key/file for configured binary
 2. **Execution smoke** (`smoke_test_coding_agent` / `coding_agent_invoke.sh smoke`) — proves headless one-line prompt works
 
-Hermes profile `model_reachability` (`hermes -p <profile> chat`) is a **third**, separate check for dispatch LLM backends — not the coding CLI.
+Hermes profile `model_reachability` (`hermes -p <profile> chat`) is a **third**, separate check for dispatch LLM backends — not the coding CLI. Dashboard profile badges label failures **model unreachable** (with optional `model_reachability_detail`: `provider auth failed`, `model not found`, etc.) — do not confuse with `coding_agent_cli.model_reachable` (**auth/model failed** on the external coding binary).
 
 ## Gateway operator checklist
 

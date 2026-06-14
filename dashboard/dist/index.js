@@ -108,6 +108,9 @@
         if (next.model_reachable == null && prev.model_reachable != null) {
           merged.profiles[k].model_reachable = prev.model_reachable;
         }
+        if (!next.model_reachability_detail && prev.model_reachability_detail) {
+          merged.profiles[k].model_reachability_detail = prev.model_reachability_detail;
+        }
       });
     }
     if (extra.coding_agent_model == null && base.coding_agent_model != null) {
@@ -489,7 +492,10 @@
         labelColor = "#22c55e";
       } else if (info.model_reachable === false) {
         dotColor = "#eab308";
-        labelText = "auth stale (" + modelLabel + effort + ")";
+        var detail = (info.model_reachability_detail || "").trim();
+        labelText = detail
+          ? ("model unreachable — " + detail + " (" + modelLabel + effort + ")")
+          : ("model unreachable (" + modelLabel + effort + ")");
         labelColor = "#eab308";
       } else if (statusProbing) {
         dotColor = "#94a3b8";

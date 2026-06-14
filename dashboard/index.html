@@ -324,10 +324,14 @@ function setProfileStatus(id, info) {
     el.classList.add('ok');
     label = document.createTextNode('reachable (' + (info.model || '?') + ')');
   } else if (info.model_reachable === false) {
-    // Yellow: in config but auth stale / unreachable
+    // Yellow: Hermes LLM provider unreachable (not coding-agent CLI auth)
     dot.classList.add('warn');
     el.classList.add('warn');
-    label = document.createTextNode('auth stale (' + (info.model || '?') + ')');
+    var detail = (info.model_reachability_detail || '').trim();
+    var unreachableLabel = detail
+      ? ('model unreachable — ' + detail + ' (' + (info.model || '?') + ')')
+      : ('model unreachable (' + (info.model || '?') + ')');
+    label = document.createTextNode(unreachableLabel);
   } else {
     // Yellow: in config, reachability unknown (no OAuth flow for this provider)
     dot.classList.add('warn');

@@ -159,6 +159,29 @@ hermes gateway restart
 
 SSOT: `plugin/data/references/coding-agent-auth.md`. Agent playbook: `AGENTS.md` § *When a user has coding-binary auth trouble*.
 
+### Dashboard profile yellow ("model unreachable") vs coding-agent auth
+
+**Symptom:** Kanban-Advanced dashboard **Profiles** row shows yellow **model unreachable** (optionally `provider auth failed` or `model not found`) on worker/orchestrator. Operator reads this as "Cursor auth failed."
+
+**Root cause:** Two separate probes:
+
+| Dashboard row | Check | Fix |
+| --- | --- | --- |
+| **Profiles** (orchestrator / worker) | Hermes LLM ping (`hermes -p <profile> chat -q "say ok"`) | `hermes auth add <provider>` or fix profile `model.default` in `config.yaml` |
+| **Coding agent** | Headless CLI smoke (`check_coding_agent_cli.py`) | `agent login`, `HOME=` in `.env`, API keys — [coding-agent auth](../plugin/data/references/coding-agent-auth.md) |
+
+Preflight mirrors the same split: `model_reachability` (Hermes profiles) and `coding_agent_cli_reachability` (external binary). `profile_availability` no longer uses `agent status | grep "Logged in"`.
+
+**Fix (Hermes provider):**
+
+```bash
+hermes -p kanban-advanced-worker config show   # confirm model + provider
+hermes auth add nous                           # example — use your provider
+hermes -p kanban-advanced-worker chat -q "say ok"
+```
+
+Refresh dashboard with probe enabled (`GET .../status?probe=1`).
+
 ### "Coding agent smoke failed" / E020 / `Workspace Trust Required`
 
 **Symptom:** Worker blocks at Step 3 or E020. Dashboard **Coding Agent** dot may still be green. Cursor stderr shows `Workspace Trust Required`, or smoke exits non-zero from the worktree.

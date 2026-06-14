@@ -220,12 +220,13 @@ check_profile_availability() {
     fi
   done
 
+  # Coding-agent CLI auth is verified by check_coding_agent_cli_reachability()
+  # (headless smoke via check_coding_agent_cli.py). Do NOT use `agent status` here —
+  # it reports OAuth file presence, not execution capability.
   if ! command -v agent >/dev/null 2>&1; then
     issues+=("agent binary not found")
   elif ! run_with_timeout "$CHECK_TIMEOUT" agent --version >/dev/null 2>&1; then
     issues+=("agent --version failed")
-  elif ! run_with_timeout "$CHECK_TIMEOUT" sh -c 'agent status 2>/dev/null | grep -q "Logged in"'; then
-    issues+=("agent not logged in")
   fi
 
   local soul_path="${HERMES_HOME}/profiles/${WORKER_PROFILE}/SOUL.md"
@@ -239,7 +240,7 @@ check_profile_availability() {
     record_check "profile_availability" "fail" "blocking" "$joined"
   else
     record_check "profile_availability" "pass" "blocking" \
-      "Profiles (${PREFLIGHT_PROFILES}) and agent auth verified"
+      "Profiles (${PREFLIGHT_PROFILES}) present; agent binary on PATH"
   fi
 }
 

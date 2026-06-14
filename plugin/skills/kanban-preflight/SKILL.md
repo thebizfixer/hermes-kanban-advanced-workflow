@@ -163,7 +163,7 @@ hermes gateway run   # tmux or background for persistence
 
 ### 5. Profile availability (`profile_availability`)
 
-**Goal:** Required Hermes profiles exist, the Cursor/agent CLI works, auth is valid, and orchestrator SOUL.md is not corrupted.
+**Goal:** Required Hermes profiles exist, the Cursor/agent CLI binary is on PATH and responds to `--version`, and orchestrator SOUL.md is not corrupted. **Does not** verify coding-agent OAuth — that is `coding_agent_cli_reachability` (§5c). Do **not** use `agent status` for auth; it is not execution-capable.
 
 **Manual verification:**
 

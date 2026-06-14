@@ -110,7 +110,7 @@ This is where most of our Phase 2 failures occurred. Each sad path now has a str
 | Gateway not running | Low | BLOCKING | Preflight §4 (gateway health) | ✅ Structural |
 | Dispatcher stuck (ready cards not claimed) | Medium | BLOCKING | board_keeper.sh §3 (stuck detection + gateway restart) | ✅ Structural via board keeper |
 | Provider rate-limited (429) | Medium | DEGRADED | Same-provider staggering via parent-child links | ⚠️ Reduces but doesn't eliminate |
-| Agent auth failure | Low | BLOCKING | Preflight §5 (agent auth verified) | ✅ Structural |
+| Agent auth failure | Low | BLOCKING | Preflight §5c (`coding_agent_cli_reachability` via `check_coding_agent_cli.py`) | ✅ Structural |
 | Agent OOM / segfault crash | Low | BLOCKING | Dispatcher retries; board keeper detects blocked | ⚠️ No prevention, only detection |
 | Agent produces zero output | Medium | BLOCKING | Evaluation chain E006 (zero-output check) | ✅ Structural |
 | Worktree creation fails (disk full) | Low | BLOCKING | Preflight E007 (disk space) | ✅ Structural |

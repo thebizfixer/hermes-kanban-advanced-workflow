@@ -111,6 +111,7 @@ Extend `_check_profiles()` profile info:
   "model": "anthropic/claude-opus-4.6",
   "provider": "openrouter",
   "model_reachable": true,
+  "model_reachability_detail": "",
   "reasoning_effort": "high",
   "reasoning_effort_configured": true,
   "reasoning_effort_source": "agent",
@@ -196,6 +197,7 @@ Extend `profileBadge(info)`:
 | State | Label pattern |
 |-------|----------------|
 | Reachable | `reachable (model · effort)` e.g. `reachable (claude-opus-4.6 · high)` |
+| Unreachable (probe failed) | `model unreachable (model · effort)` or `model unreachable — {detail} (model · effort)` when `model_reachability_detail` is set (`model not found`, `provider auth failed`, `inconclusive`, `timed out`) — **Hermes LLM provider**, not coding-agent CLI |
 | Configured, no probe | `configured (model · effort)` |
 | Effort is Hermes default and unconfigured | omit `· medium` **or** show `· medium (default)` — **prefer omit** to reduce noise |
 

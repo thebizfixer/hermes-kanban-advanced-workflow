@@ -52,6 +52,7 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
       "model": "anthropic/claude-opus-4.6",
       "provider": "openrouter",
       "model_reachable": true,
+      "model_reachability_detail": "",
       "reasoning_effort": "high",
       "reasoning_effort_configured": true,
       "reasoning_effort_source": "agent",
@@ -97,7 +98,7 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
 | `plugin_update_available` | `true` when `plugin_behind > 0` |
 | `plugin_local_changes` | Porcelain dirty count in `plugin_install_path`; `null` when not checkable |
 
-`profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. `profiles.*.reasoning_effort` reflects `agent.reasoning_effort` from the profile `config.yaml` (or Hermes default `medium` when unset). `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
+`profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. When false, `profiles.*.model_reachability_detail` may be `model not found`, `provider auth failed`, or `inconclusive` — the dashboard labels this **model unreachable**, not coding-agent CLI auth. `profiles.*.reasoning_effort` reflects `agent.reasoning_effort` from the profile `config.yaml` (or Hermes default `medium` when unset). `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
 
 **Bootstrap limitation:** Init/Save smoke is **advisory** — HTTP 200 / successful init can return with `! coding CLI auth/model check failed` in `output`. Bootstrap writes `KANBAN_CODING_AGENT*` and `HOME` to `.env` but **does not** add vendor API keys. **Preflight** and **pre-dispatch gate** block decomposition when headless auth fails. See `plugin/data/references/coding-agent-auth.md`.
 

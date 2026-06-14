@@ -145,31 +145,50 @@ def _read_env(project_root: Path) -> dict:
     return env
 
 
-def _check_model_reachable(profile: str) -> bool | None:
-    """Ping the model configured for *profile* via a minimal chat query.
+_MODEL_NOT_FOUND_KEYS = (
+    "model not found",
+    "no such model",
+    "unknown model",
+    "invalid model",
+    "does not exist",
+    "not available",
+)
+_PROVIDER_AUTH_FAILED_KEYS = (
+    "authentication",
+    "unauthorized",
+    "401",
+    "403",
+    "token",
+    "expired",
+    "api key",
+)
 
-    Returns True (model responded), False (model name invalid or auth failed),
-    or None (timed out or ambiguous — yellow in dashboard).
+
+def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
+    """Ping the Hermes LLM backend for *profile* via a minimal chat query.
+
+    Returns (True, "") when the model responded, (False, detail) when the ping
+    failed with a known cause, or (None, detail) when timed out or ambiguous.
+    This checks **Hermes profile provider auth**, not the coding-agent CLI.
     No --yolo flag is needed; "say ok" never triggers tool calls.
     """
     if not profile:
-        return None
+        return None, "missing profile"
     try:
         r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=20)
         out = (r.stdout + r.stderr).lower()
         if r.returncode == 0:
-            return True
-        if any(k in out for k in (
-            "model not found", "no such model", "unknown model",
-            "invalid model", "does not exist", "not available",
-            "authentication", "unauthorized", "401", "403",
-            "token", "expired", "api key",
-        )):
-            return False
+            return True, ""
+        if any(k in out for k in _MODEL_NOT_FOUND_KEYS):
+            return False, "model not found"
+        if any(k in out for k in _PROVIDER_AUTH_FAILED_KEYS):
+            return False, "provider auth failed"
         # Non-zero exit with no diagnostic keywords — treat as unknown (yellow).
-        return None
+        return None, "inconclusive"
+    except subprocess.TimeoutExpired:
+        return None, "timed out"
     except Exception:
-        return None
+        return None, "inconclusive"
 
 
 def _dispatch_profile_list(project_root: Path | None = None) -> list[str]:
@@ -231,6 +250,7 @@ def _check_profiles(
             "model": "",
             "provider": "",
             "model_reachable": None,
+            "model_reachability_detail": "",
             "reasoning_effort": "medium",
             "reasoning_effort_configured": False,
             "reasoning_effort_source": "default",
@@ -258,10 +278,19 @@ def _check_profiles(
                 cache_key = f"model_reachable:{profile}"
                 cached = _cache_get(cache_key, _TTL_MODEL_PROBE)
                 if cached is not None:
-                    info["model_reachable"] = cached
+                    if isinstance(cached, dict):
+                        info["model_reachable"] = cached.get("reachable")
+                        info["model_reachability_detail"] = cached.get("detail") or ""
+                    else:
+                        info["model_reachable"] = cached
                 else:
-                    info["model_reachable"] = _check_model_reachable(profile)
-                    _cache_set(cache_key, info["model_reachable"])
+                    reachable, detail = _check_model_reachable(profile)
+                    info["model_reachable"] = reachable
+                    info["model_reachability_detail"] = detail
+                    _cache_set(
+                        cache_key,
+                        {"reachable": reachable, "detail": detail},
+                    )
 
         result[profile] = info
     return result
