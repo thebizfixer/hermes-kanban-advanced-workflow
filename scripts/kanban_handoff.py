@@ -36,6 +36,7 @@ Exit codes:
     4  dispatcher disabled / auto_decompose enabled (unless --allow-offline)
     5  plan file not found / plan_id could not be determined
     6  card creation failed
+    7  board not clean (existing plan cards — archive after operator confirms, or --force)
 """
 
 from __future__ import annotations
@@ -256,15 +257,21 @@ _CODING_AGENT_CLI_SKIP_HINT = (
     " If the coding-agent CLI check is blocking, export "
     "PREFLIGHT_SKIP_CODING_AGENT_CLI=1 and retry."
 )
+_CODING_AGENT_LOCK_HINT = (
+    " Stale auth lock? rm -f ${HERMES_HOME:-~/.hermes}/.locks/coding-agent-auth.lock"
+)
 
 
 def _gate_timeout_hint(message: str) -> str:
     lowered = message.lower()
+    hints = []
     if "timeout" in lowered or "timed out" in lowered or "124" in lowered:
-        return _CODING_AGENT_CLI_SKIP_HINT
+        hints.append(_CODING_AGENT_CLI_SKIP_HINT)
     if "coding_agent_cli" in lowered or "coding agent cli" in lowered:
-        return _CODING_AGENT_CLI_SKIP_HINT
-    return ""
+        hints.append(_CODING_AGENT_CLI_SKIP_HINT)
+    if "lock" in lowered or "flock" in lowered:
+        hints.append(_CODING_AGENT_LOCK_HINT)
+    return "".join(dict.fromkeys(hints))
 
 
 def _run_pre_dispatch_gate(
@@ -353,6 +360,80 @@ def _find_open_handoff(plan_id: str, title: str) -> str | None:
         ):
             return str(card.get("id", "")) or None
     return None
+
+
+def _cards_for_plan(plan_id: str) -> list[dict]:
+    """All board cards tied to plan_id (any status)."""
+    matches: list[dict] = []
+    needle = f"plan_id: {plan_id}"
+    for card in _list_cards():
+        if not isinstance(card, dict):
+            continue
+        body = str(card.get("body", ""))
+        title = str(card.get("title", ""))
+        if needle in body or plan_id in title:
+            matches.append(card)
+    return matches
+
+
+def _check_board_cleanliness(
+    plan_id: str,
+    *,
+    force: bool = False,
+) -> tuple[bool, str, list[str]]:
+    """Return (ok, message, archived_ids). Exit 7 when not ok and not force."""
+    cards = _cards_for_plan(plan_id)
+    if not cards:
+        return True, "", []
+
+    running = [
+        c for c in cards if str(c.get("status", "")).lower() == "running"
+    ]
+    if running:
+        ids = ", ".join(str(c.get("id", "?")) for c in running)
+        return (
+            False,
+            (
+                f"Board has {len(running)} running card(s) for plan_id {plan_id} "
+                f"({ids}). Wind down to blocked or done before handoff."
+            ),
+            [],
+        )
+
+    if force:
+        archived: list[str] = []
+        for card in cards:
+            cid = str(card.get("id", "")).strip()
+            if not cid:
+                continue
+            result = _hermes("kanban", "archive", cid)
+            if result.returncode == 0:
+                archived.append(cid)
+            else:
+                return (
+                    False,
+                    f"Failed to archive {cid}: {(result.stderr or result.stdout).strip()}",
+                    archived,
+                )
+        return True, f"Archived {len(archived)} card(s) for plan_id {plan_id}.", archived
+
+    lines = [
+        f"Board has {len(cards)} existing card(s) for plan_id {plan_id}:",
+    ]
+    for card in cards:
+        lines.append(
+            f"  {card.get('id')} ({card.get('status')}): "
+            f"{str(card.get('title', ''))[:80]}"
+        )
+    lines.extend(
+        [
+            "Confirm with the operator before archiving stale cards.",
+            "Then run: hermes kanban archive <id> for each row above.",
+            "Or re-run handoff with --force after operator approval "
+            "(refused while any card is running).",
+        ]
+    )
+    return False, "\n".join(lines), []
 
 
 # ── Plan id + body ───────────────────────────────────────────────────────────
@@ -492,6 +573,11 @@ def main() -> int:
         action="store_true",
         help="Skip gateway/dispatcher hard-checks (card will sit until dispatch resumes)",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="After operator approval, archive non-running plan cards before handoff",
+    )
     parser.add_argument("--json", action="store_true", help="Machine-readable output")
     args = parser.parse_args()
 
@@ -526,6 +612,19 @@ def main() -> int:
         bundle_root = project_root / "hermes-kanban-advanced-workflow"
 
     cards_yaml_path = _discover_cards_yaml(plan_id, plan_path, project_root, overlay)
+
+    board_ok, board_msg, archived = _check_board_cleanliness(
+        plan_id, force=args.force
+    )
+    if not board_ok:
+        emit({
+            "ok": False,
+            "error": "board_not_clean",
+            "detail": board_msg,
+            "plan_id": plan_id,
+            "fix": "Confirm with operator, archive listed cards, or re-run with --force",
+        })
+        return 7
 
     gate_status, gate_script = _run_pre_dispatch_gate(plan_id, project_root, overlay)
 
@@ -611,7 +710,8 @@ def main() -> int:
         return 6
 
     emit({"ok": True, "reused": False, "id": card_id, "title": title,
-          "assignee": orchestrator_profile, "plan_id": plan_id})
+          "assignee": orchestrator_profile, "plan_id": plan_id,
+          **({"archived": archived} if archived else {})})
     return 0
 
 

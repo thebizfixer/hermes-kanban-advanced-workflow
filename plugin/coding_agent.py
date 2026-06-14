@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -24,6 +25,13 @@ CODING_AGENT_MODEL_AUTO = "auto"
 SMOKE_PROMPT = "say ok"
 SMOKE_TIMEOUT_SECONDS = 180
 AUTH_PROBE_TIMEOUT_SECONDS = 15
+CODING_AGENT_AUTH_LOCK_STALE_SECONDS = int(
+    os.environ.get("CODING_AGENT_AUTH_LOCK_STALE_SECONDS", "600")
+)
+CODING_AGENT_AUTH_LOCK_WAIT_PROBE = 5
+CODING_AGENT_AUTH_LOCK_WAIT_DISPATCH = int(
+    os.environ.get("CODING_AGENT_AUTH_LOCK_WAIT_SECONDS", "120")
+)
 
 
 @dataclass(frozen=True)
@@ -175,12 +183,32 @@ def _coding_agent_auth_lock_path() -> Path:
     return lock_dir / "coding-agent-auth.lock"
 
 
+def _clear_stale_coding_agent_auth_lock(lockfile: Path) -> None:
+    if not lockfile.exists():
+        return
+    try:
+        age = time.time() - lockfile.stat().st_mtime
+        if age > CODING_AGENT_AUTH_LOCK_STALE_SECONDS:
+            lockfile.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _resolve_auth_lock_wait(timeout: int, *, lock_wait_seconds: int | None) -> int:
+    if lock_wait_seconds is not None:
+        return lock_wait_seconds
+    if timeout <= AUTH_PROBE_TIMEOUT_SECONDS:
+        return CODING_AGENT_AUTH_LOCK_WAIT_PROBE
+    return CODING_AGENT_AUTH_LOCK_WAIT_DISPATCH
+
+
 def _run_binary_command(
     cmd: list[str],
     run: Callable[..., object],
     *,
     timeout: int,
     use_auth_lock: bool = False,
+    lock_wait_seconds: int | None = None,
 ):
     if not cmd:
         raise ValueError("empty command")
@@ -188,19 +216,22 @@ def _run_binary_command(
     if not executable:
         raise FileNotFoundError(cmd[0])
     argv = [executable, *cmd[1:]]
-    if use_auth_lock and shutil.which("flock"):
-        lockfile = _coding_agent_auth_lock_path()
-        return run(["flock", "-w", "120", str(lockfile), *argv], timeout=timeout)
+    wait = _resolve_auth_lock_wait(timeout, lock_wait_seconds=lock_wait_seconds)
     if use_auth_lock and sys.platform != "win32":
         try:
             import fcntl
 
             lockfile = _coding_agent_auth_lock_path()
+            _clear_stale_coding_agent_auth_lock(lockfile)
             with open(lockfile, "a+", encoding="utf-8") as lockfh:
                 fcntl.flock(lockfh.fileno(), fcntl.LOCK_EX)
                 return run(argv, timeout=timeout)
         except ImportError:
             pass
+    if use_auth_lock and shutil.which("flock"):
+        lockfile = _coding_agent_auth_lock_path()
+        _clear_stale_coding_agent_auth_lock(lockfile)
+        return run(["flock", "-w", str(wait), str(lockfile), *argv], timeout=timeout)
     return run(argv, timeout=timeout)
 
 

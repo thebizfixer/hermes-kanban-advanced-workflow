@@ -10,7 +10,7 @@
 | **Save** (dashboard) | Same advisory smoke when binary on PATH | **No** | — |
 | **Preflight** | `coding_agent_cli_reachability` via `check_coding_agent_cli.py` | — | **Yes** (blocking check) |
 | **Pre-dispatch gate** | `check_coding_agent_cli.py` again | — | **Yes** |
-| **Worker Step 3** | `coding_agent_invoke.sh smoke` from worktree | — | **Yes** (card block / E020) |
+| **Worker Step 3** | `coding_agent_invoke.sh smoke` from worktree — **handshake** (`agent -p "hello" --trust`) when `.hermes/kanban/preflight_cache.json` is fresh (< 30 min); full smoke otherwise | — | **Yes** (card block / E020) |
 
 ### What bootstrap does **not** do
 
@@ -62,7 +62,7 @@ Many CLIs store OAuth or API session files under `$HOME`. Hermes gateway units w
 2. Gateway systemd unit: `Environment="HOME=/home/youruser"`
 3. Worker / invoke script: `scripts/lib/coding_agent_env.sh` (sourced by `coding_agent_invoke.sh`)
 
-After changing `HOME` or credentials: delete `.hermes/kanban/preflight_cache.json` and re-run preflight.
+After re-auth: delete `.hermes/kanban/preflight_cache.json` and re-run preflight / gate. Gate success writes the cache via `check_coding_agent_cli.py`.
 
 ## Worktree provisioning (`.worktreeinclude`)
 

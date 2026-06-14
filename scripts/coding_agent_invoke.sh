@@ -15,12 +15,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/coding_agent_env.sh"
 # shellcheck source=lib/coding_agent_auth_lock.sh
 source "$SCRIPT_DIR/lib/coding_agent_auth_lock.sh"
+# shellcheck source=lib/preflight_cache.sh
+source "$SCRIPT_DIR/lib/preflight_cache.sh"
 ensure_coding_agent_home
 
 MODE="${1:-smoke}"
 PROMPT="${2:-say ok}"
 BINARY="${KANBAN_CODING_AGENT:-agent}"
 MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
+REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 model_is_auto() {
   case "${MODEL,,}" in
@@ -69,6 +72,28 @@ _run_agent() {
     return "$rc"
   done
 }
+
+_run_handshake() {
+  echo "[coding_agent_invoke] preflight cache fresh — handshake only" >&2
+  CODING_AGENT_AUTH_LOCK_WAIT_SECONDS="${CODING_AGENT_AUTH_LOCK_WAIT_SECONDS:-5}"
+  case "$BINARY" in
+    agent)
+      args=( -p "hello" --trust )
+      append_model_args args
+      _run_agent
+      return $?
+      ;;
+    *)
+      echo "[coding_agent_invoke] cache fresh — skipping full smoke for ${BINARY}" >&2
+      return 0
+      ;;
+  esac
+}
+
+if [[ "$MODE" == "smoke" ]] && preflight_cache_fresh "$BINARY" "$REPO_ROOT"; then
+  _run_handshake
+  exit $?
+fi
 
 case "$BINARY" in
   agent)

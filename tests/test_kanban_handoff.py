@@ -53,6 +53,48 @@ class TestKanbanHandoff(unittest.TestCase):
     def test_gate_timeout_hint_absent_for_unrelated(self) -> None:
         self.assertEqual(handoff._gate_timeout_hint("attestation missing"), "")
 
+    def test_cards_for_plan_matches_body(self) -> None:
+        cards = [
+            {"id": "t_abc12345", "status": "done", "title": "Gate", "body": "plan_id: foo\n"},
+            {"id": "t_def67890", "status": "ready", "title": "Other", "body": "plan_id: bar\n"},
+        ]
+        original = handoff._list_cards
+        handoff._list_cards = lambda: cards  # type: ignore[method-assign]
+        try:
+            matched = handoff._cards_for_plan("foo")
+            self.assertEqual(len(matched), 1)
+            self.assertEqual(matched[0]["id"], "t_abc12345")
+        finally:
+            handoff._list_cards = original  # type: ignore[method-assign]
+
+    def test_board_cleanliness_blocks_running(self) -> None:
+        cards = [
+            {"id": "t_run12345", "status": "running", "title": "Card", "body": "plan_id: p1\n"},
+        ]
+        original = handoff._list_cards
+        handoff._list_cards = lambda: cards  # type: ignore[method-assign]
+        try:
+            ok, msg, archived = handoff._check_board_cleanliness("p1", force=False)
+            self.assertFalse(ok)
+            self.assertIn("running", msg.lower())
+            self.assertEqual(archived, [])
+        finally:
+            handoff._list_cards = original  # type: ignore[method-assign]
+
+    def test_board_cleanliness_prompts_archive_when_done(self) -> None:
+        cards = [
+            {"id": "t_done1234", "status": "done", "title": "Old", "body": "plan_id: p2\n"},
+        ]
+        original = handoff._list_cards
+        handoff._list_cards = lambda: cards  # type: ignore[method-assign]
+        try:
+            ok, msg, archived = handoff._check_board_cleanliness("p2", force=False)
+            self.assertFalse(ok)
+            self.assertIn("Confirm with the operator", msg)
+            self.assertIn("hermes kanban archive", msg)
+        finally:
+            handoff._list_cards = original  # type: ignore[method-assign]
+
     @unittest.skipUnless(os.name == "nt", "MSYS path conversion is Windows-specific")
     def test_bash_path_windows_drive(self) -> None:
         path = handoff.Path("E:/Projects/foo/scripts/pre_dispatch_gate.sh")

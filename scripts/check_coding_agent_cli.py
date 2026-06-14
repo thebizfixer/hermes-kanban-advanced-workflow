@@ -33,6 +33,7 @@ from plugin.coding_agent_env import (  # noqa: E402
     describe_prerequisite_issues,
     ensure_coding_agent_runtime_env,
 )
+from plugin.coding_agent_auth_cache import write_preflight_cache  # noqa: E402
 from plugin.config_overlay import (  # noqa: E402
     resolve_coding_agent,
     resolve_coding_agent_model,
@@ -142,6 +143,7 @@ def main() -> int:
         reachable = False
 
     if reachable is True:
+        write_preflight_cache(binary, REPO_ROOT, source="check_coding_agent_cli")
         print(f"OK: {binary} headless smoke passed (model={model}, HOME={env.get('HOME', '?')})")
         return 0
 
