@@ -30,8 +30,11 @@ class TestInFlightIndex(unittest.TestCase):
             "## L5-pre",
             "## L5 ",
             "## L6",
+            "## L7",
             "Bundle resolution",
             "kanban_recover.py",
+            "final_audit_sanity.py",
+            "plan_file_zero_diff",
         ):
             self.assertIn(marker, text, f"index missing section: {marker}")
 

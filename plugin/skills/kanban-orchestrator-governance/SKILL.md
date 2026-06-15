@@ -10,9 +10,9 @@ metadata:
 
 # Kanban Orchestrator Governance Reference
 
-> Load on-demand when gate FAIL, attestation error, `validate_board` exit 1, or handoff/decompose stalls. Happy path stays in `kanban-advanced:kanban-orchestrator`.
+> Load on-demand when gate FAIL, attestation error, `validate_board` exit 1, handoff/decompose stalls, **or final audit exit 2 / remediation loop / check 13**. Happy path stays in `kanban-advanced:kanban-orchestrator`.
 
-**Router:** `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` § L0–L4. Wiki: `wiki/in-flight-navigation.md` if repo has `wiki/`.
+**Router:** `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` § L0–L4 **and L7 (final audit)**. Wiki: `wiki/in-flight-navigation.md` if repo has `wiki/`.
 
 **Constitution (MUST / MUST NOT):**
 
@@ -93,3 +93,18 @@ Iteration-limit cards: check worktree commits before re-dispatch. Full flow: `pl
 - **Raw git worktree add** on workers → E021 — see worker-governance.
 
 Historical context: matrix-v3/v5 failure traces (June 2026). Every guardrail maps to a real incident.
+
+## Final audit / post-flight (L7)
+
+Load **`plugin/data/references/final-audit-sanity-check.md`** first for any post-flight symptom. Index § L7 has command rows.
+
+| Symptom | Tier | Recovery |
+| --- | --- | --- |
+| `final_audit_sanity.py` exit **2** | T2/T3 | Fix plan path, git, DB; `kanban_block` audit — no remediation spawn |
+| exit **1** violations | T2 | `--spawn-remediation`; wait; re-run `--tier all` |
+| Max rounds / audit blocked | T2/T3 | Review tier JSON; operator; `final_audit_max_remediation_rounds` |
+| `gave_up` remediation | T3 | Escalation on audit card; tier JSON `escalated` |
+| `plan_file_zero_diff` after E001 ALLOW | T2 | Add path to card `Files:`; stamp `Commit:`; see § Tier 1 ↔ E001 |
+| Tier 2 false positive | T2 | `final_audit_overrides` in overlay (`wiki/configuration.md`) |
+| check **13** FAIL | T2 | Close/archive remediation children; `validate_board.sh` |
+| Premature audit promote | T2 | Do not run `auto_unblock` manually — `_has_active_remediation_children` |

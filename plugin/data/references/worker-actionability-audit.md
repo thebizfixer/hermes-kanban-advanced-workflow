@@ -12,10 +12,16 @@ Run after anchor-point verification and before declaring a plan ready for decomp
 | 4 | **`Tests:` line with file + assertions** | "Tests must pass" or missing entirely | Name a specific test file and at least 2–3 assertion patterns |
 | 5 | **`Depends on:` when cross-section** | Section B calls a function section A creates, but no dependency stated | Add `**Depends on:** §N (function_name)` |
 
+| **Self-audit line** | Agent block missing `Self-audit:` before commit | Add `Self-audit: confirm each Spec/Acceptance bullet; revert files not in Files:` per `plan-file-format.md` |
+
 ## Additional consistency checks
 
 | Check | What "fail" looks like | Fix |
 |-------|----------------------|-----|
+| **Markup-safe placeholders** | Plan uses `<plan_id>`, `<command>`, `<card2-branch>` in prose or agent blocks | Use `{plan_id}` style per `plan-file-format.md` |
+| **Spec precision (non-trivial)** | Agent block says "wire X to Y" with no `Spec:` / `Call-sites:` / `Forbidden:` | Add contract block per `kanban-planning` §Card body template |
+| **Precision verbs** | "integrate", "hook up", "handle", "support" without concrete operation | Replace with `call X from Y at Z`, `add field F to dict D`, etc. |
+| **Contracts for shared symbols** | Two cards name the same helper but pin no signature | Add `Contracts:` in `## Kanban optimization`; copy into each card |
 | **Frontmatter/body alignment** | A `todos:` entry says "wire X" but the body says X is deferred | Edit the frontmatter `content:` string to match the body |
 | **Line budget matches body** | Line budget references a different filename than the body | Align filenames; recalculate if body scope changed |
 | **Helper reference is named** | "Call the shared repair helper" — which helper? | Use the actual function name |

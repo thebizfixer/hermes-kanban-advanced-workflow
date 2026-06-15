@@ -12,6 +12,17 @@ PREFLIGHT_CACHE_MAX_AGE_SECONDS = 30 * 60
 
 
 def preflight_cache_path(project_root: Path | str | None = None) -> Path:
+    """Resolve preflight cache — prefer project .hermes, then HERMES_HOME."""
+    if project_root is not None:
+        root = Path(project_root).resolve()
+        project_cache = root / ".hermes" / "kanban" / "preflight_cache.json"
+        if project_cache.is_file():
+            return project_cache
+    hh = os.environ.get("HERMES_HOME", "").strip()
+    if hh:
+        hh_cache = Path(hh).expanduser() / "kanban" / "preflight_cache.json"
+        if hh_cache.is_file():
+            return hh_cache
     root = Path(project_root or os.getcwd()).resolve()
     return root / ".hermes" / "kanban" / "preflight_cache.json"
 

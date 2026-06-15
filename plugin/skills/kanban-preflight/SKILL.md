@@ -10,7 +10,7 @@ metadata:
 
 # Kanban Preflight — Environment Gating
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -299,6 +299,17 @@ Use **`${bundle_path}/scripts/preflight.sh`** as the single pre-dispatch gate. I
 - **Production without a secret key.** The app must fail loud at startup — preflight blocks early instead of mid-board failures.
 - **SOUL.md corruption.** HTML entities or unexpected markup in SOUL.md produce nonsense card bodies; profile check blocks until restored.
 - **Gateway up but dispatcher wedged.** `gateway status` succeeding does not replace `hermes kanban watch` / cron monitoring during execution — preflight is pre-flight only.
+
+## When preflight fails (load in order)
+
+| Symptom / check | First load | Notes |
+| --- | --- | --- |
+| `status: fail` (blocking) | This skill § Pitfalls + failed check `id` in JSON | Fix env; `rm -f .hermes/kanban/preflight_cache.json`; re-run |
+| `coding_agent_cli_reachability` fail | `plugin/data/references/coding-agent-auth.md` | Bootstrap advisory ≠ gate — see `AGENTS.md` |
+| Check 0 filesystem / E011 | `wiki/troubleshooting.md` § Cross-mount | Clone to native path |
+| Check 0b skill provisioning | Re-run init / Update Plugin | `provision.sh --check` |
+| `status: degraded` only | Operator OK required for walk-away | Do not silently treat as pass |
+| Still stuck after fixes | `in-flight-governance-index.md` § L0–L1 | `wiki/troubleshooting.md` |
 
 ## Cross-references
 

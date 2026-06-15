@@ -10,7 +10,7 @@ metadata:
 
 # Kanban Cleanup
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -37,6 +37,8 @@ python hermes-kanban-advanced-workflow/scripts/generate_postmortem.py \
 The script reads token JSONL (`KANBAN_TOKEN_LOG` or `~/.hermes/kanban/tokens.jsonl`), task history from the kanban SQLite DB (`KANBAN_DB` or `~/.hermes/state.db`), and the intervention counter. It writes an eight-section markdown report (execution summary, agent performance, failure taxonomy, intervention log, discovered pitfalls, skill updates, token economics, learning summary). Confirm stdout shows `Postmortem written: ...` before proceeding.
 
 Cross-reference: `kanban-advanced:kanban-postmortem` skill for section semantics; `generate_postmortem.py` for flags (`--token-log`, `--db`, `--stdout`).
+
+**If postmortem shows `uncaught_violation_count: null` or WARN for missing tier JSON:** final audit did not complete or tier JSON was deleted — re-run `final_audit_sanity.py --tier all` before archive. Load `kanban-advanced:kanban-postmortem` § Final audit KPIs.
 
 ### 1. Archive all kanban tasks
 
@@ -70,7 +72,7 @@ ps aux | grep "agent -p" | grep -v grep
 ### 5. Stage non-kanban changes
 ```bash
 git status --short
-# Stage only project files — NEVER stage .hermes/ or .cursor/ artifacts
+# Stage only project files — NEVER stage `.hermes/` or vendor IDE artifact directories
 git add <specific files>
 # Do NOT use git add -A
 ```

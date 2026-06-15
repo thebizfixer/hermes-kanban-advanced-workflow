@@ -17,6 +17,7 @@ Load the relevant wiki page for detailed instructions:
 | How do I set this up? | `wiki/setup.md` |
 | How does init / bootstrap work? (profiles, SOUL, skills) | `wiki/bootstrap.md` |
 | How do I configure it? | `wiki/configuration.md` |
+| Why `dispatch_stale_timeout_seconds` is 14400 and where it is set? | `plugin/data/references/dispatch-stale-timeout.md` + `wiki/bootstrap.md` step 13 |
 | Which coding agent / model does the worker use? | `docs/reference/coding-agents.md` |
 | Headless CLI flags (smoke + dispatch per binary)? | `plugin/data/references/coding-agent-cli-invocation.md` |
 | How does governance work? | `wiki/governance.md` (§ Full pre-execution governance stack) |
@@ -28,6 +29,11 @@ Load the relevant wiki page for detailed instructions:
 | What must the operator provision (.env, worktree, deps)? | `plugin/data/references/operator-provisioning.md` |
 | How do I handle rate limits? | `wiki/provider-strategy.md` |
 | What's the DMAIC mapping? | `wiki/six-sigma-mapping.md` |
+| How do I write / format a plan file? | `skill_view("kanban-advanced:kanban-planning")` + `plugin/data/references/plan-file-format.md` |
+| Final audit exit-2 / stuck remediation loop | `plugin/data/references/final-audit-sanity-check.md` |
+| Tier 2 false positive / doc-coverage gap | `plugin/data/references/final-audit-doc-coverage.md` |
+| E001 ALLOW but Tier 1 `plan_file_zero_diff` | `plugin/data/references/final-audit-sanity-check.md` § Tier 1 ↔ E001 |
+| Postmortem `uncaught_violation_count: null` | `kanban-advanced:kanban-postmortem` § Final audit KPIs — re-run audit |
 | Where are upstream docs? | `wiki/external-references.md` |
 
 ## Requirements

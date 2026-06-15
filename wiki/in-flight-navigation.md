@@ -35,13 +35,14 @@ Project `.hermes/docs/kanban-*` handoffs are **historical** — not in worktrees
 
 ## Orchestrator router (MBB — board / decompose)
 
-| Symptom | Layer | Tier | Index keywords |
-|---------|-------|------|----------------|
-| Gate / attestation / preflight fail | L1–L2 | T2 | preflight, gate FAIL, A00x |
-| Handoff stuck / exit 2–4 | L3 | T2/T3 | handoff ready, exit |
-| Scratch cards / bad decompose | L4 | T2 | scratch, cards-yaml |
-| Crons / validate fail | L4 | T2 | crons missing, validate_board |
-| Salvage / iteration limit | L6 | T2 | iteration limit, E001 |
+| Symptom | Layer | Tier | Index keywords | Deep dive |
+|---------|-------|------|----------------|-----------|
+| Gate / attestation / preflight fail | L1–L2 | T2 | preflight, gate FAIL, A00x | in-flight index L1–L2 |
+| Handoff stuck / exit 2–4 | L3 | T2/T3 | handoff ready, exit | `decomposition-workflow.md` |
+| Scratch cards / bad decompose | L4 | T2 | scratch, cards-yaml | in-flight index L4 |
+| Crons / validate fail | L4 | T2 | crons missing, validate_board | `wiki/governance.md` § crons |
+| Salvage / iteration limit | L6 | T2 | iteration limit, E001 | salvage reference |
+| Final audit exit-2 / max rounds / remediation stuck | post-flight | T2 | final audit, tier1, remediation wave | `plugin/data/references/final-audit-sanity-check.md` |
 
 ## Worker router (BB — card phase)
 

@@ -62,6 +62,7 @@ from lib.plan_parse import (  # noqa: E402
     parse_card_block,
     parse_plan,
 )
+from lib.decompose_stamp import stamp_all_impl_cards  # noqa: E402
 
 # ── CLI ────────────────────────────────────────────────────────────────────
 
@@ -176,6 +177,12 @@ def update_plan_memory(
     if task_ids:
         data["task_ids"] = list(task_ids.values())
         data["task_ids_by_key"] = task_ids
+        data["card_task_ids"] = task_ids
+        branches = {
+            key: f"wt/{tid}" for key, tid in task_ids.items() if key not in ("gate", "root", "audit")
+        }
+        if branches:
+            data["card_branches"] = branches
 
     mem_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(f"  Plan memory updated: {mem_path} ({impl_card_count} impl cards)")
@@ -200,6 +207,23 @@ def extract_id(output: str) -> str | None:
     return m.group(1) if m else None
 
 
+def estimate_turn_budget(card: dict) -> int:
+    """Rough happy-path turn estimate (kanban-planning Optimize formula)."""
+    body = card.get("body", "") or ""
+    lines = int(card.get("estimated_lines", 0) or 0)
+    fn_count = len(re.findall(r"\b(?:def |class |async def )", body))
+    test_runs = min(body.lower().count("pytest") + body.lower().count("npm test"), 3)
+    consumer_checks = body.lower().count("call-sites:")
+    return (fn_count * 3) + (test_runs * 2) + (consumer_checks * 2) + (2 if lines > 80 else 0) + 2
+
+
+def max_retries_for_card(card: dict) -> int:
+    """Per-plan cap: always ≤2 retries for code-gen cards."""
+    if card.get("type") != "code-gen":
+        return 2
+    return 2
+
+
 def create_card(card: dict, dry_run: bool = False, block_after: bool = False) -> str | None:
     """Create a single kanban card. Returns task ID or None.
 
@@ -213,6 +237,11 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
     assignee = card["assignee"]
     card_type = card["type"]
     body = card["body"]
+
+    if card_type == "code-gen" and "Iteration-budget:" not in body:
+        est = estimate_turn_budget(card)
+        body = f"Iteration-budget: ~{est} turns (happy-path cap 35; max-retries: 2)\n\n{body}"
+        card["body"] = body
 
     if dry_run:
         suffix = " then block" if block_after else ""
@@ -236,6 +265,7 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
             branch = card.get("branch") or f"kanban/{plan_id}/{card_key}"
             cmd.extend(["--workspace", workspace])
             cmd.extend(["--branch", branch])
+            cmd.extend(["--max-retries", str(max_retries_for_card(card))])
 
         # Read body from temp file, pass inline (--body-file not supported in all Hermes versions)
         with open(tmpfile, 'r', encoding="utf-8") as bf:
@@ -276,6 +306,30 @@ def link_cards(parent_id: str, child_id: str, dry_run: bool = False) -> bool:
         return True
     out, err, rc = hermes("kanban", "link", parent_id, child_id)
     return rc == 0
+
+
+def find_existing_plan_cards(plan_id: str, card_keys: list[str]) -> dict[str, str]:
+    """Return existing task IDs keyed by card key when plan_id already has cards on board."""
+    if not plan_id:
+        return {}
+    out, _, rc = hermes("kanban", "list")
+    if rc != 0:
+        return {}
+    existing: dict[str, str] = {}
+    for line in out.splitlines():
+        parts = line.split()
+        if not parts or not parts[0].startswith("t_"):
+            continue
+        tid = parts[0]
+        detail, _, _ = hermes("kanban", "show", tid)
+        if f"plan_id: {plan_id}" not in detail and f"plan_id:{plan_id}" not in detail.replace(" ", ""):
+            continue
+        for key in card_keys:
+            marker = f"card_key: {key}"
+            if marker in detail or f"#### Card {key}" in detail or f"key: {key}" in detail:
+                existing[key] = tid
+                break
+    return existing
 
 
 def verify_links(card_map: dict[str, str], cards: list[dict]) -> list[str]:
@@ -376,11 +430,34 @@ def main():
     all_cards = parsed["cards"]
     for card in all_cards:
         _normalize_card_assignee(card, worker_profile, orchestrator_profile)
-        if plan_file_rel and "plan_file:" not in card.get("body", ""):
-            card["body"] = f"plan_file: {plan_file_rel}\n{card['body']}"
 
-    # Count impl cards first (used in auto-generated card bodies)
+    plan_id = parsed.get("plan_id", "")
+    stamp_all_impl_cards(
+        all_cards,
+        plan_id=plan_id,
+        plan_file_rel=plan_file_rel,
+        plan_path=args.plan if args.plan else None,
+    )
+    for card in all_cards:
+        if plan_file_rel and "plan_file:" not in card.get("body", ""):
+            card["body"] = f"plan_file: {plan_file_rel}\ncard_key: {card.get('key', '')}\n{card['body']}"
+
     impl_cards = [c for c in all_cards if c["type"] not in ("gate", "root", "audit")]
+
+    if not args.dry_run and plan_id:
+        dupes = find_existing_plan_cards(plan_id, [c["key"] for c in impl_cards])
+        if dupes:
+            print(
+                f"ERROR: plan_id '{plan_id}' already has cards on board: "
+                + ", ".join(f"{k}={v}" for k, v in sorted(dupes.items())),
+                file=sys.stderr,
+            )
+            print(
+                "Archive the prior board or pass --gate-id to reuse the gate. "
+                "Do not decompose twice without archiving.",
+                file=sys.stderr,
+            )
+            sys.exit(7)
 
     # Auto-generate gate card (every board needs one)
     gate_card = {
@@ -425,6 +502,22 @@ def main():
     }
 
     # Auto-generate audit card
+    head_sha = ""
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(Path.cwd()),
+            timeout=10,
+        )
+        if r.returncode == 0:
+            head_sha = r.stdout.strip()
+    except Exception:
+        pass
+    baseline_line = f"Audit-baseline-sha: {head_sha}\n" if head_sha else ""
     audit_card = {
         "key": "audit",
         "title": f"Final audit — {parsed.get('plan_id', 'kanban plan')}",
@@ -441,7 +534,14 @@ def main():
         "ordinal_parent": None,
         "workspace": None,
         "branch": None,
-        "body": f"plan_id: {parsed.get('plan_id', 'unknown')}\nFinal audit. Verifies file compliance, lint, tests, cross-task consistency, commit reachability.",
+        "body": (
+            f"plan_id: {parsed.get('plan_id', 'unknown')}\n"
+            f"Type: audit\n"
+            f"{baseline_line}"
+            f"Final audit — run `python3 hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py "
+            f"--plan-id {parsed.get('plan_id', 'unknown')} --tier all` (Tier 1 plan-scope + Tier 2 doc coverage). "
+            f"On violations: `--spawn-remediation`. See plugin/data/references/final-audit-sanity-check.md."
+        ),
         "agent_body": None,
     }
 

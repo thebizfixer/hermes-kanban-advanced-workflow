@@ -347,4 +347,4 @@ python -m unittest discover -s tests -q
 
 - Full `verify_optimization.py` Phase B (all 15 checks in Python).
 - Merge `verify_goal_cards.py` frontmatter helpers into `plan_parse`.
-- `post_merge_gate.sh` backend-specific pytest paths — separate Sentimentary-app coupling issue.
+- `post_merge_gate.sh` backend-specific pytest paths — separate host-app coupling issue.

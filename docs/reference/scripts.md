@@ -10,7 +10,7 @@ bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 
 Single gate before decomposition. Runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py`) → attestation → card policy present → plan memory seeded → DB integrity → **materialized scripts executable** (`auto_unblock.sh`, `board_keeper.sh`, `worktree_setup.sh` under `$HERMES_HOME/scripts/`) → **hermes on PATH**.  Replaces the old multi-step Steps 0a–0e.  Fails on any blocking check with a specific error.
 
-After all blocking checks pass, runs **`coding_agent_auth_prewarm`** (non-blocking WARN): one serialized Cursor `agent -p "echo ok" --trust` under `flock` so parallel workers inherit a fresh `auth.json`. See `plugin/data/references/coding-agent-auth.md` § Pre-warm before decomposition.
+After all blocking checks pass, runs **`coding_agent_auth_prewarm`**: when `KANBAN_CODING_AGENT=agent` (Cursor), pre-warm is **blocking** (FAIL stops decomposition); other binaries log WARN-only. One serialized `agent -p "echo ok" --trust` under `flock`. See `plugin/data/references/coding-agent-auth.md` § Pre-warm before decomposition.
 
 Added checks in v1.1: `test -x` (not just `test -f`) for cron scripts, and hermes PATH verification so crons can invoke `hermes kanban` commands.
 
@@ -20,11 +20,11 @@ Added checks in v1.1: `test -x` (not just `test -f`) for cron scripts, and herme
 bash hermes-kanban-advanced-workflow/scripts/validate_board.sh [--strict] [--profile advisory|balanced|strict]
 ```
 
-Pre-dispatch structural gate.  Run after card creation and cron provisioning, before the orchestrator completes the gate card. 12 checks:
+Pre-dispatch structural gate.  Run after card creation and cron provisioning, before the orchestrator completes the gate card. 13 checks:
 
 | # | Check | What it catches |
 |---|-------|----------------|
-| 0 | **Cron health** — scripts executable, hermes on PATH, both crons running | Silent cron failures, cron environment PATH mismatch |
+| 0 | **Cron health** — scripts executable, hermes on PATH, wave crons running (+ lifecycle when `notify_lifecycle`) | Silent cron failures, cron environment PATH mismatch |
 | 1 | Orphaned `--parents` declarations | P008 |
 | 2 | Code-gen cards with scratch workspace | P006 |
 | 3 | Shared workspace paths | P007 |
@@ -36,6 +36,7 @@ Pre-dispatch structural gate.  Run after card creation and cron provisioning, be
 | 9 | Worker cards without `agent -p` blocks | P002 |
 | 10 | Orchestrator-only cards on worker profiles | Protocol violation prevention |
 | 11 | Worker cards without `Tests:` line | E003 prevention |
+| 12 | **Card self-sufficiency** — `plan_id`, `Acceptance:`, `Call-sites:` (shared symbols), `Parent-branches:` when `parents:` set | P010–P013; completeness-loop readiness |
 
 Cron health (check 0) was hardened in v1.1: per-script executable verification, both `auto_unblock` and `board_keeper` crons verified running, and hermes PATH check with common-install-location fallback.
 
@@ -45,7 +46,7 @@ Cron health (check 0) was hardened in v1.1: per-script executable verification, 
 bash hermes-kanban-advanced-workflow/scripts/preflight.sh
 ```
 
-Environment gating before decomposition. Checks include filesystem coherence, kanban DB integrity, memory budget, secret availability, API reachability, hermes version + goal flag, gateway health, profile availability, **Hermes** model reachability (profile LLM ping), **coding-agent CLI reachability** (`check_coding_agent_cli.py` — separate from Hermes profiles), and environment parity. Returns JSON with `status: pass | degraded | fail`. See `kanban-advanced:kanban-preflight` skill for full details.
+Environment gating before decomposition. Checks include filesystem coherence, kanban DB integrity, memory budget, secret availability, API reachability, hermes version + goal flag, **`kanban.auto_decompose`** and **`kanban.dispatch_stale_timeout_seconds`** (degraded when misconfigured), gateway health, profile availability, **Hermes** model reachability (profile LLM ping), **coding-agent CLI reachability** (`check_coding_agent_cli.py` — separate from Hermes profiles), and environment parity. Returns JSON with `status: pass | degraded | fail`. See `kanban-advanced:kanban-preflight` skill for full details.
 
 ## Cron scripts
 
@@ -63,14 +64,17 @@ Polls the board and unblocks cards whose parents are all done.  Run via cron eve
 bash scripts/board_keeper.sh
 ```
 
-Proactive board manager for walk-away execution.  Runs every 180s.  5 functions:
+Proactive board manager for walk-away execution.  Runs every 180s.  Core functions:
 1. Salvage iteration-limit cards (check worktree, commit, merge, complete)
 2. Kill orphaned agent processes from archived cards
 3. Unstick ready cards stalled >3 minutes
-4. Detect unmerged done cards (commits ahead of `${working_branch}`)
-5. Report board status
+4. Detect unmerged done cards (commits ahead of `${working_branch}`) and auto-merge when safe
+5. Flag thrash (>40 events on active cards)
+6. Report board status
 
-Runs as a **script-only** Hermes cron (`no_agent=true`, `deliver=local`). Pure bash salvage — no LLM required for wave progression. Logs to `$HERMES_HOME/kanban/logs/board-keeper.log`.
+Event-driven complement: `plugin/hooks.py` `post_tool_call` fires `auto_unblock.sh --max-unblock 1` after each successful `kanban_complete` so the next wave can release without waiting for the cron tick.
+
+Runs as a **script-only** Hermes cron (`no_agent=true`, `deliver=local`). Pure bash salvage — no LLM required for wave progression. Logs to `.hermes/kanban/logs/board-keeper.log` (project) or `$HERMES_HOME/kanban/logs/`.
 
 ### `provision_kanban_crons.sh`
 
@@ -80,7 +84,19 @@ bash scripts/provision_kanban_crons.sh --check
 bash scripts/provision_kanban_crons.sh --remove [--plan-id <id>]
 ```
 
-Per-plan lifecycle for `kanban-auto-unblock-1m` and `kanban-board-keeper-3m`. Uses `deliver=local` (no messaging platform). **Not** called at init — create at decomposition, remove at cleanup. Stores job IDs in `.hermes/kanban/memory/<plan_id>.json`.
+Per-plan cron lifecycle for wave progression and optional lifecycle notify. Uses gateway `HERMES_HOME` resolver (`scripts/lib/gateway_hermes_home.sh`) so jobs register in the main cron store, not a profile-scoped store.
+
+| Job | Schedule | `deliver` | When |
+|-----|----------|-----------|------|
+| `kanban-auto-unblock-1m` | every 1m | `local` | always at decomposition |
+| `kanban-board-keeper-3m` | every 3m | `local` | always at decomposition |
+| `kanban-lifecycle-notify-5m` | every 5m | gateway default | when `notify_lifecycle: true` (default) |
+
+**Not** called at init — create at decomposition (`--create --plan-id <id>`), remove at cleanup (`--remove`). Stores job IDs in `.hermes/kanban/memory/<plan_id>.json`. Lifecycle script reads active plan id from `.hermes/kanban/logs/lifecycle_plan_id` (written at create). `--check` WARNs when session `HERMES_HOME` is profile-scoped.
+
+### `kanban_lifecycle_notify.sh`
+
+State-diff lifecycle messages (start / running / done / catastrophic re-block) after the gate card completes. Separate from intervention notify (`kanban-advanced:kanban-notify`). Logs to `.hermes/kanban/logs/lifecycle.jsonl`. Config: `notify_lifecycle` in overlay (default `true`) or `NOTIFY_LIFECYCLE=false` to disable.
 
 ### `kanban_escalation_tracker.sh`
 
@@ -142,7 +158,7 @@ Syncs canonical skill files from `plugin/skills/` to `$HERMES_HOME/skills/kanban
 
 | Top-level | `lib/` |
 |-----------|--------|
-| `auto_unblock.sh`, `board_keeper.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py` |
+| `auto_unblock.sh`, `board_keeper.sh`, `kanban_lifecycle_notify.sh`, `kanban_intervention_inc.sh`, `kanban_git_ops.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py`, `gateway_hermes_home.sh`, `auto_unblock_core.sh`, `decompose_stamp.py`, `cross_plan_memory.py`, `plan_parse.py`, `cli_output_parse.py`, … |
 
 Init / dashboard **Update Plugin** use the same list via `plugin/script_materialize.py`. `--check` mode exits non-zero if materialized files have drifted from canonical.
 
@@ -152,7 +168,7 @@ Init / dashboard **Update Plugin** use the same list via `plugin/script_material
 python hermes-kanban-advanced-workflow/scripts/kanban_decompose.py --plan <file> [--dry-run]
 ```
 
-Governed card creation from a plan file.  Reads the plan, extracts workstreams, creates cards with proper `Files:`/`Mode:`/`agent -p` blocks, wires parent-child dependencies.
+Governed card creation from a plan file.  Reads the plan, extracts workstreams, creates cards with proper `Files:`/`Mode:`/`agent -p` blocks, wires parent-child dependencies. **Auto-stamps** `Parent-branches:`, `Call-sites:`, `Acceptance:`, `plan_file`, and `Iteration-budget:` from plan bundles (`scripts/lib/decompose_stamp.py`). The final audit card includes `Type: audit`, **`Audit-baseline-sha:`** (frozen `git rev-parse HEAD` at decompose), and a pointer to `final_audit_sanity.py`. Exits **7** when `plan_id` cards already exist (idempotent re-decompose guard). `--max-retries 2` caps decomposition retries.
 
 ## Evaluation chain (`kanban_evaluation_chain.py`)
 
@@ -164,9 +180,9 @@ python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_
 
 | Step | Code | What it checks |
 |------|------|---------------|
-| 1 | E001 | Every file in `Files:` has >0 changes |
+| 1 | E001 | Every file in `Files:` has >0 changes **or** prior commit matches card `Commit:` and touches all `Files:` (`find_prior_commit`) |
 | 2 | E002 | **Hard gate.** Auto-revert unlisted changes; block if revert fails |
-| 3 | E003 | `Tests:` command passes |
+| 3 | E003 | `Tests:` passes — shell command, or `doc:` via `verify_doc_tests` (`link-check`, `symbol-grep`, `yaml-validate`), or `code:` shell remainder |
 | 4 | E004 | Commit message matches `Commit:` line |
 | 5 | E018 | Token log entry exists with matching `task_id`, source=`agent`, non-zero tokens |
 | 6 | E006 | Zero-output — at least one file has >0 diff |
@@ -242,13 +258,31 @@ from scripts.token_tracker import log_token_run, log_from_env, log_orchestrator_
 
 Writes `tokens.jsonl` entries for sprint budgeting.  `log_token_run()` for workers (cursor + hermes tokens), `log_from_env()` for env-driven logging, `log_orchestrator_tokens()` for orchestrator checkpoints.  E018 blocks cards without matching token entries.  E020 blocks cards where agent output wasn't captured.
 
+## Final audit sanity (`final_audit_sanity.py`)
+
+```bash
+python hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py --plan-id <id> [--tier 1|2|all]
+python hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py --plan-id <id> --spawn-remediation [--round N]
+```
+
+Two-tier post-flight audit: Tier 1 plan-scope (`Acceptance:`, `Call-sites:`, `Files:` union vs git diff) and Tier 2 doc coverage. Exit codes: **0** clean, **1** violations (spawn remediation), **2** script error (do not spawn). Reports default-on to `.hermes/kanban/reports/{plan_id}_audit_tier1.json` and `tier2.json` (`--no-json` to suppress).
+
+- **`Audit-baseline-sha:`** — stamped on audit card at decompose (`kanban_decompose.py`); frozen baseline for Tier 1
+- **`Audit-round:`** — durable round counter in audit card body during remediation loop
+- **Tier 1 / E001 alignment** — `plan_file_zero_diff` reuses `find_prior_commit` from done cards' `Commit:` + `Files:` (same forgiveness as eval-chain step 1 when baseline..HEAD shows zero diff)
+- **`Tests: doc:`** — evaluated by `kanban_evaluation_chain.py` step 3 via `verify_doc_tests` (`link-check`, `symbol-grep`, `yaml-validate`); `code:` prefix runs shell remainder
+- **`auto_unblock_core.sh`** — `_has_active_remediation_children` skips audit card promotion while remediation children are active
+- **`validate_board.sh` check 13** — fails if a done audit card has open remediation children
+
+Reference: `plugin/data/references/final-audit-sanity-check.md`, `plugin/data/references/final-audit-doc-coverage.md`.
+
 ## Postmortem generator (`generate_postmortem.py`)
 
 ```bash
 python hermes-kanban-advanced-workflow/scripts/generate_postmortem.py --plan-id <id> --output .hermes/kanban/reports/
 ```
 
-Generates 8-section markdown postmortem: execution summary, agent performance, failure taxonomy, intervention log, discovered pitfalls, skill updates needed, token economics, learning summary. Reads `tokens.jsonl`, kanban SQLite DB, and intervention counter. Run before board archive.
+Generates 8-section markdown postmortem plus machine-readable KPI artifact: `{plan_id}_kpi.json` and append-only `kpi_history.jsonl` in the output directory. KPI includes success/intervention rates, wall-clock hours, `subsystem_failures` taxonomy, `auth_escalation_count`, `thrash_outliers`, and `completeness` (worker vs orchestrator catch, remediation cards). When `{plan_id}_audit_tier1.json` / `tier2.json` exist, adds `final_audit_rounds`, `plan_scope_gaps`, `doc_coverage_gaps`; sets `uncaught_violation_count` to **`null`** (unknown) when tier JSON is absent — not `0`. Cross-plan lessons merge into `.hermes/kanban/memory/_global.json` via `scripts/lib/cross_plan_memory.py`. Reads `tokens.jsonl`, kanban SQLite DB, and intervention counter. Run before board archive.
 
 ## Verify optimization (`verify_optimization.sh`)
 

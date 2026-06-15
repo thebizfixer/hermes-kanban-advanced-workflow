@@ -14,7 +14,7 @@ metadata:
 
 > The core worker lifecycle (including the `kanban_create` fan-out pattern and the "decompose, don't execute" rule) is auto-injected into every kanban process via the `KANBAN_GUIDANCE` system-prompt block. This skill is the deeper playbook when you're an orchestrator profile whose whole job is routing.
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -293,7 +293,7 @@ Run this on every profile that may decompose tasks. The `base_url` and `api_key`
 | `kanban.orchestrator_profile` | `""` (falls back to default) | Profile for triage decomposition | Set explicitly for clarity |
 | `kanban.default_assignee` | `""` (falls back to default) | Fallback when decomposer can't match | Set explicitly |
 | `kanban.failure_limit` | `2` | Auto-block after N consecutive failures | Already existed in v0.14.x |
-| `kanban.dispatch_stale_timeout_seconds` | `14400` (4h) | Reclaim running tasks past heartbeat timeout | Our 3-min heartbeat is well within |
+| `kanban.dispatch_stale_timeout_seconds` | **`14400` (4h)** at bootstrap; upstream may ship `0` | Reclaim running tasks past heartbeat timeout | Bootstrap sets explicitly — see `dispatch-stale-timeout.md` |
 | `kanban.worker_log_rotate_bytes` | `2097152` (2 MiB) | Worker log rotation size | Default is fine |
 | `kanban.worker_log_backup_count` | `1` | Worker log rotation backups | Default is fine |
 | `auxiliary.kanban_decomposer` | `provider: auto, model: ""` | Model for decomposition | **Must configure for custom providers** |
@@ -579,14 +579,36 @@ log_from_env(
 
 ## Final audit (mandatory)
 
-After all tasks reach `done`:
+After all implementation tasks reach `done`:
 
-**The final audit is orchestrator-executed, not dispatched to workers.** The audit card body is a text checklist — it has no `agent -p` block. Any worker that picks it up will protocol-violate (same failure mode as the gate card). Create the audit card as a placeholder for the board's dependency graph (it gates on the last implementation card), but when it reaches `ready`, the orchestrator runs the audit directly and completes the card manually.
-## Final audit (mandatory)
+**The final audit is orchestrator-executed, not dispatched to workers.** The audit card has no `agent -p` block. When it reaches `ready`, the orchestrator runs the scripted audit and completes the card manually.
 
-After all tasks reach `done`:
+### Phased final audit SOP
 
-1. **File-level plan compliance:** `git diff --stat <baseline>..HEAD` — verify every planned file has > 0 lines changed. Zero-diff = dropped sub-task.
+1. **Mechanical gates (keep):** merge branches, optional `post_merge_gate.sh`, KPI source checks, cross-card regression (E017), gate tests, churn audit (steps 1–10 below).
+2. **Run scripted two-tier audit:**
+
+```bash
+python3 hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py --plan-id <plan_id> --tier all
+```
+
+| Exit | Action |
+| --- | --- |
+| `0` | `kanban_complete` audit card (after `validate_board.sh` check 13 clears) |
+| `1` | `--spawn-remediation`, wait for remediation wave, repeat step 2 |
+| `2` | `kanban_block` audit card with error detail; page operator — **do not spawn remediation** |
+
+3. **Cleanup + postmortem** after audit card completes.
+
+**Do not** manually run `auto_unblock.sh` during the remediation phase. `_has_active_remediation_children` in `auto_unblock_core.sh` prevents premature audit promotion.
+
+Reference: `plugin/data/references/final-audit-sanity-check.md`, `plugin/data/references/final-audit-doc-coverage.md`.
+
+**Tier 1 / E001 alignment:** When `plan_file_zero_diff` would fire, Tier 1 first checks done cards for E001-equivalent prior-commit evidence (`Commit:` + `find_prior_commit`). False positives after in-flight E001 ALLOW usually mean the path is missing from card `Files:` or `Commit:` was not stamped.
+
+### Mechanical checklist (before / alongside scripted audit)
+
+1. **File-level plan compliance:** `git diff --stat <baseline>..HEAD` against `Audit-baseline-sha:` on the audit card. A planned file with **zero diff** is a violation **unless** Tier 1 clears it via **E001 prior-commit rule** (`find_prior_commit` on a done card's `Commit:` + `Files:`). Do not assume "dropped sub-task" when E001 already ALLOWed the file in-flight — fix card `Files:` / `Commit:` or run scripted audit. **`final_audit_sanity.py --tier all`** applies this automatically.
 2. **Lint + typecheck** on changed files.
 3. **Full test suite.**
 4. **Post-merge gate:** Run `bash hermes-kanban-advanced-workflow/scripts/post_merge_gate.sh <plan_id>` — this verifies gate tests from the plan, cross-card regression, and churn audit. Do not close the board until this passes.
@@ -598,11 +620,29 @@ After all tasks reach `done`:
    - Kanban DB: `test -f "$HERMES_HOME/kanban.db" && echo "OK" || echo "MISSING: kanban.db"`
    - Intervention counter: `test -f .hermes/kanban/logs/interventions.count && echo "OK ($(cat .hermes/kanban/logs/interventions.count))" || echo "MISSING: interventions.count"`
    If any source is missing: flag in postmortem, investigate which worker/script didn't write it, harden the gap. Do NOT skip KPI reporting because of missing data — estimate from agent logs.
-   8. **Cross-card regression check (E017):** When multiple cards touched the same file, verify that functions added by earlier cards are still present after later merges. Card 10 removed `_merge_fetch_scope_exhausted` that Card 2 added — both touched `tinyfish_pipelines.py`, the dependency chain was respected, but the merge was destructive. For each file touched by ≥2 cards, diff the first card's additions against the final merged state and flag any function that was added then removed.
+   8. **Cross-card regression check (E017):** When multiple cards touched the same file, verify that functions added by earlier cards are still present after later merges. Card 10 removed `_merge_fetch_scope_exhausted` that Card 2 added — both touched `pipelines.py`, the dependency chain was respected, but the merge was destructive. For each file touched by ≥2 cards, diff the first card's additions against the final merged state and flag any function that was added then removed.
    9. **Gate test verification:** Before marking the plan complete, verify every gate test from the plan's Test plan section passes. Do not trust plan YAML alone — this plan's Card 1 was marked `completed` while the harness test was red on HEAD. Run the plan's specified gate tests and only mark the plan done when they pass.
-   10. **Excessive churn audit:** For each card, compare actual line changes (additions + deletions) against the plan's estimated line budget. Flag any card that exceeds the estimate by >3×. Card 5 produced 8,551 net line changes on `tinyfish.py` against an estimated ~30 — this was a whole-module rewrite not in plan scope.
+   10. **Excessive churn audit:** For each card, compare actual line changes (additions + deletions) against the plan's estimated line budget. Flag any card that exceeds the estimate by >3×. Card 5 produced 8,551 net line changes on `large_module.py` against an estimated ~30 — this was a whole-module rewrite not in plan scope.
+
+11. **Completeness audit (per-card):** For every implementation card, verify each `Acceptance:` / `Call-sites:` / `Files:` surface in the merged tree. **`final_audit_sanity.py --tier all`** automates this union audit plus Tier 2 doc coverage. On any miss, **create a remediation card** (`Type: remediation`, `Remediation-phase: final`, `Remediates: <parent_task_id>`, `Missed:` bullet list) via `--spawn-remediation` — **never** dispatch the coding CLI from the orchestrator session. Workers run Step 3–6 on remediation cards. If a remediation card reaches `gave_up`, escalate to the operator (no second-level remediation). Flowchart + KPI buckets: `wiki/governance.md` § Role-based completeness loop.
 
 **KPI reporting (mandatory for postmortem):** Every postmortem must include token burn (orchestrator + worker + CLI agent, by provider), cache efficiency, cost estimate, success rate, autonomous completion rate, first-pass yield, intervention rate, wall clock duration, and failure-mode distribution. If token_tracker.py was not configured, estimate from agent logs (grep 'API call' agent.log). The user will ask for KPIs — have them ready.
+
+### When final audit hits a problem (load in order)
+
+| Symptom | First load | Then |
+| --- | --- | --- |
+| `final_audit_sanity.py` **exit 2** (plan/git/DB error) | `plugin/data/references/final-audit-sanity-check.md` § exit codes | `kanban_block` audit card — **do not** spawn remediation |
+| **exit 1** (violations) | Same runbook § orchestrator SOP | `--spawn-remediation`, wait for wave, re-run `--tier all` |
+| **Max rounds** / audit blocked after escalation | `final-audit-sanity-check.md` § Max rounds | `wiki/configuration.md` (`final_audit_max_remediation_rounds`); operator triage |
+| **Remediation wave stuck** (running/blocked children) | `hermes kanban list --parent <audit_tid>` | Index L7 → `in-flight-governance-index.md` |
+| **`gave_up` remediation child** | `final-audit-sanity-check.md` § Tier 1 ↔ E001 + sad-path | Escalation on audit card; violations marked `escalated` in tier JSON |
+| **`plan_file_zero_diff` after E001 ALLOW** | `final-audit-sanity-check.md` § Tier 1 ↔ E001 | Add path to done card `Files:`; stamp `Commit:`; re-run audit |
+| **Tier 2 doc false positive** | `plugin/data/references/final-audit-doc-coverage.md` | Add `final_audit_overrides` in overlay (`wiki/configuration.md`) |
+| **`validate_board` check 13 FAIL** | Close/archive open remediation children | Orchestrator skill § Final audit |
+| **Uncaught KPI / missing tier JSON** | `kanban-advanced:kanban-postmortem` § Final audit KPIs | Re-run audit before cleanup; do not treat `null` uncaught as pass |
+
+**Index router:** `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` § **L7**. Wiki belt map: `wiki/in-flight-navigation.md` § Orchestrator router.
 
 ## Walk-away mode
 

@@ -284,6 +284,51 @@ else
     fi
 fi
 
+# ── 16. Spec precision (non-trivial agent blocks) ───────────────────────
+echo "16. Spec precision (Spec:/Call-sites: on non-trivial cards)"
+MULTI_FILE_AGENTS=$(python3 - "$PLAN" <<'PY' 2>/dev/null || echo 0)
+import re, sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+blocks = re.findall(r"```agent\s*\n(.*?)```", text, re.DOTALL)
+needs = 0
+missing = 0
+for block in blocks:
+    files = len(re.findall(r"Files:\s*[^\n]+", block, re.I))
+    trivial = files <= 1 and "Call-sites:" not in block and "wire " not in block.lower()
+    if trivial:
+        continue
+    needs += 1
+    if "Spec:" not in block and "Call-sites:" not in block:
+        missing += 1
+print(missing)
+PY
+)
+if [[ "${MULTI_FILE_AGENTS:-0}" -gt 0 ]]; then
+    check_fail "$MULTI_FILE_AGENTS non-trivial agent block(s) missing Spec: and Call-sites: — see plan-file-format.md"
+else
+    check_pass "Non-trivial agent blocks include Spec: or Call-sites:"
+fi
+
+# ── 17. Contracts block when shared Call-sites ───────────────────────────
+echo "17. Contracts block for shared symbols"
+CALLSITE_REFS=$(echo "$OPT_SECTION" | grep -ci 'Call-sites:' || true)
+CONTRACTS_BLOCK=$(echo "$OPT_SECTION" | grep -ciE '^Contracts:' || true)
+if [[ "${CALLSITE_REFS:-0}" -gt 1 && "${CONTRACTS_BLOCK:-0}" -eq 0 ]]; then
+    check_warn "Multiple Call-sites: in optimization section but no Contracts: block — pin shared signatures"
+else
+    check_pass "Contracts discipline OK (or single-surface plan)"
+fi
+
+# ── 18. Ban vague integration verbs in agent blocks ─────────────────────
+echo "18. Precision verbs in agent blocks"
+VAGUE_IN_AGENT=$(echo "$PLAN_CONTENT" | awk '/```agent/,/```/' | grep -ciE '\b(wire|hook up|integrate|handle|support)\b' || true)
+if [[ "${VAGUE_IN_AGENT:-0}" -gt 0 ]]; then
+    check_warn "$VAGUE_IN_AGENT vague verb(s) in agent blocks — replace with concrete operations (plan-file-format.md)"
+else
+    check_pass "No vague integration verbs in agent blocks"
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""
 echo "=== Results: $PASSES passed, $WARNINGS warnings, $FAILURES failures ==="

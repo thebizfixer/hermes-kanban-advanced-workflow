@@ -63,7 +63,7 @@ done
 | Keywords | Layer | Tier | Belt | First command | Verify | Deep dive |
 |----------|-------|------|------|---------------|--------|-----------|
 | `E021`, exit 127 | L5-pre | T1 | BB | `worktree_setup.sh --task-id <id> --repo-root <repo>` | `.hermes/scripts/coding_agent_invoke.sh` in WT | `operator-provisioning.md` |
-| plan file missing | L5-pre | T1 | BB | `git checkout origin/${working_branch} -- .cursor/plans/*<plan_id>*` | Plan readable | worker skill orient |
+| plan file missing | L5-pre | T1 | BB | `git checkout origin/${working_branch} -- .agent/plans/*{plan_id}*` | Plan readable | worker skill orient |
 | `.env` / venv missing | L5-pre | T3 | Op | Add paths to `.worktreeinclude`; operator provisions | Tests run in WT | `operator-provisioning.md` |
 | stale materialized skill | L5-pre | T2 | MBB | Update Plugin + gateway restart | SKILL mtime fresh | `handoff-regression-checklist.md` |
 
@@ -85,6 +85,19 @@ done
 | `E003`/`E006` retry | L6 | T1 | BB | `kanban_recover.py --list`; fix + retry | Chain ALLOW | worker-governance |
 | `E018`/`E020` tokens | L6 | T1 | BB | Capture agent JSON stdout; `token_tracker` | Exact log entry | worker-governance |
 | iteration limit 90/90 | L6 | T2 | MBB | Salvage commits — do not re-dispatch | Merge to staging | salvage reference |
+
+## L7 — Final audit / post-flight remediation (MBB)
+
+| Keywords | Layer | Tier | Belt | First command | Verify | Deep dive |
+|----------|-------|------|------|---------------|--------|-----------|
+| final audit exit 2 | L7 | T2 | MBB | Read stderr; fix plan/git/DB | Re-run `--tier all` exit 0 | `final-audit-sanity-check.md` |
+| tier1/tier2 violations | L7 | T2 | MBB | `python3 "$BUNDLE/scripts/final_audit_sanity.py" --plan-id <id> --tier all` | Exit 0 or spawn | `final-audit-sanity-check.md` |
+| plan_file_zero_diff after E001 | L7 | T2 | MBB | Fix done card `Files:` + `Commit:`; re-run tier 1 | No violation | `final-audit-sanity-check.md` § Tier 1 ↔ E001 |
+| remediation wave stuck | L7 | T2 | MBB | `hermes kanban list --parent <audit_tid>` | No running/blocked children | `final-audit-sanity-check.md` § sad-path |
+| max rounds exceeded | L7 | T2/T3 | MBB/Op | Review tier JSON; operator triage | Audit blocked + escalation | `wiki/configuration.md` § final audit |
+| gave_up remediation | L7 | T3 | Op | Escalation tracker output on audit card | Violations marked `escalated` in tier JSON | governance § completeness loop |
+| doc coverage false positive | L7 | T2 | MBB | Add `final_audit_overrides` in overlay | `approved_skip` in tier2 JSON | `final-audit-doc-coverage.md` |
+| check13 fail | L7 | T2 | MBB | Close or archive remediation children | `validate_board.sh` exit 0 | orchestrator skill § Final audit |
 
 ## Recover + regression
 

@@ -737,6 +737,33 @@ def build_report(
     elif source_notes and any("scope" in n.lower() for n in source_notes):
         lines.append("_No scope violations recorded — E002 ran clean, or logging not yet active._")
 
+    root = _project_root()
+    tier1, tier2, audit_notes = _load_audit_tier_reports(plan_id, root)
+    remediation_cards = [
+        task.task_id
+        for task in tasks
+        if re.search(r"Type:\s*remediation", task.body, re.IGNORECASE)
+    ]
+    audit_fields = _audit_kpi_fields(
+        tier1, tier2, remediation_cards, _audit_round_from_tasks(tasks)
+    )
+    if audit_notes or tier1 is not None or tier2 is not None:
+        lines.extend(["### Final audit", ""])
+        if audit_notes:
+            for note in audit_notes:
+                lines.append(f"- **{note}**")
+        uncaught = audit_fields["uncaught_violation_count"]
+        uncaught_display = "unknown" if uncaught is None else str(uncaught)
+        lines.extend(
+            [
+                f"- **Final audit rounds:** {audit_fields['final_audit_rounds']}",
+                f"- **Plan scope gaps (tier1):** {audit_fields['plan_scope_gaps']}",
+                f"- **Doc coverage gaps (tier2):** {audit_fields['doc_coverage_gaps']}",
+                f"- **Uncaught violations (goal 0):** {uncaught_display}",
+                "",
+            ]
+        )
+
     # Card learnings from plan memory completed_cards
     memory_dir = _project_root() / ".hermes" / "kanban" / "memory"
     memory_path = memory_dir / f"{plan_id}.json"
@@ -886,6 +913,223 @@ def build_report(
     return "\n".join(lines)
 
 
+def _build_completeness_violations(
+    tasks: list[TaskRecord],
+    scope_violations: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Return violations list plus worker/orchestrator catch counts."""
+    violations: list[dict[str, Any]] = []
+    for task in tasks:
+        if not re.search(r"Type:\s*remediation", task.body, re.IGNORECASE):
+            continue
+        remediates = re.search(r"Remediates:\s*(\S+)", task.body, re.IGNORECASE)
+        missed = re.search(r"Missed:\s*(.+?)(?:\n\n|\n(?:Type:|Files:|Acceptance:)|\Z)", task.body, re.IGNORECASE | re.DOTALL)
+        violations.append(
+            {
+                "kind": "completeness_remediation",
+                "remediation_task_id": task.task_id,
+                "parent_task_id": remediates.group(1) if remediates else "",
+                "missed": (missed.group(1).strip()[:500] if missed else ""),
+                "caught_by": "orchestrator",
+            }
+        )
+    for entry in scope_violations:
+        if not isinstance(entry, dict):
+            continue
+        violations.append(
+            {
+                "kind": "scope_e002",
+                "task_id": entry.get("task_id", ""),
+                "count": entry.get("count", 0),
+                "files": entry.get("files", []),
+                "caught_by": "worker",
+            }
+        )
+    worker_catch = sum(1 for v in violations if v.get("caught_by") == "worker")
+    orchestrator_catch = sum(1 for v in violations if v.get("caught_by") == "orchestrator")
+    return violations, worker_catch, orchestrator_catch
+
+
+def _load_audit_tier_reports(plan_id: str, repo_root: Path) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[str]]:
+    """Load tier1/tier2 audit JSON if present. Returns notes for missing files."""
+    notes: list[str] = []
+    report_dir = repo_root / ".hermes" / "kanban" / "reports"
+    tier1: dict[str, Any] | None = None
+    tier2: dict[str, Any] | None = None
+    t1_path = report_dir / f"{plan_id}_audit_tier1.json"
+    t2_path = report_dir / f"{plan_id}_audit_tier2.json"
+    if t1_path.is_file():
+        tier1 = json.loads(t1_path.read_text(encoding="utf-8"))
+    else:
+        notes.append(f"WARN: tier1 audit JSON missing at `{t1_path}` — uncaught_violation_count unknown")
+    if t2_path.is_file():
+        tier2 = json.loads(t2_path.read_text(encoding="utf-8"))
+    else:
+        notes.append(f"WARN: tier2 audit JSON missing at `{t2_path}` — doc coverage gaps unknown")
+    return tier1, tier2, notes
+
+
+def _audit_round_from_tasks(tasks: list[TaskRecord]) -> int:
+    """Authoritative round counter lives on the audit card body (`Audit-round:`)."""
+    for task in tasks:
+        if not re.search(r"Type:\s*audit", task.body, re.IGNORECASE):
+            continue
+        match = re.search(r"(?m)^Audit-round:\s*(\d+)\s*$", task.body, re.IGNORECASE)
+        if match:
+            return int(match.group(1))
+    return 0
+
+
+def _audit_kpi_fields(
+    tier1: dict[str, Any] | None,
+    tier2: dict[str, Any] | None,
+    remediation_cards: list[str],
+    audit_round_from_card: int = 0,
+) -> dict[str, Any]:
+    plan_scope_gaps = len((tier1 or {}).get("violations") or [])
+    doc_coverage_gaps = len((tier2 or {}).get("violations") or [])
+    audit_round = audit_round_from_card
+    if audit_round == 0:
+        if tier1 and tier1.get("audit_round") is not None:
+            audit_round = int(tier1["audit_round"])
+        elif tier2 and tier2.get("audit_round") is not None:
+            audit_round = int(tier2["audit_round"])
+
+    if tier1 is None and tier2 is None:
+        uncaught: int | None = None
+    else:
+        spawned = len(remediation_cards)
+        total_gaps = plan_scope_gaps + doc_coverage_gaps
+        uncaught = max(0, total_gaps - spawned) if total_gaps else 0
+
+    return {
+        "final_audit_rounds": audit_round,
+        "plan_scope_gaps": plan_scope_gaps,
+        "doc_coverage_gaps": doc_coverage_gaps,
+        "uncaught_violation_count": uncaught,
+    }
+
+
+def build_kpi_json(
+    plan_id: str,
+    tasks: list[TaskRecord],
+    token_entries: list[dict[str, Any]],
+    intervention_count: int,
+    intervention_log: list[dict[str, Any]],
+    scope_violations: list[dict[str, Any]],
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Machine-readable KPI artifact for dashboards and cross-run trend."""
+    plan_tokens = [entry for entry in token_entries if entry.get("plan_id") == plan_id]
+    if not plan_tokens:
+        plan_tokens = token_entries
+
+    total_tasks = len(tasks) if tasks else len({_task_id_from_token(e) for e in plan_tokens})
+    completed = sum(
+        1 for task in tasks if task.status.lower() in {"done", "completed", "archived"}
+    )
+    failed = sum(
+        1 for task in tasks if task.status.lower() in {"crashed", "gave_up", "timed_out", "blocked"}
+    )
+    takeovers = sum(
+        1
+        for task in tasks
+        if any(mode in task.failure_modes for mode in ("orchestrator_takeover", "iteration_budget"))
+        or "takeover" in task.body.lower()
+    )
+    autonomous = max(0, completed - takeovers) if takeovers else completed
+    success_rate = (completed / total_tasks * 100.0) if total_tasks else 0.0
+    intervention_rate = (intervention_count / total_tasks * 100.0) if total_tasks else 0.0
+    duration_hours = _wall_clock_hours(tasks)
+
+    failure_rows: dict[str, list[str]] = defaultdict(list)
+    for task in tasks:
+        mode = _classify_failure(task)
+        if mode:
+            failure_rows[mode].append(task.task_id)
+
+    auth_escalations = len(failure_rows.get("auth_error", []))
+    thrash_outliers = [
+        task.task_id for task in tasks if len(task.events) > 40
+    ]
+
+    cursor_total = sum(_cursor_total(entry) for entry in plan_tokens)
+    cache_read = sum(int((entry.get("cursor") or {}).get("cache_read_tokens") or 0) for entry in plan_tokens)
+    cache_input = sum(int((entry.get("cursor") or {}).get("input_tokens") or 0) for entry in plan_tokens)
+    cache_ratio = (cache_read / cache_input) if cache_input else 0.0
+
+    remediation_cards = [
+        task.task_id
+        for task in tasks
+        if re.search(r"Type:\s*remediation", task.body, re.IGNORECASE)
+    ]
+    completeness_violations, worker_catch_count, orchestrator_catch_count = _build_completeness_violations(
+        tasks, scope_violations
+    )
+
+    root = repo_root or _project_root()
+    tier1, tier2, audit_notes = _load_audit_tier_reports(plan_id, root)
+    audit_fields = _audit_kpi_fields(
+        tier1, tier2, remediation_cards, _audit_round_from_tasks(tasks)
+    )
+
+    return {
+        "plan_id": plan_id,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "success_rate": round(success_rate, 2),
+        "intervention_rate": round(intervention_rate, 2),
+        "intervention_count": intervention_count,
+        "first_pass_yield": round((autonomous / total_tasks * 100.0) if total_tasks else 0.0, 2),
+        "autonomous_pct": round((autonomous / completed * 100.0) if completed else 0.0, 2),
+        "total_tasks": total_tasks,
+        "completed": completed,
+        "failed": failed,
+        "wall_clock_hours": duration_hours,
+        "token_totals": {
+            "cursor": cursor_total,
+            "cache_read": cache_read,
+            "cache_input": cache_input,
+            "cache_ratio": round(cache_ratio, 4),
+        },
+        "subsystem_failures": {k: len(v) for k, v in failure_rows.items()},
+        "auth_escalation_count": auth_escalations,
+        "thrash_outliers": thrash_outliers,
+        "completeness": {
+            "violations": completeness_violations,
+            "violation_count": len(completeness_violations),
+            "remediation_cards_issued": len(remediation_cards),
+            "remediation_task_ids": remediation_cards,
+            "worker_catch_count": worker_catch_count,
+            "orchestrator_catch_count": orchestrator_catch_count,
+            "uncaught_violation_count": audit_fields["uncaught_violation_count"],
+            "first_pass_clean_cards": max(0, completed - len(remediation_cards)),
+        },
+        "final_audit_rounds": audit_fields["final_audit_rounds"],
+        "plan_scope_gaps": audit_fields["plan_scope_gaps"],
+        "doc_coverage_gaps": audit_fields["doc_coverage_gaps"],
+        "audit_tier_notes": audit_notes,
+        "scope_violations": len(scope_violations),
+        "intervention_log_entries": len(intervention_log),
+    }
+
+
+def write_kpi_json(kpi: dict[str, Any], output: Path, plan_id: str) -> Path:
+    if output.suffix == ".json":
+        dest = output
+    else:
+        output.mkdir(parents=True, exist_ok=True)
+        dest = output / f"{plan_id}_kpi.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".tmp")
+    tmp.write_text(json.dumps(kpi, indent=2) + "\n", encoding="utf-8")
+    tmp.replace(dest)
+
+    history = dest.parent / "kpi_history.jsonl"
+    with open(history, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(kpi, sort_keys=True) + "\n")
+    return dest
+
+
 def write_report(content: str, output: Path, plan_id: str) -> Path:
     if output.suffix == ".md":
         dest = output
@@ -967,7 +1211,27 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     dest = write_report(report, Path(args.output), plan_id)
+    kpi = build_kpi_json(
+        plan_id=plan_id,
+        tasks=tasks,
+        token_entries=token_entries,
+        intervention_count=intervention_count,
+        intervention_log=intervention_log,
+        scope_violations=scope_violations,
+        repo_root=_project_root(),
+    )
+    kpi_dest = write_kpi_json(kpi, Path(args.output), plan_id)
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+        import cross_plan_memory as cpm  # noqa: E402
+
+        added = cpm.record_plan_lessons(_project_root(), kpi)
+        if added:
+            print(f"Cross-plan lessons updated: +{added} new pattern(s)")
+    except Exception as exc:
+        print(f"warning: cross-plan lesson write skipped: {exc}", file=sys.stderr)
     print(f"Postmortem written: {dest}")
+    print(f"KPI JSON written: {kpi_dest}")
     if args.stdout:
         print()
         print(report)

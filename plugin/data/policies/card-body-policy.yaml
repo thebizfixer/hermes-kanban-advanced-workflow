@@ -11,6 +11,8 @@ default_action: deny
 # Carve-outs (see validate_card() in scripts/kanban_card_policy.py):
 # - `Type: orchestrator-handoff` — SOP-only control cards from kanban_handoff.py
 # - `Type: verification` — test-only gates (Tests: + Commit: N/A; no Files:/agent block)
+# - `Type: remediation` without `Remediation-phase: final` — in-flight remediation (full exempt)
+# - `Type: remediation` + `Remediation-phase: final` — post-flight audit remediation (doc-only skips P002/P012/P013)
 
 rules:
   - name: require-files-line
@@ -72,6 +74,30 @@ rules:
     action: deny
     reason: "Goal-mode cards must include an Acceptance: block (judge criteria). See references/goal-card-selection.md."
     error_code: G003_GOAL_CARD_INVALID
+
+  - name: require-plan-id
+    condition: "code-gen card body does not contain 'plan_id:'"
+    action: deny
+    reason: "Code-gen cards must include plan_id: for memory restore and postmortem scoping."
+    error_code: P010_MISSING_PLAN_ID
+
+  - name: require-acceptance
+    condition: "code-gen card body does not contain 'Acceptance:'"
+    action: deny
+    reason: "Code-gen cards must include Acceptance: criteria for worker/orchestrator completeness loops."
+    error_code: P011_MISSING_ACCEPTANCE
+
+  - name: require-call-sites-multi-file
+    condition: "code-gen card with 2+ files missing Call-sites:"
+    action: deny
+    reason: "Multi-file cards must list Call-sites: path:symbol for every integration surface."
+    error_code: P012_MISSING_CALL_SITES
+
+  - name: require-parent-branches
+    condition: "code-gen card with parents metadata missing Parent-branches:"
+    action: deny
+    reason: "Dependent cards must include Parent-branches: for kanban-git integration merge."
+    error_code: P013_MISSING_PARENT_BRANCHES
 
 profiles:
   advisory:

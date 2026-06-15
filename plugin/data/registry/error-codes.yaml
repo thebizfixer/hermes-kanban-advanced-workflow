@@ -163,7 +163,7 @@ codes:
     code: E019_DESTRUCTIVE_GIT_OP
     severity: error
     description: "Destructive git operation detected in reflog — checkout --theirs, checkout --ours, or reset --hard. These overwrite ENTIRE files on multi-author code, silently dropping unrelated changes."
-    recovery: "Resolve conflicts per-hunk with git mergetool or manual edit. Never use --theirs/--ours on source files. Legitimate reset --hard for project artifact restoration (.cursor/plans/, docs/) is auto-exempted."
+    recovery: "Resolve conflicts per-hunk with git mergetool or manual edit. Never use --theirs/--ours on source files. Legitimate reset --hard for project artifact restoration (.agent/plans/, docs/) is auto-exempted."
     source: evaluation_chain_step_8
     retry: true
 
@@ -253,6 +253,38 @@ codes:
     severity: warning
     description: "Card estimated to exceed 35 happy-path turns — risks 90-turn exhaustion"
     recovery: "Split card into smaller sub-cards. Formula: (functions × 3) + (test_runs × 2) + (consumer_checks × 2) + 2 buffer. Relocation offers no exemption."
+    source: card_body_policy
+    retry: false
+
+  P010:
+    code: P010_MISSING_PLAN_ID
+    severity: error
+    description: "Code-gen card missing plan_id: metadata"
+    recovery: "Re-decompose or add plan_id: to card body for memory restore and postmortem scoping."
+    source: card_body_policy
+    retry: false
+
+  P011:
+    code: P011_MISSING_ACCEPTANCE
+    severity: error
+    description: "Code-gen card missing Acceptance: criteria"
+    recovery: "Add Acceptance: block with Done when / Verify bullets before dispatch."
+    source: card_body_policy
+    retry: false
+
+  P012:
+    code: P012_MISSING_CALL_SITES
+    severity: error
+    description: "Multi-file card missing Call-sites: integration list"
+    recovery: "rg callers; add Call-sites: path:symbol for every surface or split the card."
+    source: card_body_policy
+    retry: false
+
+  P013:
+    code: P013_MISSING_PARENT_BRANCHES
+    severity: error
+    description: "Dependent card missing Parent-branches: for git integration"
+    recovery: "Re-decompose with parent links or add Parent-branches: kanban/{plan_id}/{parent_key}."
     source: card_body_policy
     retry: false
 

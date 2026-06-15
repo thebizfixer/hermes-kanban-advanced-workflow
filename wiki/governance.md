@@ -298,6 +298,48 @@ bash hermes-kanban-advanced-workflow/scripts/auto_unblock.sh
 ```
 Run via cron every 60s during execution. Handles every wave transition without orchestrator intervention.
 
+**Event-driven complement:** `plugin/hooks.py` `post_tool_call` also fires `auto_unblock.sh --max-unblock 1` after each successful `kanban_complete`, so the next wave can release without waiting for the next cron tick.
+
+### Role-based completeness loop
+
+After workers finish, the board is not "done" until every declared surface is verified. Violations are **caught** (good) vs **uncaught** (sail-through failure).
+
+```mermaid
+flowchart LR
+    subgraph worker["Worker (per card — in-flight)"]
+        W1["Evaluation chain ALLOW"]
+        W2["Acceptance / Call-sites verify"]
+        W3["Re-dispatch coding agent on miss"]
+        W4["kanban_complete"]
+        W1 --> W2 --> W3
+        W3 -->|satisfied| W4
+        W3 -->|budget exhausted| W4
+    end
+
+    subgraph orch["Orchestrator (final audit — post-flight)"]
+        O0["final_audit_sanity.py --tier all"]
+        O0 -->|exit 0| O4["Board done"]
+        O0 -->|exit 1| O2["--spawn-remediation"]
+        O0 -->|exit 2| O5["kanban_block + page operator"]
+        O2 --> O3["Worker dispatches remediation"]
+        O3 --> O0
+    end
+
+    W4 --> O0
+```
+
+| Actor | Catches | KPI bucket |
+|-------|---------|------------|
+| Worker (scope E002, pre-complete verify) | Unlisted files, missed Acceptance before complete | `worker_catch_count` |
+| Orchestrator (final audit remediation cards) | Missed surfaces after merge | `orchestrator_catch_count` / `remediation_cards_issued` |
+| Uncaught | Surfaces shipped without catch | `uncaught_violation_count` — **must be 0** for sail-through (`null` when tier JSON absent = unknown) |
+
+**Tier 1 ↔ E001:** Post-flight `plan_file_zero_diff` reuses the same `find_prior_commit` helper as eval-chain step 1 — a done card's `Commit:` + `Files:` can clear zero-diff plan paths that E001 already allowed in-flight. See `plugin/data/references/final-audit-sanity-check.md` § Tier 1 ↔ in-flight.
+
+Postmortem writes `{plan_id}_kpi.json` + appends `kpi_history.jsonl`. Cross-plan patterns land in `.hermes/kanban/memory/_global.json` via `scripts/lib/cross_plan_memory.py`.
+
+See also: [`docs/explanation/why-kanban-advanced.md`](../docs/explanation/why-kanban-advanced.md) § Completeness loop.
+
 ### Board keeper (proactive salvage)
 
 A second cron runs every 180s for proactive board management:

@@ -231,6 +231,8 @@
     var _useState21 = useState(null), pendingCodingAgentModel = _useState21[0], setPendingCodingAgentModel = _useState21[1];
     var _useState22 = useState("medium"), pendingReasoningEffort = _useState22[0], setPendingReasoningEffort = _useState22[1];
     var _useState23 = useState("medium"), initialReasoningEffort = _useState23[0], setInitialReasoningEffort = _useState23[1];
+    var _useState24 = useState(true), notifyLifecycle = _useState24[0], setNotifyLifecycle = _useState24[1];
+    var _useState25 = useState(false), notifySaving = _useState25[0], setNotifySaving = _useState25[1];
 
     function resolvedCodingBinary() {
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
@@ -252,6 +254,11 @@
       else setCodingAgentModel("auto");
       if (s.max_turns) setMaxTurns(s.max_turns);
       if (s.policy_profile) setPolicyProfile(s.policy_profile);
+      if (typeof s.notify_lifecycle === "boolean") {
+        setNotifyLifecycle(s.notify_lifecycle);
+      } else if (s.notify_lifecycle != null) {
+        setNotifyLifecycle(String(s.notify_lifecycle).toLowerCase() === "true" || s.notify_lifecycle === true);
+      }
     }
 
     function loadStatus(opts) {
@@ -315,8 +322,25 @@
         coding_agent_model: (codingAgentModel || "auto").trim() || "auto",
         max_turns: parseInt(maxTurns) || 180,
         trigger_branch: triggerBranch.trim(),
-        policy_profile: policyProfile
+        policy_profile: policyProfile,
+        notify_lifecycle: notifyLifecycle
       };
+    }
+
+    function persistNotifyLifecycle(next) {
+      setNotifyLifecycle(next);
+      if (!initialized) return;
+      setNotifySaving(true);
+      var data = getFormData();
+      data.notify_lifecycle = next;
+      apiSave(data).then(function () {
+        reloadStatus();
+      }).catch(function (e) {
+        setNotifyLifecycle(!next);
+        addLines(["ERROR: " + e.message], "line-err");
+      }).finally(function () {
+        setNotifySaving(false);
+      });
     }
 
     function addLines(lines, cls) {
@@ -687,7 +711,32 @@
                   );
                 });
               })(),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-auto pt-2" }, "Created by bootstrap if missing. Click a profile to change model and reasoning effort.")
+              React.createElement("div", {
+                className: "flex items-center justify-between py-1.5 px-3 rounded-md border mt-auto",
+                onClick: function (e) { e.stopPropagation(); }
+              },
+                React.createElement("span", { className: "text-sm" }, "Notifications"),
+                React.createElement("button", {
+                  type: "button",
+                  role: "switch",
+                  "aria-checked": notifyLifecycle,
+                  "aria-label": notifyLifecycle ? "Notifications on" : "Notifications off",
+                  disabled: notifySaving || bootstrapping,
+                  className: cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    notifyLifecycle ? "bg-primary" : "bg-muted",
+                    (notifySaving || bootstrapping) ? "opacity-60 cursor-not-allowed" : ""
+                  ),
+                  onClick: function () { persistNotifyLifecycle(!notifyLifecycle); }
+                },
+                  React.createElement("span", {
+                    className: cn(
+                      "pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform",
+                      notifyLifecycle ? "translate-x-4" : "translate-x-0"
+                    )
+                  })
+                )
+              )
             )
           ),
 

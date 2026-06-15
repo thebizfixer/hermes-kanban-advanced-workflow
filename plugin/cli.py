@@ -23,6 +23,7 @@ import sys
 import os
 from pathlib import Path
 
+from .hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config
 from .config_overlay import (
     DEFAULT_ORCHESTRATOR_PROFILE,
     DEFAULT_WORKER_PROFILE,
@@ -551,16 +552,10 @@ def _handle_init(args) -> int:
     print("   OK")
 
     # ── 5. Dispatcher config ─────────────────────────────────────────
-    # Disable the built-in auto-decomposer so triage cards are not rewritten
-    # by Hermes' LLM before the orchestrator reviews them, and so a dispatched
-    # orchestrator-handoff card runs the governed decomposition SOP instead of
-    # being LLM-decomposed into stub children.
-    print("5. Configuring dispatcher (kanban.auto_decompose=false)...")
-    r_ad = _run([HERMES_BIN, "config", "set", "kanban.auto_decompose", "false"])
-    if r_ad.returncode == 0:
-        print("   OK kanban.auto_decompose = false")
-    else:
-        print("   !  Could not set kanban.auto_decompose — set manually: hermes config set kanban.auto_decompose false")
+    # Disable the built-in auto-decomposer; enable stale dispatch reclaim.
+    # See plugin/data/references/dispatch-stale-timeout.md.
+    print("5. Configuring Hermes kanban dispatcher...")
+    apply_hermes_kanban_bootstrap_config(_run, HERMES_BIN, log=print)
 
     # ── 6. Gateway ───────────────────────────────────────────────────
     print("6. Checking gateway...")

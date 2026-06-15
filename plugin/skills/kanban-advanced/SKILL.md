@@ -9,7 +9,7 @@ metadata:
 
 # Kanban-Advanced Workflow
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -39,17 +39,26 @@ Load the skill that matches the user's request and proceed. All kanban-advanced 
 
 | User says | Load | Why |
 |-----------|------|-----|
-| "Plan this out" | `kanban-advanced:kanban-planning` | Draft stage — write a new plan |
+| "Plan this out" | `kanban-advanced:kanban-planning` | Draft stage — write under `.agent/plans/` |
 | "Do a sanity check" / review a plan | `kanban-advanced:kanban-planning` | Sanity check stage — read-only audit, find gaps |
 | "Harden the plan" | `kanban-advanced:kanban-planning` | Harden stage — close the gaps |
 | "Optimize for Kanban" | `kanban-advanced:kanban-planning` | Optimize stage — prep for decomposition |
+| Plan markup / angle-bracket placeholders | `plugin/data/references/plan-file-format.md` | Use `{placeholder}` not `<placeholder>`; `Spec:` contract shape |
 | "Execute the plan" / "decompose" / "proceed" | `kanban-advanced:kanban-orchestrator` | Decomposition + dispatch — needs orchestrator profile for kanban create |
 | Preflight before dispatch | `kanban-advanced:kanban-preflight` | Environment gating |
 | Worker hit a DENY / block | `kanban-advanced:kanban-worker-governance` | Error code reference |
 | Orchestrator hit a governance block | `kanban-advanced:kanban-orchestrator-governance` | Pitfall encyclopedia |
+| **Final audit** exit 1/2, remediation stuck, max rounds | `plugin/data/references/final-audit-sanity-check.md` then `kanban-advanced:kanban-orchestrator` § Final audit | Post-flight loop SSOT |
+| **False zero-diff** after E001 ALLOW | `final-audit-sanity-check.md` § Tier 1 ↔ E001 | Card `Files:` / `Commit:` fix — not a dropped sub-task |
+| **Tier 2 doc gap** / false positive | `plugin/data/references/final-audit-doc-coverage.md` | Matrix + `final_audit_overrides` |
+| Reconcile / post-plan closeout | `kanban-advanced:kanban-reconciliation` | DMAIC checklist |
+| Postmortem / KPI `null` uncaught | `kanban-advanced:kanban-postmortem` | Learning artifact + tier JSON semantics |
+| Cleanup / archive | `kanban-advanced:kanban-cleanup` | After postmortem |
 | Blocked / don't know why | `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` | Symptom → layer → command router |
 | Shared reference doc | `skill_view("kanban-advanced:kanban-advanced", "references/<file>.md")` | Init bundles `plugin/data/references/*.md` here; worktree fallback: `cat "$BUNDLE/plugin/data/references/<file>.md"` |
 | Deep navigation / matrices | `wiki/in-flight-navigation.md` (repo root) | Belt routers + worktree access diagram |
+
+**Default when stuck:** `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` — match symptom keywords to a layer (L0–L7), run the **First command**, verify, then open the **Deep dive** doc. Human operators: `wiki/troubleshooting.md` + `AGENTS.md` question table.
 
 ### When you DO need the orchestrator profile
 

@@ -562,7 +562,7 @@ check_plan_backup() {
       plan_src="$(resolve_plan_file "$(pwd)" "$plan_id" "" 2>/dev/null || true)"
     fi
     if [[ -z "$plan_src" ]]; then
-      for dir in ".hermes/kanban/plans" ".agent/plans" ".cursor/plans"; do
+      for dir in ".hermes/kanban/plans" ".agent/plans"; do
         if [[ -f "$dir/${plan_id}.plan.md" ]]; then
           plan_src="$dir/${plan_id}.plan.md"
           break
@@ -625,8 +625,46 @@ sys.exit(0 if len(parts) >= 3 and tuple(parts[:3]) >= need else 1)' "$ver_num"; 
   fi
 }
 
+check_kanban_auto_decompose() {
+  if ! command -v hermes >/dev/null 2>&1; then
+    return
+  fi
+  local cfg_out
+  cfg_out="$(hermes config show 2>/dev/null || true)"
+  if echo "$cfg_out" | grep -qE 'kanban\.auto_decompose:\s*true'; then
+    record_check "kanban_auto_decompose" "degraded" "degraded" \
+      "kanban.auto_decompose is true — manual decomposition will duplicate cards; run: hermes config set kanban.auto_decompose false"
+  elif echo "$cfg_out" | grep -qE 'kanban\.auto_decompose:\s*false'; then
+    record_check "kanban_auto_decompose" "pass" "degraded" \
+      "kanban.auto_decompose is false (required for kanban-advanced manual decompose)"
+  else
+    record_check "kanban_auto_decompose" "degraded" "degraded" \
+      "Could not read kanban.auto_decompose — confirm false before decomposition"
+  fi
+}
+
+check_kanban_dispatch_stale_timeout() {
+  if ! command -v hermes >/dev/null 2>&1; then
+    return
+  fi
+  local cfg_out
+  cfg_out="$(hermes config show 2>/dev/null || true)"
+  if echo "$cfg_out" | grep -qE 'kanban\.dispatch_stale_timeout_seconds:\s*0\b'; then
+    record_check "kanban_dispatch_stale_timeout" "degraded" "degraded" \
+      "kanban.dispatch_stale_timeout_seconds is 0 (disabled) — re-run init or: hermes config set kanban.dispatch_stale_timeout_seconds 14400"
+  elif echo "$cfg_out" | grep -qE 'kanban\.dispatch_stale_timeout_seconds:\s*[1-9][0-9]*'; then
+    record_check "kanban_dispatch_stale_timeout" "pass" "degraded" \
+      "kanban.dispatch_stale_timeout_seconds is set (stale reclaim enabled)"
+  else
+    record_check "kanban_dispatch_stale_timeout" "degraded" "degraded" \
+      "Could not read kanban.dispatch_stale_timeout_seconds — re-run init or set 14400 (see dispatch-stale-timeout.md)"
+  fi
+}
+
 check_memory_budget
 check_hermes_version
+check_kanban_auto_decompose
+check_kanban_dispatch_stale_timeout
 check_filesystem_coherence
 check_kanban_db_integrity
 check_secret_availability

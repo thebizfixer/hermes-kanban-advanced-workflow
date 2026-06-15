@@ -63,7 +63,7 @@ if [[ -n "$PLAN_REL" ]]; then
     "git log --oneline -1 -- ${PLAN_REL} | grep -q ."
 else
   check "plan on ${WORKING_BRANCH}" \
-    "git log --oneline -1 -- .cursor/plans/*${PLAN_ID}*.md .agent/plans/*${PLAN_ID}*.md .hermes/kanban/plans/*${PLAN_ID}*.md 2>/dev/null | grep -q ."
+    "git log --oneline -1 -- .agent/plans/*${PLAN_ID}*.md .hermes/kanban/plans/*${PLAN_ID}*.md 2>/dev/null | grep -q ."
 fi
 
 warn "plan pushed" \
@@ -122,6 +122,13 @@ if [[ "$CODING_AGENT" == "agent" ]]; then
   check "coding_agent_auth_prewarm" "prewarm_coding_agent_auth"
 else
   warn "coding_agent_auth_prewarm" "prewarm_coding_agent_auth"
+fi
+
+echo ""
+echo "[GATE] Result: $FAILURES failures, $WARNINGS warnings"
+if [ "$FAILURES" -gt 0 ]; then
+  echo "[GATE] BLOCKED — fix failures before dispatching"
+  exit 1
 fi
 
 if [[ -f "${PLAN_MEMORY_PATH}/${PLAN_ID}.json" ]]; then

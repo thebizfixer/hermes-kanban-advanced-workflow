@@ -330,7 +330,64 @@ for tid in $PARENTLESS_CARDS; do
 done
 [ $TEST_LINE_ISSUES -eq 0 ] && pass "All worker cards have Tests: line"
 
-# â”€â”€ Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── 12. Card self-sufficiency (completeness-loop readiness) ────────────
+echo "12. Card self-sufficiency (plan_id, Acceptance, Call-sites, Parent-branches)"
+SELF_ISSUES=0
+for tid in $PARENTLESS_CARDS; do
+    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    echo "$BODY" | grep -qi 'Type: remediation' && continue
+    echo "$BODY" | grep -qi 'Type: orchestrator-handoff' && continue
+    body_is_verification "$BODY" && continue
+    HAS_AGENT=$(echo "$BODY" | grep -c '```agent' || true)
+    [ "$HAS_AGENT" -eq 0 ] && continue
+    ASSIGNEE=$(echo "$BODY" | grep "assignee:" | head -1 | awk '{print $2}')
+    [[ "$ASSIGNEE" != "$WORKER_PROFILE" ]] && continue
+    echo "$BODY" | grep -qiE '^plan_id:\s*\S+' || { fail "Card $tid missing plan_id:"; SELF_ISSUES=$((SELF_ISSUES + 1)); }
+    echo "$BODY" | grep -q 'Acceptance:' || { fail "Card $tid missing Acceptance:"; SELF_ISSUES=$((SELF_ISSUES + 1)); }
+    FILE_COUNT=$(echo "$BODY" | grep -E '^Files:' | head -1 | tr ',' '\n' | grep -c '.' || true)
+    if [ "${FILE_COUNT:-0}" -ge 2 ] && ! echo "$BODY" | grep -q 'Call-sites:'; then
+        fail "Card $tid has 2+ files but no Call-sites:"
+        SELF_ISSUES=$((SELF_ISSUES + 1))
+    fi
+    if echo "$BODY" | grep -qiE '^parents:\s*\S+' && ! echo "$BODY" | grep -q 'Parent-branches:'; then
+        fail "Card $tid has parents: metadata but no Parent-branches:"
+        SELF_ISSUES=$((SELF_ISSUES + 1))
+    fi
+done
+[ $SELF_ISSUES -eq 0 ] && pass "Worker cards self-sufficient for completeness loop"
+
+# -- 13. Audit card remediation children (final audit phase) -----------------
+echo "13. Audit remediation children (mandatory for Type: audit)"
+CHECK13_ISSUES=0
+for tid in $PARENTLESS_CARDS; do
+    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    echo "$BODY" | grep -qiE 'Type:[[:space:]]*audit' || continue
+    STATUS=$(echo "$BODY" | grep "status:" | head -1 | awk '{print $2}')
+    [[ "$STATUS" != "done" ]] && continue
+    REMEDIATION_CHILDREN=""
+    REMEDIATION_CHILDREN="$(hermes kanban list --parent "$tid" 2>/dev/null | awk '/^t_/ {print $1}' || true)"
+    USED_PARENT_LIST=false
+    if [[ -n "$REMEDIATION_CHILDREN" ]]; then
+        USED_PARENT_LIST=true
+    else
+        REMEDIATION_CHILDREN="$(hermes kanban list 2>/dev/null | awk '/^t_/ {print $1}' || true)"
+    fi
+    for cid in $REMEDIATION_CHILDREN; do
+        CDETAIL=$(hermes kanban show "$cid" 2>/dev/null)
+        [[ -z "$CDETAIL" ]] && continue
+        echo "$CDETAIL" | grep -qiE 'Type:[[:space:]]*remediation' || continue
+        if [[ "$USED_PARENT_LIST" != true ]]; then
+            echo "$CDETAIL" | grep -q "$tid" || continue
+        fi
+        CSTATUS=$(echo "$CDETAIL" | grep "status:" | head -1 | awk '{print $2}')
+        if [[ "$CSTATUS" != "done" && "$CSTATUS" != "archived" ]]; then
+            fail "[FAIL check13] Audit card $tid has open remediation child $cid (status=$CSTATUS)"
+            CHECK13_ISSUES=$((CHECK13_ISSUES + 1))
+        fi
+    done
+done
+[ $CHECK13_ISSUES -eq 0 ] && pass "No done audit cards with open remediation children"
+
 echo ""
 echo "=== Results: $FAILURES failures, $WARNINGS warnings ==="
 

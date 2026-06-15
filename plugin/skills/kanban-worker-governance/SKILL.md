@@ -28,7 +28,7 @@ metadata:
 |---------|------|---------------|--------|
 | E021 / missing invoke script | T1 | `worktree_setup.sh --task-id <id> --repo-root <repo>` | `.hermes/scripts/coding_agent_invoke.sh` in worktree |
 | exit 127 on scripts | T1 | Resolve `BUNDLE` (index footer); Update Plugin | Script exists under `$HERMES_HOME/scripts/` |
-| plan missing in WT | T1 | `git checkout origin/${working_branch} -- .cursor/plans/*<plan_id>*` | `read_file` / cat plan section |
+| plan missing in WT | T1 | `git checkout origin/${working_branch} -- .agent/plans/*{plan_id}*` | `read_file` / cat plan section |
 | `.env` / venv missing | T3 | Operator adds to `.worktreeinclude` | `E003`/`E015` clear after provision |
 
 ## Error codes E001–E021
@@ -37,7 +37,7 @@ Canonical: `plugin/data/registry/error-codes.yaml`. **Tier:** T1=self-serve BB |
 
 | Code | Sev | Tier | Recovery |
 |------|-----|------|----------|
-| E001 | error | T1 | Widen `--baseline` / set `KANBAN_EVAL_BASELINE=origin/staging` or `merge-base:origin/main`; `pre_existing: true` uses merge-base diff; `find_prior_commit` ALLOW |
+| E001 | error | T1 | Widen `--baseline` / set `KANBAN_EVAL_BASELINE=origin/staging` or `merge-base:origin/main`; `pre_existing: true` uses merge-base diff; `find_prior_commit` ALLOW. **Post-flight:** same rule clears Tier 1 `plan_file_zero_diff` — stamp `Commit:` on complete so final audit sees E001-equivalent evidence (`final-audit-sanity-check.md` § Tier 1 ↔ E001) |
 | E002 | warn | T1 | Auto-reverted; add to `Files:` if intentional |
 | E003 | error | T1 | Fix tests/imports/deps (`E015` if env) |
 | E004 | error | T1 | Amend commit to match `Commit:` |

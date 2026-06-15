@@ -29,6 +29,10 @@ CLI_PARSE="$SCRIPT_DIR/lib/cli_output_parse.py"
 source "$SCRIPT_DIR/lib/kanban_logs.sh"
 # shellcheck source=lib/kanban_config.sh
 source "$SCRIPT_DIR/lib/kanban_config.sh"
+# shellcheck source=lib/kanban_cli_parse.sh
+source "$SCRIPT_DIR/lib/kanban_cli_parse.sh"
+# shellcheck source=lib/auto_unblock_core.sh
+source "$SCRIPT_DIR/lib/auto_unblock_core.sh"
 
 pass() { echo "  ✓ $*"; }
 warn() { echo "  ⚠ $*"; }
@@ -70,6 +74,26 @@ INTEGRATION_BRANCH="$WORKING_BRANCH"
 CONFIG_FILE="$CONFIG_FILE"
 DRY_RUN=false
 [[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
+
+# Single-instance guard — skip overlapping ticks (#30908 SQLite write pressure).
+LOCK_DIR="$(kanban_logs_dir "$REPO_ROOT")"
+mkdir -p "$LOCK_DIR"
+KEEPER_LOCK="${LOCK_DIR}/board_keeper.lock"
+exec 9>"$KEEPER_LOCK"
+if ! flock -n 9; then
+  echo "board_keeper: previous tick still running — skipping"
+  exit 0
+fi
+
+_kanban_disk_ok() {
+  local git_dir avail_mb repo_mb threshold
+  git_dir="$(git -C "$REPO_ROOT" rev-parse --git-dir 2>/dev/null || echo "$REPO_ROOT/.git")"
+  avail_mb="$(df -BM "$git_dir" 2>/dev/null | awk 'NR==2 {gsub(/M/,"",$4); print $4}' || echo 9999)"
+  repo_mb="$(du -sm "$REPO_ROOT" 2>/dev/null | awk '{print $1}' || echo 0)"
+  threshold=$(( repo_mb * 2 ))
+  [[ "$threshold" -lt 200 ]] && threshold=200
+  [[ "${avail_mb:-0}" -ge "$threshold" ]]
+}
 
 # ── Board snapshot ──────────────────────────────────────────────────────
 
@@ -128,7 +152,7 @@ for tid in $BLOCKED_IDS; do
         
         if [ -n "$WS" ] && [ -d "$WS" ]; then
             # Check for extracted module files
-            NEW_FILES=$(cd "$WS" 2>/dev/null && git status --short 2>/dev/null | grep '??' | grep 'tinyfish_' | head -5 || true)
+            NEW_FILES=$(cd "$WS" 2>/dev/null && git status --short 2>/dev/null | grep '??' | grep '\.py' | head -5 || true)
             MODIFIED=$(cd "$WS" 2>/dev/null && git diff --stat 2>/dev/null | tail -1 || true)
             
             if [ -n "$NEW_FILES" ] || [ -n "$MODIFIED" ]; then
@@ -236,12 +260,66 @@ for tid in $ALL_CARD_IDS; do
 done
 [ $RETRY_ISSUES -eq 0 ] && pass "All cards have max-retries ≤2"
 
-# ── 7. Done-but-unmerged detection ─────────────────────────────────────
+# ── 5. Thrash detection (event churn without terminal state) ─────────────
+
+echo ""
+echo "--- Thrash outliers ---"
+THRASH_COUNT=0
+if [[ -f "${HERMES_HOME}/kanban.db" ]]; then
+  THRASH_IDS=$(python3 - "$HERMES_HOME/kanban.db" <<'PY' 2>/dev/null || true
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+cols = {r[1].lower(): r[1] for r in db.execute("PRAGMA table_info(tasks)").fetchall()}
+event_tables = []
+for name in ("kanban_events", "task_events", "events", "kanban_task_events"):
+    try:
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone():
+            event_tables.append(name)
+            break
+    except sqlite3.Error:
+        pass
+if not event_tables:
+    raise SystemExit(0)
+etable = event_tables[0]
+ecols = {r[1].lower(): r[1] for r in db.execute(f"PRAGMA table_info({etable})").fetchall()}
+tid_col = ecols.get("task_id") or ecols.get("taskid")
+if not tid_col:
+    raise SystemExit(0)
+status_col = cols.get("status", "status")
+id_col = cols.get("id", "id")
+rows = db.execute(
+    f"SELECT {id_col}, {status_col} FROM tasks WHERE lower({status_col}) NOT IN ('done','completed','archived','gave_up','crashed','timed_out')"
+).fetchall()
+active = {r[0] for r in rows}
+counts = {}
+for row in db.execute(f"SELECT {tid_col}, COUNT(*) FROM {etable} GROUP BY {tid_col}"):
+    if row[0] in active and row[1] > 40:
+        counts[row[0]] = row[1]
+for tid, n in sorted(counts.items(), key=lambda x: -x[1]):
+    print(f"{tid}\t{n}")
+PY
+)
+  while IFS=$'\t' read -r tid evcount; do
+    [[ -z "$tid" ]] && continue
+    CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
+    warn "Card $tid ($CARD_NAME) has $evcount events (>40) — possible thrash before iteration limit"
+    ((THRASH_COUNT++))
+  done <<< "$THRASH_IDS"
+fi
+[ $THRASH_COUNT -eq 0 ] && pass "No thrash outliers (>40 events on active cards)"
+
+# ── 7. Done-but-unmerged detection + auto-merge ─────────────────────────
 
 echo ""
 echo "--- Unmerged done cards ---"
 DONE_IDS=$(hermes kanban list 2>/dev/null | grep '✓' | awk '{print $2}')
 UNMERGED=0
+MERGED_COUNT=0
+DISK_OK=true
+if ! _kanban_disk_ok; then
+  warn "Low disk space — skipping auto-merge this tick"
+  DISK_OK=false
+fi
 for tid in $DONE_IDS; do
     WS=$(hermes kanban show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
     [ -z "$WS" ] || [ ! -d "$WS" ] && continue
@@ -251,6 +329,21 @@ for tid in $DONE_IDS; do
         CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
         echo "  UNMERGED: $tid ($CARD_NAME) — $BEHIND commits ahead of $INTEGRATION_BRANCH in $WS"
         ((UNMERGED++))
+        if [[ "$DRY_RUN" == false && "$DISK_OK" == true ]]; then
+            BRANCH=$(cd "$WS" && git branch --show-current 2>/dev/null || true)
+            if [[ -n "$BRANCH" ]]; then
+                cd "$REPO_ROOT"
+                git remote add "wt-$tid" "$WS" 2>/dev/null || true
+                if git fetch "wt-$tid" 2>/dev/null && git merge "wt-$tid/$BRANCH" --no-edit 2>/dev/null; then
+                    echo "  → Auto-merged $tid to $INTEGRATION_BRANCH"
+                    ((MERGED_COUNT++))
+                    ((UNMERGED--)) || true
+                else
+                    warn "  Auto-merge failed for $tid — manual review required"
+                fi
+                git remote remove "wt-$tid" 2>/dev/null || true
+            fi
+        fi
     fi
 done
 [ $UNMERGED -eq 0 ] && pass "All done cards merged to $INTEGRATION_BRANCH"
@@ -374,11 +467,16 @@ if [[ "$AUDIT_COMPLETE" == "true" ]] && [[ "$PIPELINE_CURRENT" == "READY_FOR_AUD
 fi
 
 echo ""
-echo "=== Board Keeper complete: $SALVAGE_COUNT salvaged, $ORPHAN_COUNT orphans killed, $STUCK_COUNT stuck ==="
+echo "=== Board Keeper complete: $SALVAGE_COUNT salvaged, $ORPHAN_COUNT orphans killed, $STUCK_COUNT stuck, $MERGED_COUNT auto-merged ==="
+
+# ── 9. Wave progression — unblock eligible cards in same tick ───────────
+echo ""
+echo "--- Auto-unblock (board_keeper tick) ---"
+kanban_auto_unblock_tick --stagger-sec "${KANBAN_UNBLOCK_STAGGER_SEC:-0}" --max-unblock "${KANBAN_UNBLOCK_MAX_PER_TICK:-0}" || true
 
 LOG_DIR="$(kanban_logs_dir "$REPO_ROOT")"
 mkdir -p "$LOG_DIR"
-echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) salvaged=$SALVAGE_COUNT orphans=$ORPHAN_COUNT stuck=$STUCK_COUNT" >> "${LOG_DIR}/board-keeper.log"
+echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) salvaged=$SALVAGE_COUNT orphans=$ORPHAN_COUNT stuck=$STUCK_COUNT merged=$MERGED_COUNT" >> "${LOG_DIR}/board-keeper.log"
 
 # Cron staleness probe: warn when active cards exist but wave crons never ticked.
 ACTIVE=$((RUNNING + READY + BLOCKED + TODO))

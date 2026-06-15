@@ -30,11 +30,20 @@ class TestKanbanHandoff(unittest.TestCase):
             memory.mkdir(parents=True)
             yaml_path = memory / "test-plan.yaml"
             yaml_path.write_text("cards: []\n", encoding="utf-8")
-            plan = root / ".cursor" / "plans" / "test-plan.plan.md"
+            plan = root / ".agent" / "plans" / "test-plan.plan.md"
             plan.parent.mkdir(parents=True)
             plan.write_text("---\nplan_id: test-plan\n---\n", encoding="utf-8")
             found = handoff._discover_cards_yaml("test-plan", plan, root, {})
             self.assertEqual(found, yaml_path.resolve())
+
+    def test_parse_gate_failed_checks(self) -> None:
+        out = (
+            "[GATE] plan on main ... FAIL\n"
+            "[GATE] attestation ... FAIL\n"
+            "[GATE] Result: 2 failures, 0 warnings\n"
+        )
+        failed = handoff._parse_gate_failed_checks(out, "")
+        self.assertEqual(failed, ["plan on main", "attestation"])
 
     def test_parse_gate_result(self) -> None:
         out = "[GATE] Result: 0 failures, 2 warnings\n[GATE] PASSED"

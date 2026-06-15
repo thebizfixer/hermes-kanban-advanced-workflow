@@ -10,7 +10,7 @@ metadata:
 
 # Kanban Reconciliation
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -53,9 +53,15 @@ See the wiki page `six-sigma-mapping.md` for the full DMAIC mapping including th
 
 ### 1. File-level plan compliance
 ```bash
-git diff --stat <pre-plan-baseline>..HEAD
+git diff --stat <Audit-baseline-sha>..HEAD
+python3 hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py --plan-id <plan_id> --tier 1
 ```
-Every file in the plan must show > 0 lines changed. Zero-diff = dropped sub-task → create follow-up card.
+
+Every file in the plan must show > 0 lines changed vs the audit baseline **or** be cleared by **E001 prior-commit rule**: a done card's `Commit:` line matches an earlier commit that touched that card's full `Files:` list (`find_prior_commit` — same helper as eval-chain step 1). Tier 1 applies this automatically; do **not** create a follow-up card for zero-diff paths that E001 already ALLOWed unless `final_audit_sanity.py` still reports `plan_file_zero_diff`.
+
+**If reconciliation shows zero-diff but workers had E001 ALLOW:** load `plugin/data/references/final-audit-sanity-check.md` § Tier 1 ↔ in-flight — usually missing `Commit:` or path not on card `Files:`.
+
+**If Tier 1 reports other violations:** `--spawn-remediation` per `kanban-advanced:kanban-orchestrator` § Final audit — do not hand-fix from reconciliation.
 
 ### 2. Token burn report
 ```bash
@@ -116,3 +122,13 @@ If failure rate exceeds 30% during execution:
 3. Review card body format — are `Files:` lines present?
 4. Check for environment leaks (wrong paths, stale configs)
 5. Apply fixes, reset intervention counter, resume
+
+## When reconciliation surfaces a problem (load in order)
+
+| Symptom | First load | Notes |
+| --- | --- | --- |
+| Zero-diff plan file but E001 ALLOW in-flight | `plugin/data/references/final-audit-sanity-check.md` § Tier 1 ↔ E001 | Fix card `Files:` / `Commit:` before follow-up card |
+| `final_audit_sanity.py` exit 1 at reconcile | `final-audit-sanity-check.md` | Remediation loop — not reconciliation's job to skip |
+| Missing tier JSON / `uncaught_violation_count: null` in KPI | `kanban-advanced:kanban-postmortem` § Final audit KPIs | Re-run audit before cleanup |
+| Failure rate > 30% mid-run | This skill § Mid-run reconciliation | Worker SOUL, smoke, card bodies |
+| New recurring symptom | `in-flight-governance-index.md` + `wiki/troubleshooting.md` | Promote row per § Skill updates step 5 |

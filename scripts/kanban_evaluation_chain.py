@@ -273,15 +273,31 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
     return True, None
 
 
-def step_3_tests_pass(tests_cmd: str, workspace: str) -> Tuple[bool, Optional[str]]:
+def step_3_tests_pass(tests_cmd: str, workspace: str, files: list | None = None) -> Tuple[bool, Optional[str]]:
     """Run Tests: command. All must pass. Detects common silent failures:
     - 'no tests ran' / 'collected 0 items'
     - Import errors (ModuleNotFoundError, ImportError)
     - Syntax errors in code under test
     - Missing test dependencies (pytest not found)
+    - doc: prefix — delegated to verify_doc_tests (no shell)
+    - code: prefix — strip prefix and run remainder as shell
     """
     if not tests_cmd:
         return True, None  # No tests specified — allowed for non-code cards
+    cmd = tests_cmd.strip()
+    if cmd.startswith("doc:"):
+        _LIB_FA = os.path.join(os.path.dirname(__file__), "lib")
+        if _LIB_FA not in sys.path:
+            sys.path.insert(0, _LIB_FA)
+        from final_audit import verify_doc_tests  # noqa: E402
+
+        ok, err = verify_doc_tests(cmd, workspace, files or [])
+        if not ok:
+            print(f"[E003] Doc test failure: {err}")
+            return False, "E003_DOC_TEST_FAILURE"
+        return True, None
+    if cmd.startswith("code:"):
+        cmd = cmd[5:].strip()
     result = subprocess.run(
         tests_cmd, shell=True,
         capture_output=True, text=True,
@@ -547,7 +563,7 @@ def run_chain(task_id: str, workspace: str, card_body: str,
             return False, "verification_only: Tests: or Acceptance: required"
         print("[chain] Verification-only card — running tests + destructive-git checks only")
         for step_name, step_fn in (
-            ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace)),
+            ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace, parsed.get("files") or [])),
             ("No destructive git (E019)", lambda: step_8_no_destructive_git(workspace, workspace)),
         ):
             print(f"[chain] Step: {step_name}...", end=" ")
@@ -560,7 +576,11 @@ def run_chain(task_id: str, workspace: str, card_body: str,
 
     # Lattice memory: skip cold-path validation if attractor matches
     memory = {}
-    if lattice_memory_path:
+    disable_attractor = (
+        "Call-sites:" in card_body
+        or len([f for f in (parsed.get("files") or []) if f and "test" not in f.lower()]) >= 2
+    )
+    if lattice_memory_path and not disable_attractor:
         memory = load_lattice_memory(lattice_memory_path)
         attractor = find_attractor(memory, parsed["files"], parsed["tests"], workspace)
         if attractor:
@@ -594,7 +614,7 @@ def run_chain(task_id: str, workspace: str, card_body: str,
             card_body=card_body, working_branch=working_branch,
         )),
         ("Unlisted changes", lambda: step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id)),
-        ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace)),
+        ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace, parsed.get("files") or [])),
         ("Commit match", lambda: step_4_commit_match(parsed["commit"], workspace)),
         ("Exact token (E018)", lambda: step_5_exact_token(token_log, task_id)),
         ("Zero-output check", lambda: step_6_zero_output(

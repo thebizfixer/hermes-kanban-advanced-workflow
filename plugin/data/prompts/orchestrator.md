@@ -51,6 +51,19 @@ plan → optimize → preflight → decompose → execute → verify → audit �
 
 **Operator leaves after "walk away"** — you own every step until the postmortem is written. Routine progress stays silent; gateway notify fires only for intervention triggers (see `kanban-advanced:kanban-notify`).
 
+## Orchestrator token checkpoints
+
+Log planning/audit overhead at major milestones so postmortem §7 is not blind:
+
+```bash
+PYTHONPATH=. python3 -c "
+from scripts.token_tracker import log_orchestrator_tokens
+log_orchestrator_tokens(plan_id='{plan_id}', checkpoint='planning-complete', turns=12, note='Optimize checklist pass')
+"
+```
+
+Call at least: **planning-complete** (after Optimize), **decompose-complete**, **audit-start**, **cleanup-complete**. Use your session turn estimate; workers log their own tokens at task completion.
+
 ## Preflight gating (before decomposition)
 
 After plan optimization and **before** creating cards or decomposing:
@@ -183,13 +196,31 @@ The postmortem is the learning artifact for the next plan (8 sections per `kanba
 
 ## Final audit checklist
 
-Before pushing:
-- [ ] `git diff --stat baseline..HEAD` — every planned file has changes
+Run `python3 hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py --plan-id <id> --tier all` after mechanical gates. Exit **0** → complete audit card; exit **1** → `--spawn-remediation` and re-audit; exit **2** → `kanban_block` + page operator (no remediation spawn). Do not manually run `auto_unblock.sh` during remediation — `_has_active_remediation_children` guard applies.
+
+**Tier 1 ↔ E001:** Zero diff vs `Audit-baseline-sha..HEAD` is OK when a done card's `Commit:` + `Files:` satisfies `find_prior_commit` (same rule as eval-chain E001). If E001 ALLOWed in-flight but Tier 1 still fails, fix card `Files:` / `Commit:` — see `final-audit-sanity-check.md` § Tier 1 ↔ in-flight.
+
+Before pushing (mechanical gates, alongside scripted audit):
+- [ ] `git diff --stat <Audit-baseline-sha>..HEAD` — every planned file has diff **or** prior-commit clearance on a done card (`Commit:` + `Files:`)
+- [ ] `final_audit_sanity.py --tier all` exit 0 (scripted Tier 1 + Tier 2)
 - [ ] Lint + typecheck pass on changed files
 - [ ] Full test suite passes
 - [ ] Cross-task consistency (no merge conflicts, line counts match)
 - [ ] Git log review (all commits present, no revert chains)
+- [ ] `validate_board.sh` check 13 clear (no open remediation children on done audit card)
 - [ ] Push + poll CI every 300s until green
+
+### Final audit problem router
+
+| Symptom | Load first |
+| --- | --- |
+| Exit 2 | `plugin/data/references/final-audit-sanity-check.md` — block audit, no remediation |
+| Exit 1 / remediation loop | Same runbook — spawn, wait, re-audit |
+| Max rounds / gave_up / stuck wave | Same runbook § sad-path + `in-flight-governance-index.md` L7 |
+| False `plan_file_zero_diff` after E001 | Same runbook § Tier 1 ↔ E001 |
+| Tier 2 false positive | `plugin/data/references/final-audit-doc-coverage.md` |
+
+Reference: `plugin/data/references/final-audit-sanity-check.md`, `wiki/in-flight-navigation.md`
 
 ## Escalation response (board_keeper signals)
 

@@ -38,3 +38,21 @@ If you're unsure, start with `/goal` on a small task. Graduate to vanilla kanban
 | One stubborn outcome lane | Same board + **`--goal`** on 0–2 cards after Harden (see `kanban-advanced:kanban-planning` skill § Goal-card selection) |
 
 Requires Hermes **≥ 0.16.0** (tested on 0.16.0). Goal-mode (`--goal`) **enhances** vanilla Hermes; the evaluation chain still gates every completion.
+
+## Completeness loop
+
+Kanban-advanced separates **speed** (waves, crons, preflight cache) from **completeness** (every `Acceptance:` / `Call-sites:` / `Files:` surface verified before the board is done).
+
+```mermaid
+flowchart LR
+    worker["Worker: eval chain + Acceptance verify"] --> complete["kanban_complete"]
+    complete --> audit["Orchestrator final audit"]
+    audit -->|miss| remediate["Remediation card → worker"]
+    remediate --> audit
+    audit -->|pass| done["Postmortem + KPI"]
+```
+
+- **Caught violations** (worker re-dispatch or orchestrator remediation cards) are expected and recorded in `{plan_id}_kpi.json`.
+- **Uncaught violations** (false completions) are sail-through failures — target **0** on the next run.
+
+Full matrix: [`wiki/governance.md`](../../wiki/governance.md) § Role-based completeness loop.

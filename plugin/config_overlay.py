@@ -10,6 +10,7 @@ DEFAULT_WORKING_BRANCH = "main"
 DEFAULT_CODING_AGENT = "agent"
 DEFAULT_CODING_AGENT_MODEL = "auto"
 DEFAULT_POLICY_PROFILE = "balanced"
+DEFAULT_NOTIFY_LIFECYCLE = True
 VALID_POLICY_PROFILES = frozenset({"advisory", "balanced", "strict"})
 
 DEFAULT_WORKER_PROFILE = "kanban-advanced-worker"
@@ -19,6 +20,7 @@ LEGACY_ORCHESTRATOR_PROFILE = "orchestrator"
 
 PROFILE_SKILL_SETS_BY_ROLE: dict[str, frozenset[str]] = {
     "worker": frozenset({
+        "kanban-git",
         "kanban-worker",
         "kanban-worker-governance",
     }),
@@ -45,6 +47,7 @@ _MANAGED_KEYS = frozenset({
     "working_branch",
     "trigger_branch",
     "policy_profile",
+    "notify_lifecycle",
     "orchestrator_profile",
     "worker_profile",
     "preflight_profiles",
@@ -54,6 +57,7 @@ _MANAGED_KEYS = frozenset({
     "skills_output_path",
     "plan_memory_path",
     "escalation_max_attempts",
+    "final_audit_max_remediation_rounds",
 })
 
 
@@ -308,6 +312,35 @@ def resolve_policy_profile(
     return DEFAULT_POLICY_PROFILE
 
 
+def normalize_notify_lifecycle(value: str | bool | None) -> bool:
+    if value is None:
+        return DEFAULT_NOTIFY_LIFECYCLE
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    if s in ("false", "0", "no", "off"):
+        return False
+    if s in ("true", "1", "yes", "on"):
+        return True
+    return DEFAULT_NOTIFY_LIFECYCLE
+
+
+def resolve_notify_lifecycle(
+    project_root: Path,
+    *,
+    notify_lifecycle: str | bool | None = None,
+    config: dict[str, str] | None = None,
+) -> bool:
+    """Explicit arg > kanban-config.yaml > default true."""
+    if notify_lifecycle is not None:
+        return normalize_notify_lifecycle(notify_lifecycle)
+    if config is None:
+        config = read_overlay_config(overlay_path(project_root))
+    if "notify_lifecycle" in config:
+        return normalize_notify_lifecycle(config["notify_lifecycle"])
+    return DEFAULT_NOTIFY_LIFECYCLE
+
+
 def sync_dispatch_runtime_env(
     project_root: Path,
     env: dict[str, str] | None = None,
@@ -380,6 +413,7 @@ def build_overlay_yaml(
     coding_agent: str,
     coding_agent_model: str | None = None,
     policy_profile: str = DEFAULT_POLICY_PROFILE,
+    notify_lifecycle: str | bool | None = None,
     bundle_path: Path | str,
     hermes_home: Path | str,
     existing: dict[str, str] | None = None,
@@ -402,6 +436,13 @@ def build_overlay_yaml(
         "policy_profile": normalize_policy_profile(
             policy_profile or existing.get("policy_profile")
         ),
+        "notify_lifecycle": "true"
+        if normalize_notify_lifecycle(
+            notify_lifecycle
+            if notify_lifecycle is not None
+            else existing.get("notify_lifecycle")
+        )
+        else "false",
         "orchestrator_profile": orchestrator_profile,
         "worker_profile": worker_profile,
         "preflight_profiles": preflight_profiles,
@@ -420,6 +461,8 @@ def build_overlay_yaml(
             lines.append(f'preflight_profiles: "{val}"')
         elif key in ("schema_version", "policy_profile", "coding_agent_model"):
             lines.append(f'{key}: "{val}"')
+        elif key == "notify_lifecycle":
+            lines.append(f"notify_lifecycle: {val}")
         else:
             lines.append(f"{key}: {val}")
 

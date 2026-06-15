@@ -323,6 +323,23 @@ cd ~/projects/<repo-name>
 
 **Fix:** Archive stuck triage cards and recreate using **block-on-create**: `hermes kanban create` (lands `ready`) → `hermes kanban block` immediately → link parents → orchestrator completes gate after `validate_board.sh` → `auto_unblock.sh` releases children when parents are `done`. Never use `--triage` for dependent cards. Full rationale: [[decomposition-workflow]].
 
+### Final audit / remediation loop (post-flight)
+
+**Symptom:** `final_audit_sanity.py` exit **1** or **2**; audit card blocked; remediation children stuck; `validate_board.sh` check **13** FAIL; postmortem shows `uncaught_violation_count: null`.
+
+**Load first:** `plugin/data/references/final-audit-sanity-check.md`. Index: `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` § **L7**. Orchestrator skill § **When final audit hits a problem**.
+
+| Exit / symptom | Action |
+| --- | --- |
+| **Exit 2** (plan/git/DB) | `hermes kanban block` audit card — **no** `--spawn-remediation`; fix plan path, git state, or DB |
+| **Exit 1** (violations) | `--spawn-remediation`; wait until `hermes kanban list --parent <audit_tid>` shows no running/blocked children; re-run `--tier all` |
+| **Max rounds** / escalation | Review `{plan_id}_audit_tier*.json`; operator triage; `final_audit_max_remediation_rounds` in [[configuration]] |
+| **`gave_up` remediation** | Escalation on audit card; violations marked `escalated` in tier JSON — no second remediation wave |
+| **False `plan_file_zero_diff` after E001 ALLOW** | Add path to done card `Files:`; stamp `Commit:`; re-run audit — not a dropped sub-task |
+| **Tier 2 false positive** | Add `final_audit_overrides` in overlay ([[configuration]] — operator-owned, not init-managed) |
+| **Premature audit promote** | Do not run `auto_unblock.sh` manually during remediation — `_has_active_remediation_children` guard |
+| **Missing tier JSON before cleanup** | Re-run `final_audit_sanity.py --tier all` before archive; see `kanban-advanced:kanban-postmortem` § Final audit KPIs |
+
 ### "Cards dispatched before parents finished" / "dependency gating bypassed"
 
 **Symptom:** Child cards run while parent cards are still `todo`, `running`, or not yet linked.
@@ -480,7 +497,7 @@ Then repeat **execute the plan**. Plugin reference: `plugin/data/references/prof
 **Checks (in order):**
 
 1. **Gateway running** — `hermes gateway status` or `hermes cron status`. Crons tick inside the gateway process; CLI chat alone does not fire them.
-2. **Wave crons exist** — `hermes cron list` must show `kanban-auto-unblock-1m` and `kanban-board-keeper-3m` as `[active]` with `Deliver: local`. Jobs must include `--workdir <repo-root>` (re-create with `provision_kanban_crons.sh --create --workdir "$(git rev-parse --show-toplevel)"` if logs never update).
+2. **Wave crons exist** — `hermes cron list` must show `kanban-auto-unblock-1m` and `kanban-board-keeper-3m` as `[active]` with `Deliver: local`. When `notify_lifecycle: true` (default), also expect `kanban-lifecycle-notify-5m` (gateway messaging — not `deliver=local`). Jobs must include `--workdir <repo-root>` (re-create with `provision_kanban_crons.sh --create --workdir "$(git rev-parse --show-toplevel)"` if logs never update).
 3. **Created per plan** — jobs are provisioned at decomposition (`provision_kanban_crons.sh --create`), **not** at init. Re-run create during an active plan if missing.
 4. **Logs** — prefer project `.hermes/kanban/logs/auto-unblock.log` (SSOT); falls back to `$HERMES_HOME/kanban/logs/` when no project kanban dir. `board_keeper.sh` warns when logs are stale >3m while cards are active.
 5. **Messaging optional** — missing Telegram/Discord does **not** stop script crons (`deliver=local`).
@@ -503,6 +520,22 @@ git restore tui_gateway/server.py
 git pull --ff-only
 hermes gateway restart
 ```
+
+## Upstream Hermes constraints ([#35986](https://github.com/NousResearch/hermes-agent/issues/35986))
+
+kanban-advanced works around several vanilla Hermes behaviors. When something feels "broken but documented," check this table before patching application code.
+
+| Gap | Symptom | kanban-advanced mitigation |
+|-----|---------|---------------------------|
+| **1 — Thrash / event churn** | Card burns retries with no durable state change | `board_keeper.sh` flags >40 events on active cards; postmortem `thrash_outliers`; iteration budget stamped at decompose |
+| **3 — Triage without auto_decompose** | `--triage` cards stuck forever | `auto_decompose=false` + block-on-create; preflight WARN if auto_decompose true |
+| **4 — Profile-scoped HERMES_HOME** | Crons created in profile store never tick | `gateway_hermes_home` resolver; `provision_kanban_crons` uses gateway store |
+| **6 — OAuth parallel stampede** | Intermittent auth on wave unblocks | `auto_unblock` stagger + `--max-unblock 1`; blocking prewarm in gate; auth lock file |
+| **7 — dispatch_stale_timeout default** | Stale dispatches never time out | Bootstrap sets `kanban.dispatch_stale_timeout_seconds=14400`; manual: `hermes config set kanban.dispatch_stale_timeout_seconds 14400` (not an overlay key). See [dispatch-stale-timeout.md](../plugin/data/references/dispatch-stale-timeout.md). |
+
+**Messaging crons vs wave crons:** Walk-away monitor / lifecycle notify jobs must be registered from the **default gateway-bound profile** (main `HERMES_HOME`). Wave progression crons (`auto_unblock`, `board_keeper`) use `deliver=local` and are exempt. `provision_kanban_crons.sh --check` WARNs when session `HERMES_HOME` is profile-scoped.
+
+**post_tool_call context:** Hook-driven `auto_unblock` uses gateway `HERMES_HOME` + repo cwd; if gateway context is unavailable the hook fails silently (cron remains fallback).
 
 ## Full error code listing
 

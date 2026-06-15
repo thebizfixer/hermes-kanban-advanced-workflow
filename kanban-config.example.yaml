@@ -45,7 +45,7 @@ skills_output_path: ".hermes/skills/kanban-advanced"
 plan_memory_path: ".hermes/kanban/memory"
 
 # Optional extra directories to search for plan files (agent-neutral resolver).
-# Built-in defaults: .hermes/kanban/plans, .agent/plans, .cursor/plans, etc.
+# Built-in defaults: .hermes/kanban/plans, .agent/plans, .claude/plans, etc. Extend via plan_search_dirs.
 # plan_search_dirs: []
 
 # ---------------------------------------------------------------------------
@@ -63,6 +63,22 @@ plan_memory_path: ".hermes/kanban/memory"
 # Gateway timeout
 # ---------------------------------------------------------------------------
 gateway_timeout_seconds: 1800
+
+# Stale dispatch timeout — set at bootstrap (Hermes config.yaml, not overlay):
+#   kanban.dispatch_stale_timeout_seconds = 14400  (via hermes config set at init)
+# Rationale: plugin/data/references/dispatch-stale-timeout.md
+
+# Notifications — per-card start/running/done after gate completes (walk-away lifecycle cron)
+notify_lifecycle: true
+
+# ---------------------------------------------------------------------------
+# Final audit (Tier 1/2 sanity + post-flight remediation)
+# ---------------------------------------------------------------------------
+# final_audit_max_remediation_rounds: 2
+# final_audit_overrides:
+#   - signal: doc_coverage_gap
+#     path: scripts/lib/some_internal.py
+#     rationale: "Internal helper — no scripts.md entry required"
 
 # ---------------------------------------------------------------------------
 # Escalation thresholds (cron / board_keeper escalation chain)

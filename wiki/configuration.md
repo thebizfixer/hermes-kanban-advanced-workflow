@@ -34,6 +34,14 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `PREFLIGHT_MEMORY_WARN_MB` | Degraded memory threshold | `2048` |
 | `PREFLIGHT_SKIP_API` | Skip API health check | unset |
 | `PREFLIGHT_SKIP_FS_CHECK` | Skip filesystem coherence check | unset |
+| `notify_lifecycle` | Per-card start/running/done gateway messages after gate completes (`kanban-lifecycle-notify-5m` cron) | `true` |
+| `gateway_timeout_seconds` | Gateway timeout hint for commit-cadence advice | unset |
+| `final_audit_max_remediation_rounds` | Max post-flight remediation rounds before escalation (`final_audit_sanity.py`) | `2` |
+| `final_audit_overrides` | Tier 2 doc-coverage allowlist (array of `signal`, `path`, `rationale`) | `[]` |
+
+`final_audit_overrides` is **operator-owned**: read at audit time from overlay YAML but **not** in init `_MANAGED_KEYS` — re-run `hermes kanban-advanced init` does not overwrite your allowlist. Edit `.hermes/kanban-overrides/kanban-config.yaml` directly; schema in `schema/kanban-config.schema.json`. See `plugin/data/references/final-audit-doc-coverage.md`.
+
+Set `notify_lifecycle: false` in `kanban-config.yaml` or dashboard **Profiles → Notifications** (toggle off) to skip lifecycle cron provisioning. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged — lifecycle notify is a separate, lower-noise channel.
 
 ## Coding agent resolution
 
@@ -49,7 +57,7 @@ To change binary or model: use dashboard **Coding Agent** (binary + model row) a
 
 ## Re-init and branch preservation
 
-`hermes kanban-advanced init` and dashboard **Bootstrap** refresh dispatch profiles (SOUL.md, role-only skills, verification), materialized shared skills, and cron **script files** (not cron jobs — see [[bootstrap]]). Optional `plan_search_dirs` in overlay config extends agent-neutral plan file resolution (defaults include `.hermes/kanban/plans`, `.cursor/plans`, `.agent/plans`). They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh dispatch profiles (SOUL.md, role-only skills, verification), materialized shared skills, and cron **script files** (not cron jobs — see [[bootstrap]]). Optional `plan_search_dirs` in overlay config extends agent-neutral plan file resolution (defaults include `.hermes/kanban/plans`, `.agent/plans`, and other agent tool dirs). They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
 
 ```bash
 hermes kanban-advanced init --project-root .                    # keeps existing branches
@@ -58,7 +66,7 @@ hermes kanban-advanced init --project-root . --working-branch staging  # overrid
 
 To change branches on an initialized project, prefer dashboard **Save** or edit `kanban-config.yaml` directly. **Working branch** defaults to git upstream / `origin/HEAD` / local `HEAD`, then `main`. **Trigger branch** is optional — leave blank to skip deploy-branch protection.
 
-Optional keys you added manually (e.g. `feature_branch_prefix`, `gateway_timeout_seconds`) are preserved across re-init.
+Optional keys you added manually (e.g. `feature_branch_prefix`, `gateway_timeout_seconds`, **`final_audit_overrides`**) are preserved across re-init.
 
 ## Project root for dashboard / API
 
@@ -154,10 +162,14 @@ Hermes Agent v0.15.0 added several kanban config keys under the `kanban:` sectio
 | `kanban.auto_decompose_per_tick` | `3` | Max triage tasks to decompose per dispatcher tick. Throttles aux LLM calls. |
 | `kanban.orchestrator_profile` | `""` | Profile that handles triage decomposition. Falls back to default profile. Set to your orchestrator profile name. |
 | `kanban.default_assignee` | `""` | Fallback assignee when decomposer can't match a profile. |
-| `kanban.dispatch_stale_timeout_seconds` | `14400` | Stale detection: running tasks without heartbeat for this many seconds are auto-reclaimed. `0` disables. |
+| `kanban.dispatch_stale_timeout_seconds` | **`0` (disabled)** in many upstream installs — **not** read from `kanban-config.yaml` | Reclaim `running` tasks with no heartbeat for this many seconds. Bootstrap sets **`14400` (4h)**. `0` disables. Rationale: [dispatch-stale-timeout.md](../plugin/data/references/dispatch-stale-timeout.md). |
 | `kanban.failure_limit` | `2` | Auto-block after N consecutive non-success attempts (spawn_failed, timed_out, crashed). Built-in circuit-breaker. |
 | `kanban.worker_log_rotate_bytes` | `2097152` | Worker log rotation size (2 MiB default). |
 | `kanban.worker_log_backup_count` | `1` | Number of rotated worker log backups to keep. |
+
+**Bootstrap** (`hermes kanban-advanced init` / dashboard **Bootstrap**) sets `kanban.auto_decompose=false` and `kanban.dispatch_stale_timeout_seconds=14400` via `hermes config set`. If upstream later ships a non-zero default, re-run init or adjust manually.
+
+Do **not** put `dispatch_stale_timeout_seconds` in `.hermes/kanban-overrides/kanban-config.yaml` — `validate_config.py` rejects unknown overlay keys, and Hermes does not read that file for this setting.
 
 ### New auxiliary tasks (v0.15.0)
 

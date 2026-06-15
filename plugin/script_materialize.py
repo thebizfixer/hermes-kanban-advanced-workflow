@@ -7,6 +7,9 @@ from pathlib import Path
 HERMES_SCRIPT_NAMES = (
     "auto_unblock.sh",
     "board_keeper.sh",
+    "kanban_lifecycle_notify.sh",
+    "kanban_intervention_inc.sh",
+    "kanban_git_ops.sh",
     "token_tracker.py",
     "coding_agent_invoke.sh",
     "worktree_setup.sh",
@@ -23,6 +26,9 @@ LIB_SCRIPT_NAMES = (
     "plan_paths.sh",
     "kanban_cli_parse.sh",
     "kanban_logs.sh",
+    "gateway_hermes_home.sh",
+    "auto_unblock_core.sh",
+    "preflight_cache.sh",
 )
 
 LIB_PYTHON_NAMES = (
@@ -30,6 +36,8 @@ LIB_PYTHON_NAMES = (
     "plan_parse.py",
     "cli_output_parse.py",
     "governance_profile.py",
+    "decompose_stamp.py",
+    "cross_plan_memory.py",
 )
 
 

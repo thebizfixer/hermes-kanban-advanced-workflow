@@ -10,7 +10,7 @@ metadata:
 
 # Kanban Notify — Intervention Gateway Push
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -163,6 +163,20 @@ Before the operator walks away, state explicitly:
 - The **8 intervention triggers** that will page them
 - The **7 silent events** above
 - Whether `NOTIFY_ON_COMPLETE` is set
+- Whether **lifecycle notify** is on (`notify_lifecycle: true` default — per-card progress, not intervention)
+
+## Lifecycle notify (separate from intervention)
+
+**Default on** (`notify_lifecycle: true` in `kanban-config.yaml` or dashboard **Profiles → Notifications**). Provisions `kanban-lifecycle-notify-5m` at decomposition via `provision_kanban_crons.sh`.
+
+| Channel | Script | When | Prefix |
+|---------|--------|------|--------|
+| Intervention | orchestrator + `kanban_intervention_inc.sh` | 8 triggers only (auth exhausted, human gate, …) | 🚨 |
+| Lifecycle | `kanban_lifecycle_notify.sh` | Per-card start / running / done + catastrophic re-block **after gate completes** | ℹ️ (no 🚨) |
+
+Lifecycle state-diff logs: `.hermes/kanban/logs/lifecycle.jsonl`. Disable with `notify_lifecycle: false` or dashboard toggle off — wave crons (`auto_unblock`, `board_keeper`) still run.
+
+**Do not** increment `interventions.count` for lifecycle messages. **Do not** use lifecycle notify for evaluation-chain denies — those are worker/orchestrator remediation unless they hit an intervention trigger.
 
 ### Completion notification opt-in
 
@@ -201,6 +215,18 @@ Cross-reference: `hermes-kanban-advanced-workflow/prompts/orchestrator.md` § In
 - **CLI-only environments.** Do not promise push; use tmux `kanban watch` and log fallback.
 - **Final-audit subscribe vs intervention list.** `notify-subscribe` on the audit card is optional convenience; default walk-away stays silent until `NOTIFY_ON_COMPLETE=true`.
 - **Notifying after exhausted code-problem retries.** If all three escalation levels (coding agent → worker → orchestrator) failed to resolve a code or test failure, the correct response is a plan review, not a gateway page. Notify only if the block cause is environmental or requires approval outside the agents' authority (`HUMAN_INTERVENTION` from `board_keeper.sh`).
+
+## When to notify vs stay silent (load in order)
+
+| Situation | Notify? | Load |
+| --- | --- | --- |
+| Auto-retryable worker block (first failure) | No | Orchestrator triage pipeline |
+| `[escalation:coding_agent:auth]` after smoke retry | Yes (intervention) | `coding-agent-auth.md` |
+| Final audit **exit 2** / max rounds / `gave_up` remediation | Yes (intervention) | `final-audit-sanity-check.md`; index L7 |
+| Final audit exit 1 mid-remediation wave | No (unless stuck > policy) | Orchestrator § Final audit problem router |
+| Token burn advisory only | No | Orchestrator investigates |
+| Plan complete + postmortem | Optional | `NOTIFY_ON_COMPLETE=true` — `kanban-cleanup` |
+| Unknown trigger | No until classified | This skill § Intervention trigger table |
 
 ## Cross-references
 

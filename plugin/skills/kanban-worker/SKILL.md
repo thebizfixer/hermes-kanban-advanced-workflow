@@ -26,9 +26,21 @@ metadata:
 
 > **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E021, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. On DENY or block → `skill_view("kanban-advanced:kanban-worker-governance")` then `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` — do not guess.
 
+## When worker hits a problem (load in order)
+
+| Symptom | First load | Notes |
+| --- | --- | --- |
+| Evaluation chain DENY (`E001`–`E021`) | `kanban-advanced:kanban-worker-governance` | Code row → recovery command |
+| E001 zero-diff but work is done | Same + stamp `Commit:` | Post-flight Tier 1 uses same `find_prior_commit` rule |
+| Auth / smoke fail | `plugin/data/references/coding-agent-auth.md` | `[escalation:coding_agent:auth]` → T3 |
+| Worktree / E021 | `worktree_setup.sh` | Index § L5-pre |
+| Plan section missing in worktree | Index § L5 | `git checkout origin/${working_branch} -- .agent/plans/…` |
+| Don't know which layer | `in-flight-governance-index.md` | Symptom → command → verify |
+| Parent integration / merge | `kanban-advanced:kanban-git` | When card lists `Parent-branches:` |
+
 > The **lifecycle** (7 steps: orient → memory → fast-sanity → handoff → monitor → verify → complete) is the worker's job. The worker is a **supervisor of the coding agent**, not the implementer. Its job: read the card, do a fast sanity check, hand off to the coding agent, monitor progress, verify the output via the evaluation chain, and close the task.
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -66,7 +78,7 @@ If `hermes kanban show <task_id>` block reason contains `[escalation:coding_agen
 
 **Plan file availability (mandatory):** The full plan file must be accessible in the worktree for autonomous troubleshooting. The card body carries task-specific instructions, but when the cursor agent hits an unexpected failure, the worker needs the plan for root cause context, phase dependencies, and sad-path contingencies.
 
-1. **Identify the plan file** — prefer `plan_file:` from the card body (stamped at decomposition). Else use `plan_id:` / `$HERMES_KANBAN_PLAN_ID` with the agent-neutral resolver (`.hermes/kanban/plans/` backup first, then `.agent/plans`, `.cursor/plans`, etc.):
+1. **Identify the plan file** — prefer `plan_file:` from the card body (stamped at decomposition). Else use `plan_id:` / `$HERMES_KANBAN_PLAN_ID` with the agent-neutral resolver (`.hermes/kanban/plans/` backup first, then `.agent/plans`, then `plan_search_dirs` from overlay):
 ```bash
 PYTHONPATH=scripts/lib python3 -c "from plan_paths import resolve_plan_file; print(resolve_plan_file('.', '$PLAN_ID'))"
 ```
@@ -333,7 +345,7 @@ The evaluation chain runs deterministic steps (AEP DAL pattern). Each returns AL
 
 | Step | Code | What it checks | On DENY |
 |------|------|---------------|---------|
-| 1. Files: compliance | E001 | Every file in `Files:` has >0 changes in diff | Block — agent didn't touch required files |
+| 1. Files: compliance | E001 | Every file in `Files:` has >0 changes in diff **or** `find_prior_commit` ALLOW (prior commit touched full `Files:` list) | Block — widen baseline or fix `Commit:` stamp so post-flight Tier 1 can clear the same path |
 | 2. Unlisted changes | E002 | **Hard gate.** Auto-revert files modified outside `Files:`. If revert fails, DENY. | Block — agent modified files it wasn't authorized to touch. Orchestrator investigates. |
 | 3. Test pass | E003 | Run `Tests:` command, all must pass | Block — fix code or split card |
 | 4. Commit match | E004 | `git log -1 --format=%s` matches `Commit:` line | Block — commit message mismatch |
@@ -345,6 +357,8 @@ The evaluation chain runs deterministic steps (AEP DAL pattern). Each returns AL
 **E002 is a hard gate.** The auto-revert MUST succeed. If `git checkout HEAD~1 -- <unlisted_file>` fails (merge conflict, file didn't exist before), the card blocks. The orchestrator must investigate why the agent modified files outside its scope — this is a governance violation, not a cleanup task.
 
 **E018 is a hard gate.** The token log entry MUST exist for this task. If `tokens.jsonl` has no entry with matching `task_id`, source=`agent`, and non-zero tokens, the card blocks. The orchestrator can manually add the entry and unblock, but the worker must not complete without token attribution.
+
+**Acceptance / Call-sites verify (standard for code-gen cards):** After the evaluation chain returns ALLOW, compare the worktree against the card's `Acceptance:` and `Call-sites:` lines. If any surface is unmet, **re-dispatch the coding agent** on the same card (do not `kanban_complete`) until satisfied or iteration budget is exhausted. Load `kanban-advanced:kanban-git` before Step 3 when the card lists `Parent-branches:` or parent integration prose. See `wiki/governance.md` § Role-based completeness loop (worker catch vs orchestrator remediation).
 
 **Lattice memory (AEP attractor pattern):** After successful completion, the chain writes a lattice memory entry with files + tests hash. Subsequent workers with matching attractor_hash skip cold-path validation for steps 1, 3, and 4. Steps 2, 5, and 6 always run — scope enforcement and token attribution are never cached.
 
@@ -549,7 +563,7 @@ The orchestrator reads `tokens.jsonl` during reconciliation and the postmortem g
 
 Agents are for **code generation** only. Use **terminal commands directly** for pipeline execution (test suites, benchmarking, schema regeneration, git merges).
 
-- ✓ Agent: `"add evaluate_sentiment_rewrite function to classifier.py"`
+- ✓ Agent: `"add foo_helper function to utils.py"`
 - ✗ Agent: `"re-run test suite and record results"` → use terminal
 
 ### Heartbeat pattern (mandatory)

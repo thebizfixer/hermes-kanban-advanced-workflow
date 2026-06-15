@@ -11,6 +11,7 @@ post_tool_call — logs board events after kanban tool calls (create, complete,
 import json
 import logging
 import os
+import subprocess
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Any
@@ -33,6 +34,49 @@ def _ensure_log_dir():
 def _get_profile(**kwargs: Any) -> str:
     """Best-effort detection of the active Hermes profile."""
     return os.environ.get("HERMES_PROFILE", "")
+
+
+def _repo_root() -> Path | None:
+    """Best-effort project root for event-driven auto_unblock."""
+    for key in ("KANBAN_REPO_ROOT", "HERMES_KANBAN_REPO_ROOT"):
+        raw = os.environ.get(key, "").strip()
+        if raw:
+            candidate = Path(raw).expanduser()
+            if candidate.is_dir():
+                return candidate.resolve()
+    cwd = Path.cwd()
+    if (cwd / ".hermes" / "kanban").is_dir() or (cwd / ".git").is_dir():
+        return cwd.resolve()
+    return None
+
+
+def _trigger_event_driven_unblock() -> None:
+    """Fire auto_unblock after kanban_complete (complements 1m cron). Fail silently."""
+    try:
+        from plugin.hermes_gateway_home import resolve_gateway_hermes_home
+    except ImportError:
+        from hermes_gateway_home import resolve_gateway_hermes_home  # type: ignore
+
+    hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
+    gateway_home = resolve_gateway_hermes_home(hermes_home)
+    script = Path(gateway_home) / "scripts" / "auto_unblock.sh"
+    if not script.is_file():
+        return
+    root = _repo_root()
+    if root is None:
+        return
+    env = {**os.environ, "HERMES_HOME": gateway_home}
+    try:
+        subprocess.Popen(
+            ["bash", str(script), "--max-unblock", "1"],
+            cwd=str(root),
+            env=env,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        pass
 
 
 def on_session_start(**kwargs: Any) -> None:
@@ -123,6 +167,11 @@ def post_tool_call(tool_name: str = "", args: Any = None, result: str = "",
 
         with open(EVENT_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(entry) + "\n")
+
+        if tool_name == "kanban_complete":
+            result_text = str(result or "").lower()
+            if "error" not in result_text and "failed" not in result_text:
+                _trigger_event_driven_unblock()
 
     except Exception as exc:
         # Hook errors are caught by Hermes, but we log to stderr as a fallback

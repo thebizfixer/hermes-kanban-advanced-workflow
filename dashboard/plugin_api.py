@@ -29,6 +29,7 @@ from plugin.config_overlay import (  # noqa: E402
     detect_default_working_branch,
     normalize_optional_branch,
     normalize_policy_profile,
+    normalize_notify_lifecycle,
     overlay_path,
     read_overlay_config,
     resolve_branch_settings,
@@ -36,6 +37,7 @@ from plugin.config_overlay import (  # noqa: E402
     resolve_coding_agent_model,
     resolve_dispatch_profiles,
     resolve_hermes_home,
+    resolve_notify_lifecycle,
     resolve_plugin_install_dir,
     resolve_plugin_skills_src,
     resolve_policy_profile,
@@ -64,6 +66,7 @@ from plugin.hermes_model_config import (  # noqa: E402
     profile_has_model_config,
     seed_default_reasoning_effort_for_profile,
 )
+from plugin.hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config  # noqa: E402
 from plugin.profile_bootstrap import (  # noqa: E402
     dispatch_profile_names,
     ensure_dispatch_profiles,
@@ -589,6 +592,7 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         "coding_agent_model": coding_agent_model,
         "coding_agent_cli": coding_agent_cli,
         "policy_profile": resolve_policy_profile(project_root, env=env),
+        "notify_lifecycle": resolve_notify_lifecycle(project_root, config=config),
         "max_turns": _get_max_turns(
             project_root, orchestrator_config_show=orch_config_show
         ),
@@ -805,6 +809,13 @@ async def init(request: Request):
     else:
         policy_profile = resolve_policy_profile(project_root, env=env)
     output.append(f"   Governance profile: {policy_profile}")
+    if "notify_lifecycle" in body:
+        notify_lifecycle = normalize_notify_lifecycle(body.get("notify_lifecycle"))
+    elif "notify_lifecycle" in existing_config:
+        notify_lifecycle = normalize_notify_lifecycle(existing_config["notify_lifecycle"])
+    else:
+        notify_lifecycle = resolve_notify_lifecycle(project_root, env=env)
+    output.append(f"   Notifications (lifecycle): {'on' if notify_lifecycle else 'off'}")
     if kept:
         output.append("   Preserved branch settings from existing kanban-config.yaml")
 
@@ -883,6 +894,7 @@ async def init(request: Request):
             coding_agent=coding_agent,
             coding_agent_model=coding_agent_model,
             policy_profile=policy_profile,
+            notify_lifecycle=notify_lifecycle,
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
             existing=existing_config,
@@ -946,13 +958,8 @@ async def init(request: Request):
         output.append("   !  Could not resolve HOME — set HOME= in .env for gateway workers")
     output.append("   OK")
 
-    # Kanban config — disable built-in auto-decomposer so triage cards are
-    # not rewritten by Hermes LLM before the orchestrator reviews them.
-    r_ad = _run([HERMES_BIN, "config", "set", "kanban.auto_decompose", "false"])
-    if r_ad.returncode == 0:
-        output.append("   OK kanban.auto_decompose = false")
-    else:
-        output.append("   !  Could not set kanban.auto_decompose — set manually: hermes config set kanban.auto_decompose false")
+    # Kanban Hermes config — auto_decompose off + stale dispatch timeout (see dispatch-stale-timeout.md)
+    apply_hermes_kanban_bootstrap_config(_run, HERMES_BIN, log=output.append)
 
     # Gateway
     gw = _check_gateway()
@@ -998,6 +1005,10 @@ async def save(request: Request):
         policy_profile = normalize_policy_profile(body.get("policy_profile"))
     else:
         policy_profile = resolve_policy_profile(project_root, env=env)
+    if "notify_lifecycle" in body:
+        notify_lifecycle = normalize_notify_lifecycle(body.get("notify_lifecycle"))
+    else:
+        notify_lifecycle = resolve_notify_lifecycle(project_root, config=config)
     max_turns = body.get("max_turns", 180)
 
     output = []
@@ -1005,6 +1016,7 @@ async def save(request: Request):
     output.append(f"   Working branch: {working_branch}")
     output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
     output.append(f"   Governance profile: {policy_profile}")
+    output.append(f"   Notifications (lifecycle): {'on' if notify_lifecycle else 'off'}")
     _append_coding_agent_cli_log(
         output, coding_agent, coding_agent_model, probe=True
     )
@@ -1020,6 +1032,7 @@ async def save(request: Request):
             coding_agent=coding_agent,
             coding_agent_model=coding_agent_model,
             policy_profile=policy_profile,
+            notify_lifecycle=notify_lifecycle,
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
             existing=config,

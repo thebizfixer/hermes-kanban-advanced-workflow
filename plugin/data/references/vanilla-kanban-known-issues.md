@@ -137,7 +137,7 @@ kanban-advanced init sets this automatically. Never run `hermes kanban decompose
 
 ### Concurrent agents corrupt each other's work (shared worktree)
 
-**Symptom:** Multiple agents modifying the same files in the same directory. Files created by one agent are deleted by another. Changes to shared files (e.g., `tinyfish.py`) are lost. Iteration budget wasted on conflict recovery.
+**Symptom:** Multiple agents modifying the same files in the same directory. Files created by one agent are deleted by another. Changes to shared files (e.g., `large_module.py`) are lost. Iteration budget wasted on conflict recovery.
 
 **Exposure:** Any two cards that use the same `--workspace` path. Especially dangerous when cards touch the same file.
 

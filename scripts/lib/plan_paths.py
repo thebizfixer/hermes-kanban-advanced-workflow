@@ -9,7 +9,6 @@ from typing import Iterable, List, Optional
 DEFAULT_PLAN_SEARCH_DIRS: tuple[str, ...] = (
     ".hermes/kanban/plans",
     ".agent/plans",
-    ".cursor/plans",
     ".claude/plans",
     ".codex/plans",
     ".gemini/plans",

@@ -1,7 +1,7 @@
 ---
 name: kanban-planning
 description: How to write implementation plans optimized for Kanban decomposition — file-level granularity, section structure, agent-prompt blocks, ordinal card body templates, and dependency graphs. Distinguishes Harden (WHAT — content completeness, sanity check, gap closure) from Optimize (HOW — formatting for decomposition, agent blocks, budgets, graphs).
-version: 5.2.0
+version: 5.3.0
 metadata:
   hermes:
     tags: [kanban, planning, decomposition, governance]
@@ -9,7 +9,7 @@ metadata:
 ---
 # Kanban Planning
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -25,11 +25,25 @@ Plans are gated by policy before decomposition. The orchestrator runs `kanban_ca
 **Verification card template:**
 ```
 Type: verification
-Tests: <command>
+Tests: {command}
 Commit: N/A (verification only)
 Mode: read-only
 ```
 No `Files:` line and no ` ```agent` block.
+
+## Plan file format (markdown + preview)
+
+Plans must use **markup-safe placeholders** — many renderers treat `<word>` as HTML-like tags and break preview or hide sections. **Never use angle-bracket placeholders** (`<plan_id>`, `<card2-branch>`, `<command>`). Use **`{placeholder}`** or backticks instead.
+
+Full SSOT: `plugin/data/references/plan-file-format.md` (also loaded via `skill_view("kanban-advanced:kanban-planning", "references/plan-file-format.md")` after init).
+
+**Quick rules:**
+- Agent blocks: single ` ```agent ` fence only — no outer ` ````markdown ` wrapper.
+- Non-trivial cards: include `Spec:`, `Call-sites:`, `Forbidden:`, `Acceptance:`, `Self-audit:` per §Card body agent-prompt template.
+- Shared symbols: `Contracts:` block in `## Kanban optimization`, copied into every card that touches those symbols.
+- Paths in prose: `.hermes/kanban/memory/{plan_id}.json`, not `<plan_id>.json`.
+
+**Self-check before Optimize attestation:** `grep -nE '<[A-Za-z_/]' <plan>.md` — fix placeholder matches (allow `<=` / `>=` only).
 
 ## Planning stage order (mandatory)
 
@@ -79,7 +93,7 @@ Run this during the Optimize stage, after the plan content is hardened. These it
 8. **Same-provider staggering planned** — Cards on the same provider serialized via parent-child links (or documented as auto-serialized by the dispatcher). See the provider-strategy wiki page for multi-provider fan-out and fallback configuration.
 9. **Line budget computed** — Total net line changes estimated across all cards. No single card exceeds 200 net lines. The `line_budget` field in the frontmatter summarizes the plan total.
 10. **Card granularity verified** — No card bundles more than 2 distinct file-level changes. Cards with 3+ files are split regardless of line count. Same-file cards that touch the same file are serialized via parent-child links.
-11. **Same-file merge verification** — When a card touches a file that a prior card also modified, the card body MUST include instructions to rebase on the prior card's branch before working. Card 10 removed `_merge_fetch_scope_exhausted` that Card 2 added because Card 10 was created from staging (which didn't have Card 2's commits yet). The dependency graph specified Card 2 → Card 10 parent-child ordering, but the child must still merge the parent's changes. Add to card body: `**Before modifying <file>, rebase on <parent-card-branch>: git fetch origin <parent-branch> && git merge <parent-branch>.**`
+11. **Same-file merge verification** — When a card touches a file that a prior card also modified, the card body MUST include instructions to rebase on the prior card's branch before working. Card 10 removed `_merge_fetch_scope_exhausted` that Card 2 added because Card 10 was created from staging (which didn't have Card 2's commits yet). The dependency graph specified Card 2 → Card 10 parent-child ordering, but the child must still merge the parent's changes. Add to card body: `**Before modifying {file}, rebase on {parent-card-branch}: git fetch origin {parent-branch} && git merge {parent-branch}.**`
 12. **Cross-section contradictions checked** — No two sections modify the same file in conflicting ways. If section A creates function X and section B deletes function X, flag as contradiction. If section A modifies lines 100–200 and section B modifies lines 150–250, flag as overlapping.
 13. **Optimization attestation** — All checklist items recorded in the plan frontmatter under `optimization_checklist` with `status: pass`. The orchestrator's Step 0c reads this for attestation.
 14. **Plan committed and pushed to `${working_branch}`** — The hardened, optimized plan is committed to `${working_branch}` and pushed to `origin/${working_branch}`. Workers branch their worktrees from `${working_branch}` and need the full plan file for autonomous troubleshooting. Verify: `git log --oneline -1 -- .agent/plans/<plan>.md` shows a recent commit on `${working_branch}` AND `git fetch origin ${working_branch} --dry-run` confirms the push.
@@ -87,6 +101,15 @@ Run this during the Optimize stage, after the plan content is hardened. These it
 16. **Diff cap present** — Every agent-prompt block over 50 lines includes an explicit scope guard: `"If your diff exceeds 150 lines net, STOP and report what's remaining."` This prevents scope explosion (observed: 1654-line diff on a 91-line card). Smaller cards don't need this.
 17. **Goal-card acceptance encoded** — For each `goal_card: true` workstream: add an **`Acceptance:`** subsection (judge-facing; use template in `plugin/data/references/goal-card-selection.md`); optional `goal_max_turns` in frontmatter (default **20**, must not exceed `goals.max_turns`). Run `python3 hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md` before attestation.
 18. **Executive summary documentation-ready** — For plans that serve double-duty as implementation plans AND documentation artifacts (linked from `docs/` or referenced by other plans), the executive summary must be self-contained: a reader who never opens the evidence matrix must understand the problem, root causes, what's already fixed, what each phase delivers, and target metrics. Anti-pattern: a flat severity table. Required structure: (a) one-sentence opening, (b) root causes table with fix-complexity column, (c) already-shipped items, (d) remediation-at-a-glance phase table, (e) key performance targets in before/after format, (f) closing line with blast radius.
+19. **Acceptance surface audit** — Each YAML todo → list every deliverable (code path, test file, operator script, deploy step). If more than one surface, split the todo or add numbered `Acceptance:` items in the agent block.
+20. **Call-site audit** — For any "wire X to Y" todo, `rg` all callers; agent block lists every `Call-sites: path:symbol` or names a shared resolver both paths must use.
+21. **Files completeness** — For UX/helper changes, `rg` the symbol across the repo; all subscriber-facing call sites appear in `Files:` or an explicit follow-up card.
+22. **Verification taxonomy** — `verification-local` (pytest only) vs `verification-deploy` (operator + deploy); never mark deploy todos `completed` on merge to staging alone.
+23. **Same-file graph** — Mark cards that touch the same production file; planner sets `wave_parent` chain (not parallel gate-only siblings) for those files.
+24. **Multi-parent cap** — Test/doc cards: max **2** production parents unless `Mode: read-only`; otherwise split fixtures by file.
+25. **Spec precision** — Non-trivial agent blocks include `Spec:` + `Anchor:` + `Examples:`; `Contracts:` in `## Kanban optimization` pins every `Call-sites:` symbol; ban vague integration verbs unless followed by a concrete operation (see `plan-file-format.md`).
+26. **Plan memory seed** — At end of Optimize, write `acceptance_matrix` (or equivalent) into plan frontmatter or `.hermes/kanban/memory/{plan_id}.json` for decompose to expand.
+27. **Markup-safe placeholders** — No `<word>` slots anywhere in the plan file; use `{word}` per §Plan file format.
 
 ### System-agnostic path convention
 
@@ -94,13 +117,13 @@ All documentation, skill files, and wiki pages MUST use system-agnostic paths. N
 
 | Avoid | Use | Rationale |
 |-------|-----|-----------|
-| `.cursor/plans/` | `.agent/plans/` | Works whether the user is on Cursor, Claude Code, Codex, or any agent |
+| IDE-specific plan dirs in plugin docs | `.agent/plans/` | Agent-neutral canonical path; extend via `plan_search_dirs` in overlay |
 | `~/.hermes/` | `$HERMES_HOME/` | Hermes state directory is an environment variable — supports custom installs |
 | `/mnt/c/`, `/mnt/e/` | Native filesystem paths | WSL DrvFs paths are platform-specific and blocked by preflight |
 
 The trigger phrase table in the interaction model, the adoption protocol, and all script invocations must follow this convention. Historical plan files and changelogs are exempt — they're immutable records of what was built.
 
-**CLI Agent terminology:** In KPI/metrics sections, use "CLI Agent" (system-agnostic). In coding-agent rosters and intro paragraphs, use the actual product name ("Cursor CLI"). The distinction: metrics should be portable across coding agents; the roster tells users exactly what to install.
+**CLI Agent terminology:** In KPI/metrics sections, use **CLI Agent** (vendor-neutral). In coding-agent install rosters, use the vendor product name for the configured binary (e.g. the display name from `plugin/coding_agent.py`). Metrics stay portable across coding agents; rosters tell operators what to install.
 
 **README formatting pitfalls:** After any markdown edit, check for URL-encoded HTML artifacts (`%3C` wrappers), HTML entities (`&gt;`/`&lt;`), broken code fences, triple blank lines, and mixed table formatting. See `plugin/data/references/readme-formatting-pitfalls.md` for the full checklist.
 
@@ -150,56 +173,71 @@ Build what's needed first. Flag what's wanted as optional. When in doubt, implem
 
 ### Card body agent-prompt template
 
-Every code-generation card body must end with a fenced `agent -p` block. This is what the worker extracts and executes directly:
+Every code-generation card body must end with a fenced `agent -p` block. This is what the worker extracts and executes directly.
 
-````markdown
+**Non-trivial cards** (new/changed signatures, 2+ files, or non-trivial logic) use the full contract shape below. **Trivial cards** (rename, one-line constant, config-only) may omit `Spec:` / `Anchor:` / `Examples:`.
+
 ```agent
-agent -p "Implement [task] per plan §[section].
-plan_id: <plan-id>
-Files: path/to/file1.py, path/to/file2.py.
-Mode: modify-only.
-Tests: <test command>.
-Commit: <commit message>.
+agent -p "Implement {one-line task}.
+plan_id: {plan_id}
+Files: {path} ({mode}), …
+Mode: modify-only
+Anchor: {class/function + approx line}
+Spec:
+- Signature: {exact def/types; raised exceptions}
+- Constants: {NAME = value}
+- Data shape: {field names + types}
+- Behavior: {numbered steps; edge cases}
+- Examples: {>=1 happy; 1 representative edge}
+Call-sites: {path:symbol, …} or none
+Forbidden: {never-tier — paths, deps, no signature changes elsewhere}
+Acceptance:
+- Done when: {observable assertion / passing test name}
+- Verify: {exact rg/pytest command}
+Self-audit: before commit, list each Spec/Acceptance item and confirm met; revert any file not in Files:
+Tests: {test command}
+Commit: {commit message}
+Diff cap: if >150 net lines, STOP and report.
 Do NOT push to ${working_branch} — commit to worktree branch only."
 ```
 
 The worker's Step 4 extracts this block via regex, executes it, and monitors the agent. No prompt construction, no re-reading the body, no debating what model to use.
 
 > **Model selection belongs to the profile, not the card body.** Do NOT add `--model` or `--output-format` flags. The profile's `config.yaml` determines the model. Card body policy P005 blocks cards that attempt to override profile model config.
-> **Model name requirement:** `<model-name>` must be a valid ID for the target CLI. Run the CLI's model-list command first (e.g. `agent --list-models` for Cursor CLI). Cursor CLI uses Cursor-native IDs, not upstream provider names. **If the valid set is unknown, omit `--model` and `--output-format` entirely** — the CLI will auto-select.
+> **Model name requirement:** If the valid model set is unknown, omit `--model` entirely — the CLI auto-selects.
 
 ### Ordinal card body template (AEP cardinal analysis pattern)
 
 For complex tasks (sad-path recovery, policy enforcement, infrastructure changes), use the 8-question ordinal format. Each "not" variant maps to a specific evaluation chain step:
 
 ```markdown
-### Task: <title>
+### Task: {title}
 
-**What is Needed?** <outcome description>
-**How is it Needed?** <happy path>
+**What is Needed?** {outcome description}
+**How is it Needed?** {happy path}
 
-**What is Wanted?** <desired outcome>
-**How is it Wanted?** <happy path for desired>
+**What is Wanted?** {desired outcome}
+**How is it Wanted?** {happy path for desired}
 
-**Where does it belong?** <file paths, workspace>
-**How does it belong there?** <integration points>
+**Where does it belong?** {file paths, workspace}
+**How does it belong there?** {integration points}
 
-**When is it received?** <environmental conditions>
-**How will it be received?** <verification steps>
+**When is it received?** {environmental conditions}
+**How will it be received?** {verification steps}
 
-**What is NOT Wanted?** <failure modes → maps to error codes E001-E006>
-**How is it NOT Wanted?** <sad paths → maps to recovery actions>
+**What is NOT Wanted?** {failure modes → maps to error codes E001-E006}
+**How is it NOT Wanted?** {sad paths → maps to recovery actions}
 
-**Where does it NOT belong?** <restricted paths → maps to E002/E009/E011>
-**How does it NOT belong there?** <boundary enforcement → maps to card policy P001-P004>
+**Where does it NOT belong?** {restricted paths → maps to E002/E009/E011}
+**How does it NOT belong there?** {boundary enforcement → maps to card policy P001-P004}
 
-**When is it NOT received?** <environmental failures → maps to E007/E008/E012>
-**How will it NOT be received?** <governance infra failures → maps to A001-A003/E013>
+**When is it NOT received?** {environmental failures → maps to E007/E008/E012}
+**How will it NOT be received?** {governance infra failures → maps to A001-A003/E013}
 
 Files: path/to/file.py
 Mode: modify-only
-Tests: <command>
-Commit: <message>
+Tests: {command}
+Commit: {message}
 ```
 
 ## Policy profiles
@@ -280,28 +318,17 @@ Net change = additions + deletions + rewrites.
 ```markdown
 ### Job name (Priority)
 
-**File:** `path/to/file.py` L<line range>
+**File:** `path/to/file.py` L{line range}
 
 **Approach:**
-<concrete implementation steps>
+{concrete implementation steps}
 
 **Tests:**
-<test file and specific cases>
+{test file and specific cases}
 
 **Card body:**
-```agent
-agent -p "Implement [task] per plan §[section].
-plan_id: <plan-id>
-Files: path/to/file1.py, path/to/file2.py.
-Mode: modify-only.
-Tests: <test command>.
-Commit: <commit message>.
-Do NOT push to ${working_branch} — commit to worktree branch only."
-```
 
-The worker's Step 4 extracts this block via regex, executes it, and monitors the agent. No prompt construction, no re-reading the body, no debating what model to use.
-
-> **Model selection belongs to the profile, not the card body.** Do NOT add `--model` or `--output-format` flags. The profile's `config.yaml` determines the model. Card body policy P005 blocks cards that attempt to override profile model config.
+(Single `agent` fence — see §Card body agent-prompt template; use {placeholders}, not angle brackets.)
 ```
 
 ## Kanban optimization section (mandatory output)
@@ -311,7 +338,7 @@ After the Optimize checklist passes, append (or rewrite) a **`## Kanban optimiza
 **Workflow: arrange first, label second**
 
 1. **Arrange** — Order cards by the dependency graph (gate → holistic fixes → parallel waves → tests → audit). Resolve merges and splits before naming.
-2. **Label** — Renumber in that order as `#### Card 1 — <title>`, `#### Card 2 — <title>`, … through `#### Card N`. Integers only, contiguous from 1, no gaps, no out-of-order appearance in the file.
+2. **Label** — Renumber in that order as `#### Card 1 — {title}`, `#### Card 2 — {title}`, … through `#### Card N`. Integers only, contiguous from 1, no gaps, no out-of-order appearance in the file.
 3. **Cross-reference** — Agent blocks and `wave_parent` / `ordinal_parent` fields use `Card N`, not draft names (`Workstream 2a`, `WS3`, letter labels).
 
 **Forbidden in `## Kanban optimization`:** `#### Card A`, `#### Workstream 3`, `#### WS2b`, or numeric labels that skip or scramble order (e.g. Card 3, Card 6, Card 2, or file order G, C, A).
@@ -329,7 +356,7 @@ plan_id: …
 wave: 1
 …
 
-#### Card 2 — <first implementation card>
+#### Card 2 — {first implementation card}
 plan_id: …
 files:
   - path/to/file.py
@@ -338,7 +365,7 @@ wave: 2
 wave_parent: card1
 (agent-prompt fenced block here)
 
-#### Card 3 — <next card in dispatch order>
+#### Card 3 — {next card in dispatch order}
 …
 ```
 
@@ -363,20 +390,22 @@ Run `bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh --plan 
 - **No per-section commits.** A gateway timeout wipes the whole run; commit cadence limits loss to one section.
 - **Plan file not on worktree branches.** Commit the hardened plan to `${working_branch}` before dispatching.
 - **Wrong tool for the job.** Not every task needs kanban. See the scope-appropriateness gate above and the README § Why NOT Kanban for guidance.
-- **Module extraction breaks test monkeypatches.** When a function is moved from a god module (e.g., `tinyfish.py`) to a new extracted module, any test that uses `monkeypatch.setattr(tf, "moved_function", ...)` on the original module will silently fail — the patched facade re-export doesn't reach internal callers in the new source module. The fix is dual-patching: add a matching `monkeypatch.setattr("new.module.moved_function", ...)` alongside the original. During planning, grep for `monkeypatch.setattr` or `@patch` targeting any function being extracted, and note the dual-patch requirement in the test strategy for that workstream.
+- **Module extraction breaks test monkeypatches.** When a function is moved from a god module (e.g., `large_module.py`) to a new extracted module, any test that uses `monkeypatch.setattr(tf, "moved_function", ...)` on the original module will silently fail — the patched facade re-export doesn't reach internal callers in the new source module. The fix is dual-patching: add a matching `monkeypatch.setattr("new.module.moved_function", ...)` alongside the original. During planning, grep for `monkeypatch.setattr` or `@patch` targeting any function being extracted, and note the dual-patch requirement in the test strategy for that workstream.
 - **`--model` in card bodies bypasses profile config.** The profile's `config.yaml` determines which model to use — the card body specifies only WHAT to do, not HOW. Putting `--model` in an agent-prompt block overrides the user's model preferences. Card body policy P005 blocks these cards at dispatch. Always omit `--model` from agent-prompt blocks. The worker uses the profile's configured model.
 - **`hermes kanban create --parents` flag is broken.** The `--parents` flag on `kanban create` does not work. Create cards without it, then wire dependencies with `hermes kanban link <parent> <child>` after all cards exist. Verify links with `hermes kanban show <child>`.
 - **Code relocation is not free.** Moving functions between files still consumes agent iterations — reading, copying, verifying imports, removing, re-exporting, testing, committing. Estimate iterations per operation (see Line Budget Analysis) and split accordingly. A 19-function extraction is easily 3+ cards.
 - **Plan lacks holistic vs surgical classification.** When a plan lists all fixes at equal priority without classifying them as holistic (global, few files) vs surgical (complex, cross-cutting), the decomposition can't optimize ordering — holistic fixes should dispatch first because they unblock surgical work and reduce blast radius. Add a classification column to the signal map before optimizing for Kanban.
 - **Labels before order.** Assigning `Card A` / `Workstream 2a` / `WS3` while still reordering produces scrambled dispatch (`G, C, A` or `3, 6, 2`). Finalize execution order in the dependency graph first, then write `## Kanban optimization` with `#### Card 1` … `#### Card N` in that order.
+- **Angle-bracket placeholders.** Using `<plan_id>`, `<command>`, or `<card2-branch>` in plan prose — breaks markup preview; use `{plan_id}` per `plan-file-format.md`.
 - **Grep calibration produces false negatives for test discovery.** A single `find . -name 'test_*.py'` won't match `*_test.py`, `tests/`, `spec/`, or non-Python test runners. Before concluding tests are missing, try at least three patterns: `find . \( -name 'test_*' -o -name '*_test.*' -o -name '*_spec.*' \)`, `grep -rl 'def test_'`, and `pytest --collect-only --quiet 2>/dev/null`. A false-negative test report wastes time and erodes trust in the hardening pass.
 
 ## References
 
+- `plugin/data/references/plan-file-format.md` — markup-safe placeholders, `Spec:` contract block, acceptance surfaces, fence rules
 - `plugin/data/references/plan-anchor-verification-pitfalls.md` — common inaccuracy patterns when verifying plan claims against the codebase
 - `plugin/data/references/worker-actionability-audit.md` — per-section actionability checklist before decomposition
 - `plugin/data/references/single-coherent-filesystem.md` — filesystem coherence and commit cadence incident analysis
-- `plugin/data/references/documentation-style.md` — system-agnostic paths, CLI Agent vs Cursor terminology, wiki table formatting, user-authored prose preservation
+- `plugin/data/references/documentation-style.md` — system-agnostic paths, CLI Agent vs vendor binary naming, wiki table formatting, user-authored prose preservation
 - `plugin/data/references/documentation-sanity-check.md` — stale reference detection, code fence integrity, table formatting, package tree maintenance
 - `plugin/data/references/readme-formatting-pitfalls.md` — URL-encoded HTML artifacts, HTML entities, broken code fences, triple blanks, user-authored prose preservation
 - `plugin/data/references/vanilla-kanban-known-issues.md` — upstream Hermes Agent kanban bugs mapped to structural workarounds (dependency gating, workspace isolation, dispatcher resilience, root card anti-patterns)

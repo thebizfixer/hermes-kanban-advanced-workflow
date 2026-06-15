@@ -109,7 +109,7 @@ hermes-kanban-advanced-workflow/
 │   ├── __init__.py                   # register(ctx): wires everything
 │   ├── schemas.py                    # 7 tool schemas (what the LLM sees)
 │   ├── tools.py                      # 7 tool handlers (wraps hermes kanban CLI)
-│   ├── hooks.py                      # on_session_start, post_tool_call
+│   ├── hooks.py                      # on_session_start; post_tool_call (board JSONL + event-driven auto_unblock)
 │   ├── cli.py                        # hermes kanban-advanced <subcommand>
 │   ├── skills/                       # 11 skill subdirectories, each with SKILL.md
 │   └── data/

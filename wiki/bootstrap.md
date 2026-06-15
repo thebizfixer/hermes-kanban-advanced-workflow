@@ -27,7 +27,8 @@ Bootstrap and init are the **same operation** from two entry points:
 10. **Cron scripts (files only)** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`. Does **not** create Hermes cron **jobs** — those are per-plan at decomposition (`provision_kanban_crons.sh --create`).
 11. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE`, and **`HOME=`** (for coding-agent credential paths) in project `.env`.
 12. **`.worktreeinclude`** — repo-root file listing gitignored paths copied into each card worktree by `worktree_setup.sh` (`.hermes/scripts/`, `kanban-overrides/`, plugin invoke helpers when using project-local `.hermes`). Commit this file after init.
-13. **Gateway check** — report running/stopped.
+13. **Hermes kanban config** — `hermes config set kanban.auto_decompose false` and `kanban.dispatch_stale_timeout_seconds 14400` (stale reclaim safety net; rationale: [`dispatch-stale-timeout.md`](../plugin/data/references/dispatch-stale-timeout.md)). Advisory if `hermes config` fails — same pattern as `auto_decompose`.
+14. **Gateway check** — report running/stopped.
 
 Init **fails loudly** if profile reconciliation/verification does not pass (dashboard returns `"error": "Profile reconciliation/verification failed"`).
 
@@ -224,6 +225,10 @@ WP=$(hermes profile show kanban-advanced-worker | awk '/^Path:/ {print $2}')
 ls "$WP/skills"                    # exactly: kanban-worker  kanban-worker-governance
 test -f "$WP/.no-bundled-skills"
 head -1 "$WP/SOUL.md"              # # Worker Prompt
+
+# 2b. Hermes kanban dispatcher config (set at bootstrap)
+hermes config show | grep -E 'kanban\.(auto_decompose|dispatch_stale_timeout_seconds)'
+# Expect: auto_decompose false, dispatch_stale_timeout_seconds 14400
 
 # 3. Orchestrator profile home
 OP=$(hermes profile show kanban-advanced-orchestrator | awk '/^Path:/ {print $2}')

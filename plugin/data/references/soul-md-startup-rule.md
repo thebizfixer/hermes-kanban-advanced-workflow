@@ -11,7 +11,7 @@ Add to the coding agent's Hermes profile SOUL.md to cap orientation waste.
 
 ## Why
 
-The 2026-05-07 postmortem (18 tasks, Sentimentary) found average orientation waste of
+The 2026-05-07 postmortem (18 tasks on a prior host run) found average orientation waste of
 16 minutes per task — workers reading arbitrary codebase files before taking their first
 productive action. Fast tasks had zero orientation phase. This rule constrains the default
 exploration-heavy behavior.

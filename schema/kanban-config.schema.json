@@ -83,6 +83,11 @@
       "minimum": 60,
       "description": "Gateway timeout seconds for commit-cadence advice."
     },
+    "notify_lifecycle": {
+      "type": "boolean",
+      "description": "When true (default), provision kanban-lifecycle-notify-5m and send per-card start/running/done gateway messages after the gate completes. Dashboard Profiles toggle maps here.",
+      "default": true
+    },
     "repo_root": {
       "type": "string",
       "default": "."
@@ -116,6 +121,35 @@
           "type": "integer",
           "minimum": 1,
           "default": 3
+        }
+      }
+    },
+    "final_audit_max_remediation_rounds": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 2,
+      "description": "Max post-flight remediation rounds before orchestrator escalation (final_audit_sanity.py)."
+    },
+    "final_audit_overrides": {
+      "type": "array",
+      "description": "Tier 2 doc-coverage allowlist — downgrades matching violations to approved_skip.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["signal", "path", "rationale"],
+        "properties": {
+          "signal": {
+            "type": "string",
+            "description": "Violation class (e.g. doc_coverage_gap)."
+          },
+          "path": {
+            "type": "string",
+            "description": "Repo-relative path to suppress."
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Operator note logged in tier2 JSON."
+          }
         }
       }
     }

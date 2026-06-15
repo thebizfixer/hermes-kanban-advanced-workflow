@@ -1,6 +1,6 @@
 # Handoff regression checklist
 
-Run after **Update Plugin**, **init/reconcile**, or before repeating a governed decomposition on a project that previously failed (e.g. Sentimentary Matrix v5 runs).
+Run after **Update Plugin**, **init/reconcile**, or before repeating a governed decomposition on a project that previously failed (e.g. a prior failed decomposition run).
 
 ## 1. Handoff card body
 

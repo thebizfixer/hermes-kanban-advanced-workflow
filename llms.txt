@@ -24,10 +24,10 @@ If a user hands you this repo link and asks you to set it up:
 3. For a quick install without the full walkthrough, use `docs/how-to/install-as-plugin.md`.
 
 After any path, the plugin registers:
-- 11 skills under `kanban-*` namespace
+- 12 skills under `kanban-*` namespace (includes `kanban-git`)
 - 7 LLM-callable tools (kanban_create, kanban_list, kanban_show, kanban_complete, kanban_block, kanban_unblock, kanban_link)
 - 7 CLI subcommands under `hermes kanban-advanced`
-- 2 lifecycle hooks (on_session_start, post_tool_call)
+- 2 lifecycle hooks (on_session_start, post_tool_call — latter triggers event-driven wave unblock)
 
 ## Platform
 
@@ -66,17 +66,21 @@ When users ask platform-specific questions, cite upstream sources from `wiki/ext
 Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Skills tab). Provides a settings UI equivalent to `hermes kanban-advanced init` — no CLI required.
 
 - **Status:** GET `/api/plugins/kanban-advanced/status` — config existence, profiles (model + `reasoning_effort`), gateway, coding agent
-- **Bootstrap:** POST `/api/plugins/kanban-advanced/init` — creates `kanban-advanced-orchestrator` + `kanban-advanced-worker` (`--no-skills`), installs plugin SOUL.md, seeds role-only profile skills, verifies, writes config overlay, materializes shared skills, provisions cron scripts. **Coding-agent smoke during bootstrap is advisory** (does not block init; does not write vendor API keys). Blocking auth: preflight + `pre_dispatch_gate.sh`. Agent reference: `wiki/bootstrap.md` § Coding-agent auth during bootstrap
+- **Bootstrap:** POST `/api/plugins/kanban-advanced/init` — creates `kanban-advanced-orchestrator` + `kanban-advanced-worker` (`--no-skills`), installs plugin SOUL.md, seeds role-only profile skills, verifies, writes config overlay, materializes shared skills, provisions cron scripts, sets `kanban.auto_decompose=false` and `kanban.dispatch_stale_timeout_seconds=14400`. **Coding-agent smoke during bootstrap is advisory** (does not block init; does not write vendor API keys). Blocking auth: preflight + `pre_dispatch_gate.sh`. Agent reference: `wiki/bootstrap.md` § Coding-agent auth during bootstrap; stale timeout: `plugin/data/references/dispatch-stale-timeout.md`
 - **Save:** POST `/api/plugins/kanban-advanced/save` — saves settings + re-runs profile reconciliation (dashboard **Save** button; not plugin **Pull**)
 - **Plugin update check:** GET `/api/plugins/kanban-advanced/status` includes `hermes_home`, `plugin_install_path`, `plugin_local_changes`, `plugin_up_to_date` / `plugin_update_available` (git fetch + behind count on install dir). **Update Plugin** calls `POST /api/plugins/kanban-advanced/update` (git pull, re-materialize skills/scripts, **reconcile dispatch profiles**)
 - **Re-init:** Bootstrap / `hermes kanban-advanced init` preserves `working_branch`, `trigger_branch`, and `policy_profile` when overlay exists; re-seeds dispatch SOUL/skills. Use **Save** to persist field edits on an initialized project
 - **Project root:** `KANBAN_PROJECT_ROOT` or `HERMES_KANBAN_CONFIG` when dashboard resolves wrong repo after `hermes update`
-- Fields: `working_branch` (defaults from git upstream / origin default), optional `trigger_branch`, `policy_profile` (`advisory` | `balanced` | `strict`), `coding_agent_binary`, `coding_agent_model` (`auto` or CLI model ID), `max_turns`; status includes `project_root`, `default_working_branch`, `coding_agent_cli` (on_path, model_reachable when probe=1), `profiles.*` (`model`, `reasoning_effort`, `recommended_reasoning_effort`, `model_reachable`, `model_reachability_detail` when probe=1)
+- Fields: `working_branch` (defaults from git upstream / origin default), optional `trigger_branch`, `policy_profile` (`advisory` | `balanced` | `strict`), `coding_agent_binary`, `coding_agent_model` (`auto` or CLI model ID), `max_turns`, `notify_lifecycle` (default `true` — per-card lifecycle cron + gateway messages; **Profiles** card toggle); status includes `project_root`, `default_working_branch`, `coding_agent_cli` (on_path, model_reachable when probe=1), `profiles.*` (`model`, `reasoning_effort`, `recommended_reasoning_effort`, `model_reachable`, `model_reachability_detail` when probe=1)
 - **Profile settings:** PUT `/api/plugins/kanban-advanced/profiles/{profile_name}` — update dispatch profile `model`/`provider` and/or Hermes `agent.reasoning_effort` (`none` | `low` | `minimal` | `medium` | `high` | `xhigh`); UI modal on **Profiles** card. Spec/reference: `docs/reference/dashboard-profile-reasoning.md`
 - Coding agent env: `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL` — worker dispatch via `scripts/coding_agent_invoke.sh` (or `build_dispatch_argv` in `plugin/coding_agent.py`); card bodies must not use `--model` / `--output-format` / `--trust` (P005)
 - Auth gate (any binary): `scripts/check_coding_agent_cli.py` — preflight `coding_agent_cli_reachability` + `pre_dispatch_gate.sh` (pre-warms Cursor OAuth once after pass via `prewarm_coding_agent_auth`); parallel workers serialize refresh with `flock` (`scripts/lib/coding_agent_auth_lock.sh`); separate from Hermes profile `model_reachability`; requires `HOME` in gateway worker env (`scripts/lib/coding_agent_env.sh`, `.env` via init/Save)
 - Coding-agent auth SSOT: `plugin/data/references/coding-agent-auth.md` (bootstrap vs gate table; agent triage when user reports auth trouble)
 - Operator provisioning SSOT: `plugin/data/references/operator-provisioning.md` (plugin vs operator layers; `.env`/`.worktreeinclude`/deps by workload)
+- Final audit SSOT: `plugin/data/references/final-audit-sanity-check.md`, `plugin/data/references/final-audit-doc-coverage.md`
+- Final audit problem routing: `AGENTS.md` (exit 2, E001/Tier 1, null uncaught); orchestrator skill § When final audit hits a problem; index L7
+- `final_audit_overrides`: operator-owned in overlay — not init-managed (`wiki/configuration.md`)
+- `validate_board.sh` check 13: `hermes kanban list --parent` on done audit cards (parity with `auto_unblock_core.sh`)
 - Agent auth playbook: `AGENTS.md` § When a user has coding-binary auth trouble
 - Agent provisioning playbook: `AGENTS.md` § When a user needs help provisioning beyond bootstrap
 - SSOT headless flags: `plugin/data/references/coding-agent-cli-invocation.md`; user reference: `docs/reference/coding-agents.md`
@@ -89,9 +93,9 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 ## Architecture
 
 - Plugin entry: `__init__.py` → `plugin/__init__.py` → `register(ctx)`
-- Skills: `plugin/skills/<name>/SKILL.md` (11 skills)
+- Skills: `plugin/skills/<name>/SKILL.md` (12 skills)
 - Data: `plugin/data/` (references, registry, policies, prompts)
-- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, check_coding_agent_cli.py, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py, verify_goal_cards.py)
+- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, check_coding_agent_cli.py, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py, verify_goal_cards.py, final_audit_sanity.py, generate_postmortem.py)
 - Handoff: `kanban_handoff.py` stamps `pre_dispatch_gate`, `BUNDLE_ROOT`, `gate_script`, `cards_yaml`; orchestrator skips gate re-run when PASSED — see `wiki/decomposition-workflow.md` § Board-mediated handoff
 - In-flight sad-path: index `plugin/skills/kanban-advanced/references/in-flight-governance-index.md` (`skill_view`); hub `wiki/in-flight-navigation.md`; regression `plugin/data/references/handoff-regression-checklist.md`
 - Worker E021: Step 3 blocks incomplete worktrees (missing `.hermes/scripts/` in worktree) before smoke — not eval-chain

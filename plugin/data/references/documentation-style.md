@@ -10,7 +10,7 @@
 | Context | Use |
 |---------|-----|
 | Hermes CLI sessions | **Hermes Agent** / **worker profile** |
-| Cursor coding CLI | **coding agent** / `agent` binary |
+| Vendor coding CLI | **coding agent** / configured binary name |
 | User-authored plan prose | Preserve voice; do not rewrite without request |
 
 ## Wiki tables
@@ -22,4 +22,5 @@
 
 - Procedural steps live in `SKILL.md`.
 - Long checklists and SSOT tables live in `plugin/data/references/`.
+- **Plan markdown format** (markup-safe placeholders, `Spec:` blocks): `plan-file-format.md`.
 - After init, bridge skill bundles references for `skill_view("kanban-advanced:kanban-advanced", "references/<file>.md")`.

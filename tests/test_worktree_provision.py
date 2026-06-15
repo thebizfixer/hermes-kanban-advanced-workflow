@@ -9,6 +9,7 @@ from pathlib import Path
 from plugin.worktree_provision import (
     WORKTREE_INCLUDE_FILENAME,
     ensure_worktreeinclude,
+    resolve_coding_agent_context_paths,
     resolve_worktree_include_paths,
 )
 
@@ -42,6 +43,22 @@ class TestWorktreeProvision(unittest.TestCase):
             paths = resolve_worktree_include_paths(root, external)
             self.assertIn(".hermes/kanban-overrides/", paths)
             self.assertNotIn(".hermes/scripts/", paths)
+
+    def test_resolve_coding_agent_context_paths_agent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            rules = root / ".cursor" / "rules"
+            rules.mkdir(parents=True)
+            (rules / "foo.mdc").write_text("rule", encoding="utf-8")
+            paths = resolve_coding_agent_context_paths("agent", root)
+            self.assertIn(".cursor/rules/", paths)
+
+    def test_resolve_paths_includes_preflight_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / ".hermes" / "kanban-overrides").mkdir(parents=True)
+            paths = resolve_worktree_include_paths(root, root / ".hermes")
+            self.assertIn(".hermes/kanban/preflight_cache.json", paths)
 
     def test_ensure_worktreeinclude_creates_and_merges(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

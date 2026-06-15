@@ -253,6 +253,17 @@ def _parse_gate_result(stdout: str, stderr: str) -> tuple[int, int] | None:
     return int(m.group(1)), int(m.group(2))
 
 
+def _parse_gate_failed_checks(stdout: str, stderr: str) -> list[str]:
+    """Return check names that printed FAIL (not WARN)."""
+    combined = (stdout or "") + (stderr or "")
+    failed: list[str] = []
+    for line in combined.splitlines():
+        m = re.match(r"\[GATE\]\s+(.+?)\s+\.\.\.\s+FAIL", line.strip())
+        if m:
+            failed.append(m.group(1).strip())
+    return failed
+
+
 _CODING_AGENT_CLI_SKIP_HINT = (
     " If the coding-agent CLI check is blocking, export "
     "PREFLIGHT_SKIP_CODING_AGENT_CLI=1 and retry."
@@ -312,7 +323,11 @@ def _run_pre_dispatch_gate(
                 stamp = f"PASSED at {ts} via {stamp_path}"
             return stamp, gate_script
         summary = (r.stdout + r.stderr).strip().splitlines()
-        reason = next((l for l in summary if l.strip()), "non-zero exit").strip()[:120]
+        failed_checks = _parse_gate_failed_checks(r.stdout, r.stderr)
+        if failed_checks:
+            reason = "failed: " + ", ".join(failed_checks[:8])
+        else:
+            reason = next((l for l in summary if l.strip()), "non-zero exit").strip()[:120]
         hint = _gate_timeout_hint(reason + " " + r.stdout + r.stderr)
         return f"FAILED at {ts}: {reason}{hint}", gate_script
     except subprocess.TimeoutExpired as exc:

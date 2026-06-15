@@ -10,7 +10,7 @@ metadata:
 
 # Kanban Postmortem — Plan Retrospective
 
-> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `sentimentary-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
+> **Skill precedence (mandatory):** When this skill and any project-specific skill (e.g., `host-project-dev-environment`) provide conflicting information about profiles, assignees, workspace paths, or dispatch rules, **this skill wins**. Kanban governance rules override project conventions. Specifically:
 > - Profile names (`worker`, `orchestrator`) come from `hermes profile list` and `kanban-config.yaml`, NOT from project skill examples or artifact tables.
 > - Workspace paths and branch naming come from this skill's decomposition rules, not from project-specific CLI examples.
 > - Card body format (`Files:`, `Mode:`, `agent -p` blocks) is enforced by card body policy (P001–P009), not by project documentation.
@@ -34,6 +34,20 @@ python hermes-kanban-advanced-workflow/scripts/generate_postmortem.py \
 
 Confirm stdout: `Postmortem written: ...` and that the file contains all eight `## N.` section headings (the script exits non-zero if any are missing).
 
+Also writes **`{plan_id}_kpi.json`** beside the markdown report and appends the same payload to **`kpi_history.jsonl`** for cross-run trending. Merges cross-plan lessons into `.hermes/kanban/memory/_global.json` when KPI completeness or subsystem failures warrant it (`scripts/lib/cross_plan_memory.py`).
+
+### Sail-through acceptance (next-run targets)
+
+Encoded in KPI `completeness` and postmortem heuristics:
+
+| Target | KPI field |
+|--------|-----------|
+| 0 uncaught false completions | `completeness.uncaught_violation_count` (goal 0; **`null`** when tier1/tier2 audit JSON is missing — not a pass) |
+| Violations recorded + remediated when caught | `completeness.remediation_cards_issued`, worker vs orchestrator catch counts |
+| Wall clock ≤ 1.5× effective estimate | `wall_clock_hours` vs plan turn-estimates |
+| 0 manual git interventions | postmortem §5 pitfalls + `kanban-git` skill adherence |
+| 0 OAuth-stampede blocks | `auth_escalation_count`, `subsystem_failures.auth_error` |
+
 ### CLI flags (cross-reference `generate_postmortem.py`)
 
 | Flag | Default | Purpose |
@@ -55,6 +69,19 @@ Confirm stdout: `Postmortem written: ...` and that the file contains all eight `
 | `interventions.jsonl` | `~/.hermes/kanban/logs/` | 4 (structured rows from `kanban-advanced:kanban-notify`) |
 
 Missing DB or token log produces **data notes** at the top of the report; the generator still emits all eight sections with best-effort inference.
+
+## Final audit KPIs (§2 Agent Performance subsection)
+
+When tier JSON exists, the markdown report includes **### Final audit** under Agent Performance with rounds, tier1/tier2 gap counts, and uncaught violations.
+
+| Symptom in KPI / report | Meaning | Load |
+| --- | --- | --- |
+| `uncaught_violation_count: null` | Tier JSON missing — **unknown**, not a pass | Re-run `final_audit_sanity.py` before archive; `final-audit-sanity-check.md` |
+| `uncaught_violation_count > 0` | Gaps reached cleanup without matching remediation | `kanban-orchestrator` § Final audit; tier JSON paths |
+| `final_audit_rounds` high vs overlay max | Remediation loop ran many times | `wiki/configuration.md`; operator triage |
+| WARN in `audit_tier_notes` | Missing `{plan_id}_audit_tier1.json` or tier2 | Re-run audit with default JSON writes |
+
+**Do not** archive the board or treat the plan as sail-through when uncaught is `null` and audit never ran.
 
 ## Report structure (eight sections)
 

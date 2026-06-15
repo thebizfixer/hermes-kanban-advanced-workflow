@@ -44,6 +44,7 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
     "supports_model_pick": true
   },
   "policy_profile": "balanced",
+  "notify_lifecycle": true,
   "max_turns": 180,
   "profiles": {
     "kanban-advanced-orchestrator": {
@@ -77,8 +78,8 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
     "probe": false,
     "git_fetch": false
   },
-  "hermes_home": "/home/user/.hermes-state/sentimentary",
-  "plugin_install_path": "/home/user/.hermes-state/sentimentary/plugins/kanban-advanced",
+  "hermes_home": "/home/user/.hermes-state/my-app",
+  "plugin_install_path": "/home/user/.hermes-state/my-app/plugins/kanban-advanced",
   "plugin_can_update": true,
   "plugin_up_to_date": true,
   "plugin_behind": 0,
@@ -180,7 +181,7 @@ Cursor uses `agent --list-models`. Other supported binaries return curated defau
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
 
-**Dispatch profiles:** Creates `kanban-advanced-orchestrator` and `kanban-advanced-worker` via `hermes profile create --no-skills`, installs `SOUL.md` from plugin prompts, seeds role-only profile skills (2 / 9), writes `.no-bundled-skills`, and verifies. Logs `HERMES_HOME:` and resolved profile paths in `output`. See `wiki/bootstrap.md`.
+**Dispatch profiles:** Creates `kanban-advanced-orchestrator` and `kanban-advanced-worker` via `hermes profile create --no-skills`, installs `SOUL.md` from plugin prompts, seeds role-only profile skills (2 / 9), writes `.no-bundled-skills`, and verifies. Logs `HERMES_HOME:` and resolved profile paths in `output`. Sets `kanban.auto_decompose=false` and `kanban.dispatch_stale_timeout_seconds=14400` via `hermes config set`. See `wiki/bootstrap.md` and `plugin/data/references/dispatch-stale-timeout.md`.
 
 **Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch`, `trigger_branch`, and `policy_profile` are **preserved from the file** unless the request body includes overrides. First-time bootstrap uses form values. Bootstrap re-runs profile reconciliation (safe for fixing skill/SOUL drift). To change settings on an initialized project, edit fields and click **Save**. **Save** persists form values and also reconciles profiles. To update the plugin package itself, use **Update Plugin** on the tab.
 
@@ -192,6 +193,7 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
   "coding_agent_binary": "agent",
   "coding_agent_model": "auto",
   "policy_profile": "balanced",
+  "notify_lifecycle": true,
   "max_turns": 180
 }
 ```
@@ -199,6 +201,8 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 `coding_agent_model`: `auto` or a CLI-specific model ID (see `GET …/coding-agent/models`).
 
 `policy_profile`: `advisory` | `balanced` | `strict` — governance enforcement level (default `balanced`).
+
+`notify_lifecycle`: when `true` (default), provisions the per-card lifecycle notify cron at decomposition and sends gateway messages for card start/running/done after the gate completes.
 
 **Response:**
 ```json
