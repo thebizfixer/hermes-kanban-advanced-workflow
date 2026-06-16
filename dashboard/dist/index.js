@@ -778,8 +778,8 @@
                   })
                 )
               ),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug truncate" },
-                "Per-card progress via lifecycle cron; intervention paging unchanged."
+              React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
+                "Notifies at card start, running, and done after the gate completes, and when a running card re-blocks."
               )
             )
           ),
@@ -816,8 +816,8 @@
                   })
                 )
               ),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug truncate" },
-                "On: unattended reconciliation, cleanup, postmortem, and completion notify after final audit."
+              React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
+                "When on, runs post-execution through completion notify after final audit without prompts; when off, waits for your approval."
               )
             )
           ),
