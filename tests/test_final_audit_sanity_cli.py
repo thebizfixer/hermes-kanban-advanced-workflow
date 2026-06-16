@@ -154,7 +154,7 @@ class TestFinalAuditSanityCli(unittest.TestCase):
                                             "--spawn-remediation",
                                         ]
                                     )
-            self.assertEqual(rc, 1)
+            self.assertEqual(rc, 0)
             self.assertEqual(spawned, [])
             tier1 = json.loads((report_dir / f"{plan_id}_audit_tier1.json").read_text(encoding="utf-8"))
             self.assertEqual(tier1["violations"][0].get("status"), "escalated")

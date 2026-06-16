@@ -59,6 +59,7 @@ Project `.hermes/docs/kanban-*` handoffs are **historical** — not in worktrees
 |--------|------|-------|
 | Plan / harden / optimize | `kanban-planning` | Any profile |
 | Execute / decompose | `kanban-advanced` → handoff script | Not manual decompose from wrong profile |
+| Install / bootstrap / Update Plugin | — | T1–T2 | MBB | `wiki/plugin-verification.md` |
 | Something broke | Index + `wiki/troubleshooting.md` | Symptom keyword search |
 
 ## T3 — Operator-only (exhaust T1/T2 first)

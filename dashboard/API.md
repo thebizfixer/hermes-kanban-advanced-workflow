@@ -222,7 +222,7 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
     "   coding_agent_model: auto (Auto (CLI default))",
     "   OK coding CLI reachable (Auto (CLI default))",
     "   OK /path/to/kanban-config.yaml",
-    "   OK 11 skills -> ...",
+    "   OK 12 skills -> ...",
     "   OK auto_unblock.sh -> ...",
     "   OK board_keeper.sh -> ...",
     "   OK token_tracker.py -> ...",
@@ -255,7 +255,7 @@ Git-pull the plugin install checkout, refresh materialized skills/scripts under 
   "output": [
     "=== Updating plugin at /path/to/.hermes/plugins/kanban-advanced ===",
     "Already up to date.",
-    "   OK 11 skills -> ...",
+    "   OK 12 skills -> ...",
     "OK Plugin updated"
   ],
   "plugin_up_to_date": true,

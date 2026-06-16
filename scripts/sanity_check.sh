@@ -114,7 +114,7 @@ check "coding_agent_env resolves HOME" "grep -q 'Path.home' scripts/lib/coding_a
 check "preflight has macOS vm_stat path" "grep -q vm_stat scripts/preflight.sh"
 check "auth prewarm respects KANBAN_CODING_AGENT" "grep -q 'KANBAN_CODING_AGENT' scripts/pre_dispatch_gate.sh"
 check "hermes_home supports USERPROFILE" "grep -q USERPROFILE scripts/lib/hermes_home.sh"
-check "auto_unblock portable task id parse" "grep -q 'kanban_extract_task_ids' scripts/auto_unblock.sh"
+check "auto_unblock portable task id parse" "grep -q 'kanban_extract_task_ids' scripts/auto_unblock.sh scripts/lib/kanban_cli_parse.sh scripts/lib/auto_unblock_core.sh"
 
 echo ""
 echo "=== Python unit tests ==="

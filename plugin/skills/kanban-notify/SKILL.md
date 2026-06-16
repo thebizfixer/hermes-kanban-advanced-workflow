@@ -167,7 +167,7 @@ Before the operator walks away, state explicitly:
 
 ## Lifecycle notify (separate from intervention)
 
-**Default on** (`notify_lifecycle: true` in `kanban-config.yaml` or dashboard **Profiles → Notifications**). Provisions `kanban-lifecycle-notify-5m` at decomposition via `provision_kanban_crons.sh`.
+**Default on** (`notify_lifecycle: true` in `kanban-config.yaml` or dashboard **Cron → Lifecycle notify**). Provisions `kanban-lifecycle-notify-5m` at decomposition via `provision_kanban_crons.sh`.
 
 | Channel | Script | When | Prefix |
 |---------|--------|------|--------|

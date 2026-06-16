@@ -34,6 +34,8 @@ Load the relevant wiki page for detailed instructions:
 | Tier 2 false positive / doc-coverage gap | `plugin/data/references/final-audit-doc-coverage.md` |
 | E001 ALLOW but Tier 1 `plan_file_zero_diff` | `plugin/data/references/final-audit-sanity-check.md` § Tier 1 ↔ E001 |
 | Postmortem `uncaught_violation_count: null` | `kanban-advanced:kanban-postmortem` § Final audit KPIs — re-run audit |
+| Install / bootstrap / Update Plugin looks wrong | `wiki/plugin-verification.md` — smoke, sanity, provision, unit tests |
+| Windows / WSL / platform paths (HERMES_HOME, Git Bash, E011) | `PLATFORM_NOTES.md` + `wiki/troubleshooting.md` § Cross-mount |
 | Where are upstream docs? | `wiki/external-references.md` |
 
 ## Requirements
@@ -49,7 +51,7 @@ Bootstrap smoke is **advisory** — init can succeed with `! coding CLI auth/mod
 3. Run:
    ```bash
    grep -E '^(KANBAN_CODING_AGENT|HOME)=' .env
-   PYTHONPATH=. python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
+   python3 hermes-kanban-advanced-workflow/scripts/check_coding_agent_cli.py
    ```
 4. If `HOME: unbound variable` — set `HOME=` in `.env` or gateway systemd; restart gateway.
 5. After any auth fix: `rm -f .hermes/kanban/preflight_cache.json` and re-run `preflight.sh` / `pre_dispatch_gate.sh`.

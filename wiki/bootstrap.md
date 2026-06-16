@@ -214,6 +214,8 @@ Re-init is **safe** for fixing drift (legacy names, extra skills, wrong SOUL). I
 
 ## Verify on disk (after bootstrap)
 
+Run profile checks from init output, then optional plugin tests ([[plugin-verification]]):
+
 ```bash
 # 1. Confirm home
 hermes profile show kanban-advanced-worker | grep -E '^(Profile|Path|Skills):'
@@ -234,7 +236,14 @@ hermes config show | grep -E 'kanban\.(auto_decompose|dispatch_stale_timeout_sec
 OP=$(hermes profile show kanban-advanced-orchestrator | awk '/^Path:/ {print $2}')
 ls "$OP/skills" | wc -l            # 9
 head -1 "$OP/SOUL.md"              # # Orchestrator Prompt
+
+# 4. Optional — plugin contract + materialization (after Update Plugin or odd bootstrap)
+python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py
+bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh
+bash hermes-kanban-advanced-workflow/scripts/provision.sh --check
 ```
+
+Full test matrix, paths, and unit suite: [[plugin-verification]].
 
 ---
 
@@ -252,7 +261,7 @@ head -1 "$OP/SOUL.md"              # # Orchestrator Prompt
 4. **Stale plugin code** — **Update Plugin**, restart gateway + dashboard, bootstrap again.
 5. **WSL vs Windows split** — separate `$HERMES_HOME` trees; fix in the environment where the gateway runs.
 
-**Fix:** Delete `kanban-advanced-worker` and `kanban-advanced-orchestrator` (`hermes profile delete <name> -y`), run bootstrap, confirm verification lines in output.
+**Fix:** Delete `kanban-advanced-worker` and `kanban-advanced-orchestrator` (`hermes profile delete <name> -y`), run bootstrap, confirm verification lines in output. If bootstrap output is unclear, run [[plugin-verification]] first to isolate plugin vs profile drift.
 
 ### Init succeeds but dashboard shows wrong profile names
 
@@ -260,7 +269,7 @@ Status API returns `dispatch_profiles` with configured names. Red "not found" me
 
 ### `Profile reconciliation/verification failed`
 
-Read the listed issues in bootstrap output. Common: prompts missing at install path (`plugin/data/prompts/`), skills bundle missing, profile home not resolvable.
+Read the listed issues in bootstrap output. Common: prompts missing at install path (`plugin/data/prompts/`), skills bundle missing, profile home not resolvable. Run [[plugin-verification]] Tier 1–2 before deleting profiles.
 
 ### Deleting profile in dashboard does not remove files
 
@@ -272,6 +281,7 @@ Hermes dashboard delete may not remove the profile directory on disk. Use `herme
 
 - [[setup]] — full install path
 - [[configuration]] — overlay variables, thinking levels, `preflight_profiles`
+- [[plugin-verification]] — install/bootstrap test suites (`smoke_test_plugin.py`, `sanity_check.sh`, unit tests)
 - [[troubleshooting]] — error codes and branch preservation
 - `plugin/data/references/hermes-state-directory.md` — `$HERMES_HOME` layout
 - `dashboard/API.md` — bootstrap API request/response

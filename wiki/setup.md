@@ -2,6 +2,8 @@
 
 > **For the agent:** When a user says "set up kanban-advanced" or "I want to use this workflow," follow this guide. Load each referenced page as needed.
 
+**Platforms:** Linux, macOS, Windows native (Hermes Git Bash), and WSL2 — [PLATFORM_NOTES.md](../PLATFORM_NOTES.md). **Coding CLIs:** any supported headless binary ([coding agents](../docs/reference/coding-agents.md)). **Host repo:** any git project; examples use neutral `hermes-kanban-advanced-workflow/` as the bundle path.
+
 ## Quick path (plugin install — recommended)
 
 1. **Confirm Hermes is installed and running:**
@@ -88,7 +90,15 @@ The worker reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from `.en
    ```
    Fix any failures before proceeding. See [[troubleshooting]] for common issues.
 
-7. **Tell the user:** "Setup complete. Create a plan with the orchestrator (`kanban-advanced-orchestrator` profile), then run `hermes kanban-advanced decompose --plan <file>`. See the README for the full lifecycle."
+7. **Plugin verification tests** (when bootstrap/update looks wrong — optional but recommended after **Update Plugin**):
+   ```bash
+   python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py
+   bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh
+   bash hermes-kanban-advanced-workflow/scripts/provision.sh --check
+   ```
+   Full matrix: [[plugin-verification]].
+
+8. **Tell the user:** "Setup complete. Create a plan with the orchestrator (`kanban-advanced-orchestrator` profile), then run `hermes kanban-advanced decompose --plan <file>`. See the README for the full lifecycle."
 
 ## Fresh Hermes install
 
@@ -148,4 +158,4 @@ The user should:
 
 **KPIs are automatic.** The agent surfaces success rate, intervention rate, token burn, and failure-mode distribution at the reconciliation checkpoint. See the [README Agent KPIs](../README.md#agent-kpis).
 
-On session start, the `on_session_start` hook fires: on `kanban-advanced-orchestrator` it hints to load `kanban-advanced:kanban-orchestrator`; on other profiles it hints about trigger phrases and the bridge skill. All 11 skills are materialized to `$HERMES_HOME/skills/kanban-advanced/` during init (shared index); dispatch profiles additionally get role-only copies under their profile `skills/` dirs — see [[bootstrap#two-skill-locations-do-not-confuse]].
+On session start, the `on_session_start` hook fires: on `kanban-advanced-orchestrator` it hints to load `kanban-advanced:kanban-orchestrator`; on other profiles it hints about trigger phrases and the bridge skill. All 12 skills are materialized to `$HERMES_HOME/skills/kanban-advanced/` during init (shared index); dispatch profiles additionally get role-only copies under their profile `skills/` dirs — see [[bootstrap#two-skill-locations-do-not-confuse]].

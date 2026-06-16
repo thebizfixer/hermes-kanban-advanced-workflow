@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def register(ctx):
     """Wire all plugin components into the Hermes Agent runtime."""
 
-    # ── 1. Register all 11 bundled skills ──────────────────────────
+    # ── 1. Register all 12 bundled skills ──────────────────────────
     skills_dir = Path(__file__).parent / "skills"
     registered = 0
     failed = []

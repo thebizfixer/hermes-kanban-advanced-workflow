@@ -185,7 +185,7 @@ See **§ 4. Evaluation chain** below. Codes **E001–E020** only; complete via `
 
 ### Plugin integrity (optional smoke)
 
-When plugin/update is suspect, before any plan run:
+When plugin/update is suspect, before any plan run — full test matrix: [[plugin-verification]].
 
 ```bash
 bash hermes-kanban-advanced-workflow/scripts/governance_integrity.sh

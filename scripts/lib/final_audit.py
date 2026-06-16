@@ -791,7 +791,8 @@ def verify_doc_tests(method: str, workspace: str, files: list[str]) -> tuple[boo
                 target = m.group(1).split("#")[0].strip()
                 if not target or target.startswith("http"):
                     continue
-                if not (Path(workspace) / target).exists():
+                resolved = (path.parent / target).resolve()
+                if not resolved.exists():
                     return False, f"broken link {target} in {f}"
         return True, None
     if method.startswith("symbol-grep "):

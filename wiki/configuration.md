@@ -41,7 +41,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 
 `final_audit_overrides` is **operator-owned**: read at audit time from overlay YAML but **not** in init `_MANAGED_KEYS` — re-run `hermes kanban-advanced init` does not overwrite your allowlist. Edit `.hermes/kanban-overrides/kanban-config.yaml` directly; schema in `schema/kanban-config.schema.json`. See `plugin/data/references/final-audit-doc-coverage.md`.
 
-Set `notify_lifecycle: false` in `kanban-config.yaml` or dashboard **Profiles → Notifications** (toggle off) to skip lifecycle cron provisioning. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged — lifecycle notify is a separate, lower-noise channel.
+Set `notify_lifecycle: false` in `kanban-config.yaml` or dashboard **Cron → Lifecycle notify** (toggle off) to skip lifecycle cron provisioning. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged — lifecycle notify is a separate, lower-noise channel.
 
 ## Coding agent resolution
 

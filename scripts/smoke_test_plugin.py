@@ -7,8 +7,10 @@ handlers, both lifecycle hooks register and are callable, and the
 profile-aware role-discovery hook (on_session_start) distinguishes the
 orchestrator role from the default/worker role.
 
-Run from the repo root:
-    python scripts/smoke_test_plugin.py
+Run from the repo root (any platform):
+
+    python3 scripts/smoke_test_plugin.py
+    # Windows: python scripts/smoke_test_plugin.py also works
 
 Exit 0 = plugin contract intact. Exit 1 = a role-critical surface is broken.
 """
@@ -18,10 +20,12 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 # Expected surface (must match plugin.yaml and README "What You Get").
 EXPECTED_SKILLS = {
-    "kanban-advanced", "kanban-cleanup", "kanban-notify",
+    "kanban-advanced", "kanban-cleanup", "kanban-git", "kanban-notify",
     "kanban-orchestrator", "kanban-orchestrator-governance", "kanban-planning",
     "kanban-postmortem", "kanban-preflight", "kanban-reconciliation",
     "kanban-worker", "kanban-worker-governance",
@@ -64,11 +68,11 @@ class MockCtx:
 def _load_plugin():
     """Import the plugin package from the repo root the way Hermes would."""
     spec = importlib.util.spec_from_file_location(
-        "kanban_advanced_pkg", REPO_ROOT / "plugin" / "__init__.py",
+        "plugin", REPO_ROOT / "plugin" / "__init__.py",
         submodule_search_locations=[str(REPO_ROOT / "plugin")],
     )
     module = importlib.util.module_from_spec(spec)
-    sys.modules["kanban_advanced_pkg"] = module
+    sys.modules["plugin"] = module
     spec.loader.exec_module(module)
     return module
 

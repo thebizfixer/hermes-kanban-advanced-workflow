@@ -626,7 +626,7 @@
         )
       ),
 
-      // ── Two-column grid (row 1: Project | Coding Agent; row 2: Profiles | Governance) ──
+      // ── Two-column grid (row 1: Project | Coding Agent; row 2: Profiles | Cron + Governance) ──
       React.createElement("div", { className: "grid grid-cols-2 gap-4 items-stretch" },
 
           // Project
@@ -711,58 +711,73 @@
                   );
                 });
               })(),
-              React.createElement("div", {
-                className: "flex items-center justify-between py-1.5 px-3 rounded-md border mt-auto",
-                onClick: function (e) { e.stopPropagation(); }
-              },
-                React.createElement("span", { className: "text-sm" }, "Notifications"),
-                React.createElement("button", {
-                  type: "button",
-                  role: "switch",
-                  "aria-checked": notifyLifecycle,
-                  "aria-label": notifyLifecycle ? "Notifications on" : "Notifications off",
-                  disabled: notifySaving || bootstrapping,
-                  className: cn(
-                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                    notifyLifecycle ? "bg-primary" : "bg-muted",
-                    (notifySaving || bootstrapping) ? "opacity-60 cursor-not-allowed" : ""
-                  ),
-                  onClick: function () { persistNotifyLifecycle(!notifyLifecycle); }
-                },
-                  React.createElement("span", {
-                    className: cn(
-                      "pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform",
-                      notifyLifecycle ? "translate-x-4" : "translate-x-0"
-                    )
-                  })
-                )
+              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-auto leading-snug" },
+                "Click a profile to change model and reasoning effort."
               )
             )
           ),
 
-          // Governance + orchestrator tuning
-          React.createElement(Card, { className: "h-full" },
-            React.createElement(CardHeader, null,
-              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Governance & Tuning")
-            ),
-            React.createElement(CardContent, { className: "space-y-4" },
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Governance profile"),
-                React.createElement("select", {
-                  value: policyProfile,
-                  onChange: function (e) { setPolicyProfile(e.target.value); },
-                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                },
-                  POLICY_PROFILES.map(function (p) {
-                    return React.createElement("option", { key: p.value, value: p.value }, p.label);
-                  })
-                ),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Controls card policy, evaluation chain, and validation gates. Use strict for walk-away execution.")
+          // Cron + Governance (stacked in one grid cell — same row height as Profiles)
+          React.createElement("div", { className: "flex flex-col gap-4 h-full min-h-0" },
+            React.createElement(Card, { className: "shrink-0" },
+              React.createElement(CardHeader, { className: "pb-2" },
+                React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Cron")
               ),
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Max turns"),
-                React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for plan decomposition. Default is 90.")
+              React.createElement(CardContent, { className: "space-y-2 pt-0" },
+                React.createElement("div", {
+                  className: "flex items-center justify-between py-1.5 px-3 rounded-md border",
+                  onClick: function (e) { e.stopPropagation(); }
+                },
+                  React.createElement("span", { className: "text-sm" }, "Lifecycle notify"),
+                  React.createElement("button", {
+                    type: "button",
+                    role: "switch",
+                    "aria-checked": notifyLifecycle,
+                    "aria-label": notifyLifecycle ? "Lifecycle cron notifications on" : "Lifecycle cron notifications off",
+                    disabled: notifySaving || bootstrapping,
+                    className: cn(
+                      "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                      notifyLifecycle ? "bg-primary" : "bg-muted",
+                      (notifySaving || bootstrapping) ? "opacity-60 cursor-not-allowed" : ""
+                    ),
+                    onClick: function () { persistNotifyLifecycle(!notifyLifecycle); }
+                  },
+                    React.createElement("span", {
+                      className: cn(
+                        "pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform",
+                        notifyLifecycle ? "translate-x-4" : "translate-x-0"
+                      )
+                    })
+                  )
+                ),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
+                  "Gateway messages on card start, running, and done via kanban-lifecycle-notify cron. Off skips lifecycle cron provisioning; intervention paging is unchanged."
+                )
+              )
+            ),
+            React.createElement(Card, { className: "flex-1 flex flex-col min-h-0" },
+              React.createElement(CardHeader, null,
+                React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Governance & Tuning")
+              ),
+              React.createElement(CardContent, { className: "space-y-4" },
+                React.createElement("div", { className: "space-y-1.5" },
+                  React.createElement(Label, { className: "text-xs" }, "Governance profile"),
+                  React.createElement("select", {
+                    value: policyProfile,
+                    onChange: function (e) { setPolicyProfile(e.target.value); },
+                    className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  },
+                    POLICY_PROFILES.map(function (p) {
+                      return React.createElement("option", { key: p.value, value: p.value }, p.label);
+                    })
+                  ),
+                  React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Controls card policy, evaluation chain, and validation gates. Use strict for walk-away execution.")
+                ),
+                React.createElement("div", { className: "space-y-1.5" },
+                  React.createElement(Label, { className: "text-xs" }, "Max turns"),
+                  React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
+                  React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for plan decomposition. Default is 90.")
+                )
               )
             )
           )

@@ -12,6 +12,7 @@
 | scratch / crons / validate | L4 | T2 | MBB | Index L4 |
 | E021 / exit 127 / auth smoke | L5-pre/L5 | T1→T3 | BB | Index L5 → `worktree_setup.sh` / invoke smoke |
 | delegation / stale skill | L5 | T1/T2 | BB/MBB | Index L5 → [[#Stale skills / plugin updated mid-kanban execution]] |
+| install / bootstrap / Update Plugin | — | T1–T2 | BB/MBB | [[plugin-verification]] |
 | E001–E020 DENY | L6 | T1 | BB | worker-governance → `kanban_recover.py --list` |
 
 **SSOT commands:** `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")`. Hub: [[in-flight-navigation]].
@@ -547,6 +548,7 @@ See `plugin/data/registry/error-codes.yaml` for all 37 codes with severity, reco
 - **Rate limits / provider setup:** See [[provider-strategy]]
 - **Governance concepts:** See [[governance]]
 - **Setup problems:** See [[setup]]
+- **Install / bootstrap verification tests:** See [[plugin-verification]] (`smoke_test_plugin.py`, `sanity_check.sh`, `provision.sh --check`, unit suite)
 - **Init / bootstrap / dispatch profiles:** See [[bootstrap]]
 - **Config questions:** See [[configuration]]
 - **Interaction model / trigger phrases:** See the [README Interaction Model](../README.md#interaction-model)

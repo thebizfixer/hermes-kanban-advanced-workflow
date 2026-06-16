@@ -306,7 +306,23 @@ Verifies every worktree commit is reachable from `${working_branch}` via merge o
 bash hermes-kanban-advanced-workflow/scripts/governance_integrity.sh
 ```
 
-Pre-decomposition check: verifies all governance files (skills, scripts, registry, policies, prompts) exist and are intact. 30 checks total. Exit 1 if any file missing or non-executable.
+Pre-decomposition check: verifies all governance files (skills, scripts, registry, policies, prompts) exist and are intact. 30 checks total. Exit 1 if any file missing or non-executable. Run from the **materialized** bundle root (typically `$HERMES_HOME/scripts/..` after bootstrap). Agent install/bootstrap test matrix: `wiki/plugin-verification.md`.
+
+## Plugin smoke test (`smoke_test_plugin.py`)
+
+```bash
+python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py
+```
+
+No Hermes runtime required. Verifies plugin `register()`: 12 skills, 7 kanban tools, 2 hooks, CLI command, callable handlers. Exit 1 if contract broken. Run from plugin checkout root with `python3` or `python` (Windows). See `wiki/plugin-verification.md` and `PLATFORM_NOTES.md`.
+
+## Sanity check (`sanity_check.sh`)
+
+```bash
+bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh
+```
+
+Environment-neutral structural validation: directories, `bash -n` on all shell scripts, LF line endings, skill frontmatter, error registry, platform-neutrality greps, and `python3 -m unittest discover -s tests` when Python is on PATH. Exit 1 on any failure. See `wiki/plugin-verification.md`.
 
 ## Intervention counter (`kanban_intervention_inc.sh`)
 

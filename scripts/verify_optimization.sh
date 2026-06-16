@@ -286,7 +286,7 @@ fi
 
 # ── 16. Spec precision (non-trivial agent blocks) ───────────────────────
 echo "16. Spec precision (Spec:/Call-sites: on non-trivial cards)"
-MULTI_FILE_AGENTS=$(python3 - "$PLAN" <<'PY' 2>/dev/null || echo 0)
+MULTI_FILE_AGENTS=$(python3 - "$PLAN" <<'PY' 2>/dev/null
 import re, sys
 from pathlib import Path
 text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
@@ -304,6 +304,7 @@ for block in blocks:
 print(missing)
 PY
 )
+MULTI_FILE_AGENTS=${MULTI_FILE_AGENTS:-0}
 if [[ "${MULTI_FILE_AGENTS:-0}" -gt 0 ]]; then
     check_fail "$MULTI_FILE_AGENTS non-trivial agent block(s) missing Spec: and Call-sites: — see plan-file-format.md"
 else

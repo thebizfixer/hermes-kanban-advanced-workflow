@@ -310,6 +310,7 @@ Use **`${bundle_path}/scripts/preflight.sh`** as the single pre-dispatch gate. I
 | Check 0b skill provisioning | Re-run init / Update Plugin | `provision.sh --check` |
 | `status: degraded` only | Operator OK required for walk-away | Do not silently treat as pass |
 | Still stuck after fixes | `in-flight-governance-index.md` § L0–L1 | `wiki/troubleshooting.md` |
+| Bootstrap / init / plugin contract suspect | `wiki/plugin-verification.md` | Tier 1 smoke + sanity before re-init |
 
 ## Cross-references
 
