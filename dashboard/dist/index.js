@@ -671,7 +671,7 @@
         )
       ),
 
-      // ── Settings grid (left: Profiles → Cron → Project; right: Coding Agent → Governance) ──
+      // ── Settings grid (left: Profiles → Cron → Project; right: Coding Agent → Walk Away → Governance) ──
       React.createElement("div", { className: "grid grid-cols-2 gap-4 items-stretch" },
 
           // Profiles (top left — pairs with Coding Agent row height)
@@ -775,11 +775,23 @@
                   })
                 )
               ),
+              React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug truncate" },
+                "Per-card progress via lifecycle cron; intervention paging unchanged."
+              )
+            )
+          ),
+
+          // Walk Away (middle right — pairs with Cron row height)
+          React.createElement(Card, { className: "h-full min-h-0 flex flex-col" },
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Walk Away")
+            ),
+            React.createElement(CardContent, { className: "space-y-4" },
               React.createElement("div", {
                 className: "flex items-center justify-between py-1.5 px-3 rounded-md border",
                 onClick: function (e) { e.stopPropagation(); }
               },
-                React.createElement("span", { className: "text-sm" }, "Walk-away mode"),
+                React.createElement("span", { className: "text-sm" }, "Toggle Off/On"),
                 React.createElement("button", {
                   type: "button",
                   role: "switch",
@@ -801,14 +813,11 @@
                   })
                 )
               ),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
-                "Lifecycle: per-card progress via kanban-lifecycle-notify cron. Walk-away: unattended reconciliation, cleanup, postmortem, and completion notify after final audit (off = prompt through post-execution). Intervention paging unchanged."
+              React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug truncate" },
+                "On: unattended reconciliation, cleanup, postmortem, and completion notify after final audit."
               )
             )
           ),
-
-          // Spacer (middle right — keeps row 2 aligned with Cron only on the left)
-          React.createElement("div", { "aria-hidden": true, className: "min-h-0" }),
 
           // Project (bottom left — pairs with Governance row height)
           React.createElement(Card, { className: "h-full min-h-0 flex flex-col" },
