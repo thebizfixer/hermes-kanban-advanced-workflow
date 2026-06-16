@@ -281,6 +281,7 @@
       );
       var needGitFetch = opts.full !== false && !needProbe;
 
+      if (needGitFetch) setStatusProbing(true);
       setLoading(true);
       return apiStatus().then(function (s) {
         var merged = cached && cached.data ? mergeStatusFields(cached.data, s) : s;
@@ -316,8 +317,10 @@
               keepProbedAt: sessionGreen && cached ? cached.probedAt : 0,
               keepProbeGreen: sessionGreen
             });
+            setStatusProbing(false);
             return complete;
           }).catch(function () {
+            setStatusProbing(false);
             return merged;
           });
         }
