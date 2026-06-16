@@ -30,6 +30,7 @@ from plugin.config_overlay import (  # noqa: E402
     normalize_optional_branch,
     normalize_policy_profile,
     normalize_notify_lifecycle,
+    normalize_notify_deliver,
     normalize_walk_away_mode,
     overlay_path,
     read_overlay_config,
@@ -39,6 +40,7 @@ from plugin.config_overlay import (  # noqa: E402
     resolve_dispatch_profiles,
     resolve_hermes_home,
     resolve_notify_lifecycle,
+    resolve_notify_deliver,
     resolve_walk_away_mode,
     resolve_plugin_install_dir,
     resolve_plugin_skills_src,
@@ -595,6 +597,10 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         "coding_agent_cli": coding_agent_cli,
         "policy_profile": resolve_policy_profile(project_root, env=env),
         "notify_lifecycle": resolve_notify_lifecycle(project_root, config=config),
+        "notify_deliver": config.get("notify_deliver", ""),
+        "notify_deliver_resolved": resolve_notify_deliver(
+            project_root, hermes_home=resolve_hermes_home(project_root)
+        ),
         "walk_away_mode": resolve_walk_away_mode(
             project_root, config=config, env=env
         ),
@@ -1027,6 +1033,13 @@ async def save(request: Request):
         notify_lifecycle = normalize_notify_lifecycle(body.get("notify_lifecycle"))
     else:
         notify_lifecycle = resolve_notify_lifecycle(project_root, config=config)
+    merged_config = dict(config)
+    if "notify_deliver" in body:
+        deliver_override = normalize_notify_deliver(body.get("notify_deliver"))
+        if deliver_override:
+            merged_config["notify_deliver"] = deliver_override
+        else:
+            merged_config.pop("notify_deliver", None)
     max_turns = body.get("max_turns", 180)
 
     output = []
@@ -1035,6 +1048,15 @@ async def save(request: Request):
     output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
     output.append(f"   Governance profile: {policy_profile}")
     output.append(f"   Notifications (lifecycle): {'on' if notify_lifecycle else 'off'}")
+    deliver_resolved = resolve_notify_deliver(
+        project_root, hermes_home=resolve_hermes_home(project_root)
+    )
+    if merged_config.get("notify_deliver"):
+        output.append(
+            f"   Lifecycle deliver: {merged_config['notify_deliver']} (resolved: {deliver_resolved})"
+        )
+    else:
+        output.append(f"   Lifecycle deliver: auto ({deliver_resolved})")
     if "walk_away_mode" in body:
         walk_away_mode = normalize_walk_away_mode(body.get("walk_away_mode"))
     elif "notify_on_complete" in body:
@@ -1061,7 +1083,7 @@ async def save(request: Request):
             walk_away_mode=walk_away_mode,
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
-            existing=config,
+            existing=merged_config,
             project_root=project_root,
         ),
         encoding="utf-8",

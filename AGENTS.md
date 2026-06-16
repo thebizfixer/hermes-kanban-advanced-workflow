@@ -23,6 +23,7 @@ Load the relevant wiki page for detailed instructions:
 | How does governance work? | `wiki/governance.md` (§ Full pre-execution governance stack) |
 | Why block-on-create / decomposition workflow? | `wiki/decomposition-workflow.md` |
 | Parallel subagent pre-dispatch gate (default on) | `plugin/data/references/parallel-subagent-gate.md` + `wiki/configuration.md` § `subagent_gate` |
+| Lifecycle cron deliver resolver | `scripts/lib/resolve_notify_deliver.sh` + `wiki/configuration.md` § `notify_deliver` |
 | Walk-away mode (post-exec automation + completion notify) | `plugin/data/references/walk-away-mode.md` + `wiki/configuration.md` § `walk_away_mode` |
 | Something is broken | `wiki/troubleshooting.md` |
 | Supervisor hit a rail mid-card / mid-decompose | `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` or `wiki/in-flight-navigation.md` |
@@ -38,6 +39,7 @@ Load the relevant wiki page for detailed instructions:
 | Postmortem `uncaught_violation_count: null` | `kanban-advanced:kanban-postmortem` § Final audit KPIs — re-run audit |
 | Install / bootstrap / Update Plugin looks wrong | `wiki/plugin-verification.md` — smoke, sanity, provision, unit tests |
 | Windows / WSL / platform paths (HERMES_HOME, Git Bash, E011) | `PLATFORM_NOTES.md` + `wiki/troubleshooting.md` § Cross-mount |
+| Lifecycle cron silent / wrong deliver | `wiki/troubleshooting.md` § Wave crons + `docs/reference/scripts.md` § `provision_kanban_crons.sh` |
 | Where are upstream docs? | `wiki/external-references.md` |
 
 ## Requirements

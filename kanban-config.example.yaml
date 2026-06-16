@@ -70,6 +70,9 @@ gateway_timeout_seconds: 1800
 
 # Notifications — per-card lifecycle cron; optional full walk-away (post-exec + completion notify)
 notify_lifecycle: true
+# Optional override for lifecycle/completion cron deliver (platform slug, all, or local for CI).
+# When omitted, scripts/lib/resolve_notify_deliver.sh picks home channel automatically.
+# notify_deliver: discord
 walk_away_mode: false
 
 # ---------------------------------------------------------------------------

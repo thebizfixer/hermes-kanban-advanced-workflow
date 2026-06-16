@@ -80,9 +80,5 @@ fi
 MSG="${MSG}
 Board archived. Review postmortem when back."
 
-if hermes message send "$MSG" >/dev/null 2>&1; then
-  date -u +"%Y-%m-%dT%H:%M:%SZ" >"$SENTINEL"
-else
-  echo "[kanban_completion_notify] WARN: gateway send failed (plan_id=${PLAN_ID})" >&2
-  exit 0
-fi
+echo "$MSG"
+date -u +"%Y-%m-%dT%H:%M:%SZ" >"$SENTINEL"

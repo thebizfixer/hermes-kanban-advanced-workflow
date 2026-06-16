@@ -58,7 +58,7 @@ Without this, triage cards may be LLM-rewritten even when you intended manual de
 2.  CREATE gate → block         create gate, block immediately (<1s race window)
 3.  CREATE wave crons           bash scripts/provision_kanban_crons.sh --create --plan-id <id>
 4.  (kanban_decompose Step 6 also calls --create if orchestrator skipped Steps 3–5)
-5.  VERIFY wave crons            bash scripts/provision_kanban_crons.sh --check — gateway must run; deliver=local
+5.  VERIFY wave crons            bash scripts/provision_kanban_crons.sh --check — gateway must run; wave crons deliver=local; lifecycle deliver=resolved home channel when notify_lifecycle enabled
 6.  CREATE impl cards (stagger) create each card, block immediately; ≥1s stagger, 3s pause / 5 cards
                                  pass --gate-id to kanban_decompose.py to avoid duplicate gate
 7.  CREATE audit card           create + block (gates on all impl)
@@ -100,7 +100,8 @@ Handoff body metadata (stamped by `kanban_handoff.py`):
 |-------|---------|
 | `BUNDLE_ROOT` | Absolute plugin checkout — runbook commands use `{BUNDLE_ROOT}/scripts/…` |
 | `gate_script` | Resolved `pre_dispatch_gate.sh` path (forensics for double-`lib/` incidents) |
-| `pre_dispatch_gate` | Gate result at creation — orchestrator skips re-run when `PASSED` |
+| `pre_dispatch_gate` | `PASSED …` when serial gate ran at build; `DEFERRED …` when parallel subagent gate is enabled (orchestrator runs Step 1 from runbook) |
+| `parallel_gate` | `enabled` or `disabled` — mirrors overlay `subagent_gate.enabled` at handoff build time |
 | `cards_yaml` | Structured decompose input when optimize/harden wrote `.hermes/kanban/memory/<plan_id>.yaml` (or plan-adjacent YAML) |
 
 Cards YAML convention: optimize/harden may write `{plan_memory_path}/{plan_id}.yaml` (default `.hermes/kanban/memory/`). Handoff discovers plan-adjacent YAML first, then plan memory.
@@ -121,6 +122,7 @@ unavailable — see `plugin/data/references/profile-switching.md`.
 | Handoff `ready` 10+ min | L3 | Restart gateway; confirm assignee = orchestrator profile |
 | `pre_dispatch_gate: UNKNOWN` on card | L2 | Orchestrator re-runs `bash <BUNDLE_ROOT>/scripts/pre_dispatch_gate.sh <plan_id>` |
 | `pre_dispatch_gate: PASSED` on card | L2 | Skip gate — proceed to runbook Step 2 |
+| `pre_dispatch_gate: DEFERRED` on card | L2 | Run parallel Step 1 from handoff runbook (`parallel_gate: enabled`); serial gate only on fallback |
 
 See `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` § L3.
 

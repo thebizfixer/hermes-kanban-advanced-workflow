@@ -112,7 +112,7 @@ Card creation **must stay serial** — parallel `kanban_create` writes risk SQLi
 - `pre_dispatch_gate.sh` — serial fallback
 - `preflight.sh`, `kanban_attestation.py`, `kanban_decompose.py`, `validate_board.sh`
 - Worker skill — workers do not run gate checks
-- `kanban_handoff.py` — still runs serial gate at handoff build time
+- `kanban_handoff.py` — defers serial gate at handoff build when `subagent_gate.enabled` is not `false` (orchestrator runs parallel Step 1); serial at build when `enabled: false`
 
 ## Speedup (typical)
 

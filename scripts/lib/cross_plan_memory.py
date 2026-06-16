@@ -174,12 +174,13 @@ def lessons_from_kpi(kpi: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     for task_id in kpi.get("thrash_outliers") or []:
+        tid = task_id.get("task_id") if isinstance(task_id, dict) else task_id
         lessons.append(
             {
                 "plan_id": plan_id,
                 "failure_class": "thrash",
                 "subsystem": "board_events",
-                "pattern": str(task_id),
+                "pattern": str(tid),
                 "source": "thrash_outlier",
             }
         )

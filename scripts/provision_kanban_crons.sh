@@ -163,7 +163,8 @@ _create_job() {
   local schedule="$1"
   local name="$2"
   local script="$3"
-  local extra_args="${4:-}"
+  local deliver="${4:-local}"
+  local extra_args="${5:-}"
   local workdir_args=()
   [[ -n "$WORKDIR" ]] && workdir_args=(--workdir "$WORKDIR")
   local existing
@@ -172,14 +173,14 @@ _create_job() {
     if [[ "$DRY_RUN" == true ]]; then
       echo "[provision_kanban_crons] [dry-run] would reuse job $existing ($name)"
     else
-      HERMES_HOME="$CRON_HERMES_HOME" hermes cron edit "$existing" --deliver local --no-agent --script "$script" --repeat 999 "${workdir_args[@]}" $extra_args >/dev/null 2>&1 || true
-      echo "[provision_kanban_crons] reused job $existing ($name)"
+      HERMES_HOME="$CRON_HERMES_HOME" hermes cron edit "$existing" --deliver "$deliver" --no-agent --script "$script" --repeat 999 "${workdir_args[@]}" $extra_args >/dev/null 2>&1 || true
+      echo "[provision_kanban_crons] reused job $existing ($name, deliver=$deliver)"
     fi
     printf '%s' "$existing"
     return 0
   fi
   if [[ "$DRY_RUN" == true ]]; then
-    echo "[provision_kanban_crons] [dry-run] would create $name ($schedule)" >&2
+    echo "[provision_kanban_crons] [dry-run] would create $name ($schedule, deliver=$deliver)" >&2
     printf 'dry-%s' "$name"
     return 0
   fi
@@ -188,7 +189,7 @@ _create_job() {
     --name "$name" \
     --no-agent \
     --script "$script" \
-    --deliver local \
+    --deliver "$deliver" \
     --repeat 999 \
     "${workdir_args[@]}" \
     $extra_args 2>&1)" || {
@@ -228,11 +229,15 @@ _remove_job() {
 
 case "$ACTION" in
   create)
-    auto_id="$(_create_job "every 1m" "$AUTO_UNBLOCK_NAME" "$AUTO_UNBLOCK_SCRIPT")"
-    keeper_id="$(_create_job "every 3m" "$BOARD_KEEPER_NAME" "$BOARD_KEEPER_SCRIPT")"
+    LIFECYCLE_DELIVER="local"
+    if _notify_lifecycle_enabled; then
+      LIFECYCLE_DELIVER="$(bash "$SCRIPT_DIR/lib/resolve_notify_deliver.sh" "$REPO_ROOT")"
+    fi
+    auto_id="$(_create_job "every 1m" "$AUTO_UNBLOCK_NAME" "$AUTO_UNBLOCK_SCRIPT" local)"
+    keeper_id="$(_create_job "every 3m" "$BOARD_KEEPER_NAME" "$BOARD_KEEPER_SCRIPT" local)"
     lifecycle_id=""
     if _notify_lifecycle_enabled; then
-      lifecycle_id="$(_create_job "every 5m" "$LIFECYCLE_NOTIFY_NAME" "$LIFECYCLE_SCRIPT")"
+      lifecycle_id="$(_create_job "every 5m" "$LIFECYCLE_NOTIFY_NAME" "$LIFECYCLE_SCRIPT" "$LIFECYCLE_DELIVER")"
       if [[ -n "$PLAN_ID" && "$DRY_RUN" != true ]]; then
         mkdir -p "$REPO_ROOT/.hermes/kanban/logs"
         printf '%s\n' "$PLAN_ID" > "$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id"
@@ -311,6 +316,22 @@ case "$ACTION" in
       if [[ -z "$id" ]]; then
         echo "[provision_kanban_crons] FAIL: cron job not found: $LIFECYCLE_NOTIFY_NAME (notify_lifecycle enabled)" >&2
         issues=$((issues + 1))
+      else
+        block="$(_cron_list | awk -v id="$id" '
+          $0 ~ "^  " id " " { found=1 }
+          found && $0 ~ "^  [a-f0-9]+ \\[" && $0 !~ id { exit }
+          found { print }
+        ')"
+        if ! echo "$block" | grep -q '\[active\]'; then
+          echo "[provision_kanban_crons] FAIL: $LIFECYCLE_NOTIFY_NAME ($id) not active" >&2
+          issues=$((issues + 1))
+        fi
+        if echo "$block" | grep -qi 'Deliver:.*local'; then
+          echo "[provision_kanban_crons] FAIL: $LIFECYCLE_NOTIFY_NAME deliver is local (expected home channel)" >&2
+          issues=$((issues + 1))
+        fi
+        resolved="$(bash "$SCRIPT_DIR/lib/resolve_notify_deliver.sh" "$REPO_ROOT" 2>/dev/null || echo unknown)"
+        echo "[provision_kanban_crons] lifecycle deliver resolved: $resolved"
       fi
     fi
     if kanban_is_profile_scoped_hermes_home; then
@@ -323,6 +344,9 @@ case "$ACTION" in
       exit 1
     fi
     echo "[provision_kanban_crons] OK: wave crons active in gateway store ($CRON_HERMES_HOME, deliver=local, no-agent)"
+    if _notify_lifecycle_enabled; then
+      echo "[provision_kanban_crons] OK: lifecycle cron active with home-channel deliver"
+    fi
     if [[ "$JSON_OUT" == true ]]; then
       echo '{"ok":true}'
     fi

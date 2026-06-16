@@ -47,7 +47,7 @@ Two steps. Restart Hermes and you're ready. Init creates `kanban-advanced-orches
 
 ## Why Kanban Advanced?
 
-Vanilla `hermes kanban` gives you a task board. This plugin adds deterministic governance: preflight gating, attestation, card body policy enforcement, a multi-step evaluation chain (ALLOW/DENY per check), automated recovery, and walk-away execution with token tracking and KPI reporting.
+Vanilla `hermes kanban` gives you a task board. This plugin adds deterministic governance: preflight gating, attestation, card body policy enforcement, a multi-step evaluation chain (ALLOW/DENY per check), automated recovery, parallel subagent pre-dispatch gate (serial fallback), board-mediated handoff for non-orchestrator profiles, lifecycle notify with resolved gateway deliver, and walk-away execution with token tracking and KPI reporting.
 
 **Full explanation:** [Why kanban-advanced?](docs/explanation/why-kanban-advanced.md) — including when NOT to use it.
 

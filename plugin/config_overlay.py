@@ -402,6 +402,39 @@ def resolve_notify_lifecycle(
     return DEFAULT_NOTIFY_LIFECYCLE
 
 
+_VALID_NOTIFY_DELIVER = frozenset({
+    "telegram",
+    "discord",
+    "slack",
+    "signal",
+    "whatsapp",
+    "all",
+    "local",
+})
+
+
+def normalize_notify_deliver(value: str | None) -> str | None:
+    """Return overlay slug or None to use auto-resolution."""
+    if value is None:
+        return None
+    s = str(value).strip().lower()
+    if not s or s in ("auto", "default", "resolved"):
+        return None
+    return s if s in _VALID_NOTIFY_DELIVER else None
+
+
+def resolve_notify_deliver(
+    project_root: Path,
+    *,
+    hermes_home: Path | str | None = None,
+) -> str:
+    """Overlay notify_deliver → cron.default_deliver → single home → all."""
+    from plugin.hermes_notify_deliver import resolve_notify_deliver as _resolve
+
+    home = str(hermes_home) if hermes_home is not None else None
+    return _resolve(project_root, hermes_home=home)
+
+
 def _parse_subagent_gate_enabled_from_text(text: str) -> bool | None:
     """Return enabled flag when subagent_gate block is present; else None (use default)."""
     in_block = False

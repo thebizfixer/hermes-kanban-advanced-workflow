@@ -207,6 +207,26 @@ def extract_id(output: str) -> str | None:
     return m.group(1) if m else None
 
 
+def parse_create_task_id(stdout: str) -> str | None:
+    """Parse task id from hermes kanban create --json or text output."""
+    stdout = stdout.strip()
+    if stdout.startswith("{"):
+        try:
+            data = json.loads(stdout)
+            tid = data.get("id")
+            if tid:
+                return str(tid)
+        except json.JSONDecodeError:
+            pass
+    return extract_id(stdout)
+
+
+def create_card_timeout_seconds(body: str) -> int:
+    """Scale create timeout for large card bodies."""
+    nbytes = len(body.encode("utf-8"))
+    return 30 + max(0, (nbytes - 4096) // 4096) * 5
+
+
 def estimate_turn_budget(card: dict) -> int:
     """Rough happy-path turn estimate (kanban-planning Optimize formula)."""
     body = card.get("body", "") or ""
@@ -271,20 +291,29 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
         with open(tmpfile, 'r', encoding="utf-8") as bf:
             body_content = bf.read()
         cmd.extend(["--body", body_content])
+        cmd.append("--json")
 
+        body_bytes = len(body_content.encode("utf-8"))
+        timeout = create_card_timeout_seconds(body_content)
         result = subprocess.run(
             cmd, capture_output=True, text=True,
             encoding="utf-8", errors="replace",
-            timeout=30,
+            timeout=timeout,
         )
         out = result.stdout.strip()
         err = result.stderr.strip()
 
-        task_id = extract_id(out)
+        task_id = parse_create_task_id(out)
         if not task_id:
-            print(f"  WARN: Could not extract ID from: {out[:200]}", file=sys.stderr)
+            print(
+                f"  ERROR: create failed for {card.get('key', title)} "
+                f"(body_bytes={body_bytes}, rc={result.returncode})",
+                file=sys.stderr,
+            )
+            if out:
+                print(f"  stdout: {out[:500]}", file=sys.stderr)
             if err:
-                print(f"  stderr: {err[:200]}", file=sys.stderr)
+                print(f"  stderr: {err[:500]}", file=sys.stderr)
             return None
 
         # Block immediately to beat the dispatcher (claims 'ready' cards in <1s).
@@ -581,11 +610,10 @@ def main():
     created = 1  # gate counts as 1
     for card in impl_cards:
         cid = create_card(card, args.dry_run, block_after=True)
-        if cid:
-            card_ids[card["key"]] = cid
-            print(f"  {card['key']}: {cid} (blocked)")
-        else:
-            print(f"  {card['key']}: FAILED", file=sys.stderr)
+        if not cid:
+            sys.exit(f"ERROR: Failed to create implementation card {card['key']}")
+        card_ids[card["key"]] = cid
+        print(f"  {card['key']}: {cid} (blocked)")
         created += 1
         time.sleep(args.stagger_ms / 1000)
         if created % args.pause_every == 0:

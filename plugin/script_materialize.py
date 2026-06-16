@@ -31,6 +31,7 @@ LIB_SCRIPT_NAMES = (
     "gateway_hermes_home.sh",
     "auto_unblock_core.sh",
     "preflight_cache.sh",
+    "resolve_notify_deliver.sh",
 )
 
 LIB_PYTHON_NAMES = (
@@ -40,6 +41,8 @@ LIB_PYTHON_NAMES = (
     "governance_profile.py",
     "decompose_stamp.py",
     "cross_plan_memory.py",
+    "token_tracker_import.py",
+    "hermes_notify_deliver.py",
 )
 
 

@@ -12,7 +12,7 @@ In **walk-away mode**, you run the full pipeline unattended and **notify only fo
 
 1. **Plan optimization + user gate.** Iterate on the plan with the operator until the optimization checklist passes. **Do NOT decompose** until they say "proceed", "execute", or equivalent.
 
-2. **Preflight gating.** Before decomposition, run environment preflight. Hard failures block dispatch; degraded status warns but may proceed with operator acknowledgment.
+2. **Preflight gating.** Before decomposition, run environment preflight. When `subagent_gate.enabled` is not `false` and the orchestrator profile has the `delegation` toolset, use the **parallel subagent gate** (plan/env/infra via `delegate_task`, then attestation + prewarm serially). Fall back to `pre_dispatch_gate.sh` when parallel is disabled, delegation is missing, or E022 fires. Handoff cards stamped `pre_dispatch_gate: DEFERRED` defer serial gate at build — execute Step 1 from the handoff runbook. Hard failures block dispatch; degraded status warns but may proceed with operator acknowledgment. See `plugin/data/references/parallel-subagent-gate.md`.
 
 3. **Plan decomposition.** Take implementation plans and decompose them into Kanban task graphs. Sketch the graph out loud before creating cards. Never bundle more than 2 file-level changes per card. Every card body must include `Files:` and `Mode:` lines.
 
@@ -57,10 +57,26 @@ Log planning/audit overhead at major milestones so postmortem §7 is not blind:
 
 ```bash
 PYTHONPATH=. python3 -c "
-from scripts.token_tracker import log_orchestrator_tokens
+import os, sys
+from pathlib import Path
+
+def _import_token_tracker():
+    for root in [os.environ.get('HERMES_KANBAN_REPO_ROOT', ''), os.getcwd(), str(Path.home() / '.hermes' / 'scripts')]:
+        if not root:
+            continue
+        candidate = Path(root).expanduser().resolve()
+        if (candidate / 'token_tracker.py').is_file():
+            sys.path.insert(0, str(candidate))
+            break
+    from token_tracker import log_orchestrator_tokens
+    return log_orchestrator_tokens
+
+log_orchestrator_tokens = _import_token_tracker()
 log_orchestrator_tokens(plan_id='{plan_id}', checkpoint='planning-complete', turns=12, note='Optimize checklist pass')
 "
 ```
+
+Or import `scripts.lib.token_tracker_import.ensure_token_tracker_import` when the bundle is on `PYTHONPATH`.
 
 Call at least: **planning-complete** (after Optimize), **decompose-complete**, **audit-start**, **cleanup-complete**. Use your session turn estimate; workers log their own tokens at task completion.
 

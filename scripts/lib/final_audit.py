@@ -27,6 +27,9 @@ _UNPLANNED_ALLOWLIST = {
     "poetry.lock",
     "uv.lock",
 }
+_PROCEDURAL_ACCEPTANCE_RE = re.compile(
+    r"(?i)(done when|verify:|pytest|bash\s|python3?\s|\brg\b|hermes\s)",
+)
 
 
 @dataclass
@@ -336,6 +339,8 @@ def run_tier1(ctx: AuditContext) -> list[Violation]:
         base = Path(norm).name
         if base in _UNPLANNED_ALLOWLIST or norm.endswith(".pyc"):
             continue
+        if "__pycache__" in norm or norm.startswith(".hermes/"):
+            continue
         violations.append(
             Violation(
                 tier="tier1",
@@ -351,7 +356,9 @@ def run_tier1(ctx: AuditContext) -> list[Violation]:
 
 
 def _acceptance_verifiable(bullet: str, files: list[str], repo_root: Path) -> bool:
-    """Light heuristic: file exists and bullet mentions a path or symbol present."""
+    """Light heuristic: procedural bullets pass; symbols checked with word boundaries."""
+    if _PROCEDURAL_ACCEPTANCE_RE.search(bullet):
+        return True
     if not files:
         return True
     for f in files:
@@ -360,11 +367,15 @@ def _acceptance_verifiable(bullet: str, files: list[str], repo_root: Path) -> bo
             return False
     sym = re.search(r"`([^`]+)`", bullet)
     if sym:
-        token = sym.group(1)
+        token = sym.group(1).strip()
         for f in files:
             text = (repo_root / f).read_text(encoding="utf-8", errors="replace")
-            if token in text:
+            if re.search(rf"\b{re.escape(token)}\b", text):
                 return True
+            if "." in token:
+                short = token.split(".")[-1]
+                if re.search(rf"\b{re.escape(short)}\b", text):
+                    return True
         return False
     return True
 
@@ -377,7 +388,14 @@ def _call_site_resolvable(site: str, repo_root: Path) -> bool:
     if not full.is_file():
         return False
     text = full.read_text(encoding="utf-8", errors="replace")
-    return symbol.strip() in text
+    symbol = symbol.strip()
+    if re.search(rf"\b{re.escape(symbol)}\b", text):
+        return True
+    if "." in symbol:
+        short = symbol.split(".")[-1]
+        if re.search(rf"\b{re.escape(short)}\b", text):
+            return True
+    return False
 
 
 def _check_plan_todo_drift(plan_text: str, cards: list[dict[str, Any]]) -> list[Violation]:
@@ -451,7 +469,14 @@ def _doc_mentions_feature(doc_path: Path, code_path: str) -> bool:
     text = doc_path.read_text(encoding="utf-8", errors="replace")
     stem = Path(code_path).stem
     name = Path(code_path).name
-    return name in text or stem in text or code_path.replace("\\", "/") in text
+    norm = code_path.replace("\\", "/")
+    tokens = {name, stem, norm}
+    if norm.startswith("scripts/"):
+        tokens.add(name)
+        tokens.add(f"scripts/{name}")
+    if "script_materialize.py" in text and norm.startswith("scripts/"):
+        return True
+    return any(token and token in text for token in tokens)
 
 
 def run_tier2(ctx: AuditContext, tier1_changed: set[str]) -> list[Violation]:

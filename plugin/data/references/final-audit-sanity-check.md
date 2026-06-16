@@ -88,6 +88,16 @@ Code tests use `code:` prefix (e.g. `code: pytest tests/test_foo.py`).
 | `plan_todo_drift` | Plan frontmatter todo status matches board reality |
 | `doc_coverage_gap` | Required doc surface mentions feature or links to SSOT reference |
 
+## Heuristic limits (Tier 1)
+
+Acceptance and call-site checks are **light heuristics**, not full static analysis:
+
+- **Procedural bullets** (`Done when`, `Verify:`, `pytest`, `bash`, `hermes`, …) pass without symbol grep.
+- **Symbol checks** use word boundaries — substring matches (e.g. `foo` inside `foo_bar`) do not count.
+- **`__pycache__/`** and **`.hermes/`** paths are excluded from `unplanned_change` even when they appear in `git diff`.
+
+When a false `acceptance_miss` or `call_site_miss` persists after remediation, add a `final_audit_overrides` entry or tighten the plan bullet to name an exact symbol/path.
+
 ## Max rounds
 
 `final_audit_max_remediation_rounds` in overlay (default **2**). When `Audit-round >= max` with violations remaining: `bash scripts/kanban_escalation_tracker.sh --task-id <audit_tid> --block-reason "<reason>"`, then `hermes kanban block <audit_tid>` with unresolved violation summary.

@@ -20,7 +20,7 @@ After the **final audit card** completes, `board_keeper.sh` invokes `scripts/kan
 3. Wave cron removal (`provision_kanban_crons.sh --remove`)  
 4. Board archive (all tasks)  
 5. Git-safe cleanup (`git_safe_cleanup.sh`, best-effort)  
-6. Completion gateway summary (`kanban_completion_notify.sh`)
+6. Completion gateway summary (`kanban_completion_notify.sh`) — same resolved `--deliver` as lifecycle (not `local`)
 
 Idempotent per plan: `.hermes/kanban/logs/post_exec_complete_<plan_id>`.
 

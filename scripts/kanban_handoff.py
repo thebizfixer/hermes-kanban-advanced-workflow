@@ -98,6 +98,42 @@ def _bash_path(path: Path) -> str:
     return posix
 
 
+def _parse_subagent_gate_enabled_from_text(text: str) -> bool | None:
+    """Return enabled flag when subagent_gate block is present; else None (default true)."""
+    in_block = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("subagent_gate:"):
+            in_block = True
+            continue
+        if in_block:
+            if ":" in stripped and not line[:1].isspace():
+                break
+            if stripped.startswith("enabled:"):
+                val = stripped.split(":", 1)[1].strip().strip('"').strip("'").lower()
+                return val in ("true", "1", "yes", "on")
+    return None
+
+
+def _resolve_subagent_gate_enabled(project_root: Path, overlay: dict[str, str]) -> bool:
+    """Mirror plugin/config_overlay.resolve_subagent_gate_enabled (default true)."""
+    raw = overlay.get("subagent_gate_enabled", "").strip().lower()
+    if raw in ("false", "0", "no", "off"):
+        return False
+    if raw in ("true", "1", "yes", "on"):
+        return True
+    config_path = project_root / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
+    if config_path.is_file():
+        parsed = _parse_subagent_gate_enabled_from_text(
+            config_path.read_text(encoding="utf-8")
+        )
+        if parsed is not None:
+            return parsed
+    return True
+
+
 def _resolve_bundle_root(project_root: Path, overlay: dict[str, str]) -> Path | None:
     """Mirror scripts/lib/kanban_bundle.sh _resolve_kanban_bundle_root order."""
     if _bundle_has_scripts(project_root):
@@ -468,12 +504,71 @@ def _derive_plan_id(plan_path: Path, explicit: str | None) -> str | None:
     return stem[: -len(".plan")] if stem.endswith(".plan") else stem
 
 
+def _gateway_status_stamp() -> tuple[str, bool]:
+    """Return (stamp line, dispatch_ok) from hermes gateway status."""
+    try:
+        r = _hermes("gateway", "status")
+        text = (r.stdout or r.stderr or "").strip()
+        running = r.returncode == 0 and "running" in text.lower()
+        first = text.splitlines()[0][:120] if text else "no output"
+        stamp = f"{'running' if running else 'not_running'} ({first})"
+        return stamp, running
+    except Exception as exc:
+        return f"unknown ({exc})", False
+
+
+def _gate_card_body(plan_id: str) -> str:
+    """Match kanban_decompose.py gate card body (plan_id for lifecycle gate_done)."""
+    return (
+        f"plan_id: {plan_id}\n"
+        "Gate card. All implementation cards link to gate. Unblock triggers wave 1 promotion."
+    )
+
+
+def _parallel_gate_step1_block(
+    plan_id: str,
+    repo_root: Path,
+    working_branch: str,
+    bundle: str,
+    gate_script: Path | None,
+) -> str:
+    """Runbook Step 1 when parallel gate is deferred from handoff build."""
+    gate_path = (
+        gate_script.resolve().as_posix()
+        if gate_script
+        else f"{bundle}/scripts/pre_dispatch_gate.sh"
+    )
+    hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
+    plan_memory = f"{repo_root.as_posix()}/.hermes/kanban/memory"
+    return f"""### Step 1 — Pre-dispatch gate (parallel default)
+
+Pre-check delegation (serial fallback when missing):
+```bash
+hermes tools list 2>/dev/null | grep -q delegation || use_serial_gate=1
+```
+
+When delegation is available, run parallel subagent gate per `skill_view` § Pre-dispatch gate:
+- Templates: `{bundle}/plugin/data/prompts/gate-subagent-plan.md`, `gate-subagent-env.md`, `gate-subagent-infra.md`
+- Substitute: REPO_ROOT={repo_root.as_posix()}, PLAN_ID={plan_id}, BUNDLE_PATH={bundle}, WORKING_BRANCH={working_branch}, PLAN_MEMORY_PATH={plan_memory}, HERMES_HOME={hermes_home}
+
+Wave 1: delegate_task plan/env/infra domains in parallel (`toolsets: ["terminal"]` only).
+Wave 2: collect JSON; on blocking fail, timeout (E022), or malformed output → serial fallback:
+```bash
+bash {gate_path} {plan_id}
+```
+
+Then attestation + coding_agent_auth_prewarm serially (same as parallel-subagent-gate.md).
+**Do not proceed to Step 2 until gate passes.**"""
+
+
 def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: str,
                 orchestrator_profile: str,
                 bundle_root: Path,
                 cards_yaml_path: Path | None = None,
                 gate_status: str = "UNKNOWN (not run)",
-                gate_script: Path | None = None) -> str:
+                gate_script: Path | None = None,
+                parallel_gate_enabled: bool = False,
+                gateway_at_handoff: str = "unknown") -> str:
     """SOP-only handoff body. NO ``agent -p`` block by design.
 
     Designed as a command-first runbook: literal CLI commands are pre-substituted
@@ -488,15 +583,42 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
         decompose_source = f'--plan "{plan_path}"'
         source_note = f"(plan markdown — workspace defaults to worktree)"
 
-    gate_skip = (
-        "pre_dispatch_gate already PASSED — skip directly to Step 2. "
-        "Do not re-run pre_dispatch_gate.sh or preflight."
-        if gate_status.startswith("PASSED")
-        else f"pre_dispatch_gate status: {gate_status} — re-run if needed before Step 2."
-    )
     bundle = bundle_root.as_posix()
+    if gate_status.startswith("PASSED"):
+        gate_skip = (
+            "pre_dispatch_gate already PASSED — skip directly to Step 2. "
+            "Do not re-run pre_dispatch_gate.sh or preflight."
+        )
+    elif gate_status.startswith("DEFERRED"):
+        gate_skip = _parallel_gate_step1_block(
+            plan_id, repo_root, working_branch, bundle, gate_script
+        )
+    elif gate_status.startswith("FAILED") or gate_status.startswith("UNKNOWN"):
+        gate_path = (
+            gate_script.resolve().as_posix()
+            if gate_script
+            else f"{bundle}/scripts/pre_dispatch_gate.sh"
+        )
+        gate_skip = (
+            f"pre_dispatch_gate status: {gate_status}\n\n"
+            "**Step 1:** Try parallel subagent gate when `delegation` is available "
+            "(see skill § Pre-dispatch gate). On parallel fail or when delegation is missing, "
+            f"run serial fallback:\n```bash\nbash {gate_path} {plan_id}\n```\n"
+            "Resolve failures before Step 2."
+        )
+    else:
+        gate_skip = f"pre_dispatch_gate status: {gate_status} — re-run if needed before Step 2."
     gate_script_line = (
         f"gate_script: {gate_script.resolve().as_posix()}" if gate_script else "gate_script: none"
+    )
+    parallel_gate_line = (
+        "parallel_gate: enabled" if parallel_gate_enabled else "parallel_gate: disabled"
+    )
+    gate_body_escaped = _gate_card_body(plan_id).replace('"', '\\"')
+    step1_label = (
+        "Step 1 — Pre-dispatch gate (parallel default)"
+        if parallel_gate_enabled or gate_status.startswith("DEFERRED")
+        else "Step 1 — Pre-dispatch gate (if needed)"
     )
 
     return f"""Type: {HANDOFF_TYPE}
@@ -507,7 +629,16 @@ Repo: {repo_root}
 working_branch: {working_branch}
 BUNDLE_ROOT: {bundle}
 {gate_script_line}
+{parallel_gate_line}
+gateway_at_handoff: {gateway_at_handoff}
 pre_dispatch_gate: {gate_status}
+
+## FIRST ACTION (execute in order — do not read the Plan file)
+
+1. `skill_view("kanban-advanced:kanban-orchestrator")`
+2. **Step 0** — Gateway check (below)
+3. **{step1_label}** — only when stamp is not `PASSED`
+4. **Step 2** — Create gate card and crons
 
 ## Decomposition runbook
 
@@ -516,28 +647,34 @@ SOP-only, no `agent -p` block, not a coding task.
 
 **Do not read the full Plan file — execute this runbook only.** Use `Plan:` for metadata.
 
-**Load skill first (ONLY this skill — do NOT load kanban-worker at entry):**
+### Step 0 — Gateway
+
+```bash
+hermes gateway status
 ```
-skill_view("kanban-advanced:kanban-orchestrator")
-```
+
+**STOP** if gateway is not running — this card will sit in `ready` with no dispatcher.
+
+### Step 1 — Pre-dispatch gate
 
 {gate_skip}
 
 ### Step 2 — Create gate card and crons
 
 ```bash
-hermes kanban create "Gate — {plan_id}" --assignee {orchestrator_profile}
+hermes kanban create "Gate — {plan_id}" --assignee {orchestrator_profile} --body "{gate_body_escaped}"
 # note the gate_id printed above, then:
 hermes kanban block <gate_id> "Gate — awaiting links"
 ```
 
-**Immediately after gate — create wave crons BEFORE impl cards (no messaging required):**
+**Immediately after gate — create crons BEFORE impl cards:**
 ```bash
 bash {bundle}/scripts/provision_kanban_crons.sh --create --plan-id {plan_id}
 bash {bundle}/scripts/provision_kanban_crons.sh --check
 ```
 
-Uses `deliver=local` and `no_agent=true` — gateway must run; Telegram/Discord not required.
+Wave crons (auto-unblock, board-keeper) use `deliver=local` and `no_agent=true` — gateway must run.
+When `notify_lifecycle` is enabled, the lifecycle cron uses **resolved home-channel deliver** (not local).
 
 **STOP if `provision_kanban_crons.sh --check` fails — do not create implementation cards.**
 
@@ -641,7 +778,16 @@ def main() -> int:
         })
         return 7
 
-    gate_status, gate_script = _run_pre_dispatch_gate(plan_id, project_root, overlay)
+    parallel_gate_enabled = _resolve_subagent_gate_enabled(project_root, overlay)
+    gate_script = _resolve_gate_script(project_root, overlay)
+    gateway_stamp, _gateway_ok = _gateway_status_stamp()
+    if parallel_gate_enabled:
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        gate_status = (
+            f"DEFERRED at {ts} (parallel subagent gate — orchestrator Step 1)"
+        )
+    else:
+        gate_status, gate_script = _run_pre_dispatch_gate(plan_id, project_root, overlay)
 
     title = f"Decompose: {plan_id}"
     body = _build_body(
@@ -651,6 +797,8 @@ def main() -> int:
         cards_yaml_path=cards_yaml_path,
         gate_status=gate_status,
         gate_script=gate_script,
+        parallel_gate_enabled=parallel_gate_enabled,
+        gateway_at_handoff=gateway_stamp,
     )
 
     # ── Preconditions ──────────────────────────────────────────────────────

@@ -153,7 +153,7 @@ for tid, meta in curr_cards.items():
         )
         event = {"ts": now, "type": "re-blocked", "task_id": tid, "plan_id": plan_id, "status": new_status}
     if event and msg:
-        subprocess.run(["hermes", "message", "send", msg], capture_output=True)
+        print(msg, flush=True)
         with open(log_path, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(event) + "\n")
 

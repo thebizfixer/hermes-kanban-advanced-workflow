@@ -88,6 +88,11 @@
       "description": "When true (default), provision kanban-lifecycle-notify-5m and send per-card start/running/done gateway messages after the gate completes. Dashboard Cron toggle maps here.",
       "default": true
     },
+    "notify_deliver": {
+      "type": "string",
+      "enum": ["telegram", "discord", "slack", "signal", "whatsapp", "all", "local"],
+      "description": "Optional override for lifecycle/completion cron --deliver. When omitted, scripts/lib/resolve_notify_deliver.sh resolves home channel (overlay → cron.default_deliver → single home → all)."
+    },
     "notify_on_complete": {
       "type": "boolean",
       "description": "Deprecated — use walk_away_mode. When true, same as walk_away_mode for legacy overlays.",

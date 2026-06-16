@@ -55,7 +55,8 @@ Check the card body for `pre_dispatch_gate:`, `cards_yaml:`, `BUNDLE_ROOT:`, and
 | Card body shows | Action |
 |----------------|--------|
 | `pre_dispatch_gate: PASSED at …` | Skip `pre_dispatch_gate.sh` and preflight — go straight to runbook **Step 2** (create gate) |
-| `pre_dispatch_gate: FAILED …` or `UNKNOWN` | Run `bash <gate_script from card body>` or `bash <BUNDLE_ROOT>/scripts/pre_dispatch_gate.sh <plan_id>` and resolve failures |
+| `pre_dispatch_gate: DEFERRED …` | Run **Step 1** parallel subagent gate from the runbook (delegation pre-check → delegate_task → attestation + prewarm); serial `pre_dispatch_gate.sh` only on fallback |
+| `pre_dispatch_gate: FAILED …` or `UNKNOWN` | **Step 1:** Try parallel gate when `delegation` is available; else run `bash <gate_script from card body>` or `bash <BUNDLE_ROOT>/scripts/pre_dispatch_gate.sh <plan_id>` and resolve failures before Step 2 |
 | `BUNDLE_ROOT: <path>` | Use absolute paths from the runbook (`bash <BUNDLE_ROOT>/scripts/…`) — do not hunt for `scripts/` |
 | `cards_yaml: <path>` (not "none") | Pass `--cards-yaml <path>` to `kanban_decompose.py` (richer workspace/branch metadata) |
 | `cards_yaml: none` | Pass `--plan <plan_path>` to `kanban_decompose.py` |
@@ -100,9 +101,25 @@ The orchestrator estimates its own token burn from turn count. If the session su
 ```python
 # Call at each checkpoint from the orchestrator session:
 import os, sys
-sys.path.insert(0, os.environ.get("HERMES_KANBAN_REPO_ROOT", os.getcwd()))
-from scripts.token_tracker import log_orchestrator_tokens
+from pathlib import Path
 
+def _import_token_tracker():
+    roots = [
+        os.environ.get("HERMES_KANBAN_REPO_ROOT", ""),
+        os.getcwd(),
+        str(Path.home() / ".hermes" / "scripts"),
+    ]
+    for root in roots:
+        if not root:
+            continue
+        candidate = Path(root).expanduser().resolve()
+        if (candidate / "token_tracker.py").is_file():
+            sys.path.insert(0, str(candidate))
+            break
+    from token_tracker import log_orchestrator_tokens
+    return log_orchestrator_tokens
+
+log_orchestrator_tokens = _import_token_tracker()
 log_orchestrator_tokens(
     plan_id="<plan_id>",
     checkpoint="planning-complete",  # or decompose-complete, audit-start, cleanup-complete
@@ -250,7 +267,7 @@ This runs in order: plan on `${working_branch}` → plan pushed → preflight �
 
 **Decomposition prep (when parallel enabled):** Before standard process Step 1, wave 1 may parallelize Subagent D (`gate-subagent-plan-parse.md`) + Subagent E (`gate-subagent-cron-setup.md`, needs `cronjob` toolset). Card creation (Steps 6–11) stays **serial** — parallel `kanban_create` risks SQLite torn-extend.
 
-Handoff cards with `pre_dispatch_gate: PASSED` skip both paths. `kanban_handoff.py` still runs the serial gate at handoff build time.
+Handoff cards with `pre_dispatch_gate: PASSED` skip both paths. When `subagent_gate.enabled` is not `false`, `kanban_handoff.py` defers serial gate at handoff build (`pre_dispatch_gate: DEFERRED`); the orchestrator runs parallel Step 1 from the handoff runbook. When `enabled: false`, handoff runs serial `_run_pre_dispatch_gate` at build as today.
 
 **Coding-agent auth gate (blocking):** Bootstrap smoke is **advisory only** — init can succeed while auth is broken. If `coding_agent_cli` or preflight `coding_agent_cli_reachability` fails, **do not decompose**. Load `plugin/data/references/coding-agent-auth.md`. Common fixes: API key in `.env`, vendor login on gateway host, `HOME=` in `.env` or systemd. Cursor: `agent status` can lie when `HOME` is unset or OAuth in `~/.config/cursor/auth.json` is expired — operator runs `agent login` (or fixes `HOME`), `hermes gateway restart` → delete `.hermes/kanban/preflight_cache.json` → re-run gate. Bootstrap alone does not prove workers can dispatch the coding CLI.
 
@@ -261,13 +278,7 @@ After the gate passes, proceed directly to the Standard process. Plans may sit f
 3. **Stop. Wait. Do nothing.** No decomposition. No card creation. No triage.
 4. Only proceed when the user says "go", "proceed", "execute", "decompose", or equivalent.
 
-When ready, run the pre-dispatch gate — **parallel subagents by default** (see § Pre-dispatch gate above); use serial `pre_dispatch_gate.sh` only when parallel is disabled or delegation is unavailable:
-
-```bash
-bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
-```
-
-After the gate passes, proceed directly to Step 1. The gate replaces the old Steps 0a–0e.
+When ready, run the pre-dispatch gate — **parallel subagents by default** (see § Pre-dispatch gate above); use serial `pre_dispatch_gate.sh` only when parallel is disabled or delegation is unavailable. Handoff cards stamped `pre_dispatch_gate: DEFERRED` defer serial gate at build — execute Step 1 from the handoff runbook.
 
 ### Full upgrade checklist
 

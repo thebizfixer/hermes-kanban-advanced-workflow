@@ -15,6 +15,8 @@ sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from final_audit import (  # noqa: E402
     AuditContext,
     Violation,
+    _acceptance_verifiable,
+    _call_site_resolvable,
     _path_cleared_by_prior_commit,
     fingerprint_from_missed_line,
     group_remediation_cards,
@@ -170,6 +172,53 @@ class TestFinalAuditSanity(unittest.TestCase):
             )
             _, max_rounds = read_overlay_audit_settings(root)
             self.assertEqual(max_rounds, 5)
+
+    def test_procedural_acceptance_bullet_passes_without_symbol(self) -> None:
+        bullet = "Done when `pytest tests/test_foo.py` passes"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertTrue(_acceptance_verifiable(bullet, [], root))
+
+    def test_acceptance_symbol_uses_word_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "module.py"
+            path.write_text("def foo_bar():\n    pass\n", encoding="utf-8")
+            self.assertFalse(
+                _acceptance_verifiable("Verify `foo` exists", ["module.py"], root)
+            )
+            self.assertTrue(
+                _acceptance_verifiable("Verify `foo_bar` exists", ["module.py"], root)
+            )
+
+    def test_call_site_resolvable_word_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "api.py"
+            path.write_text("def fetch_data():\n    return data\n", encoding="utf-8")
+            self.assertTrue(_call_site_resolvable("api.py:fetch_data", root))
+            self.assertFalse(_call_site_resolvable("api.py:fetch", root))
+
+    def test_tier1_skips_pycache_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pycache = root / "pkg" / "__pycache__" / "mod.cpython-312.pyc"
+            pycache.parent.mkdir(parents=True)
+            pycache.write_bytes(b"\x00")
+            plan = "**Files:** `pkg/mod.py`\n"
+            ctx = AuditContext(
+                plan_id="p1",
+                repo_root=root,
+                baseline="abc",
+                plan_path=root / "plan.md",
+                plan_text=plan,
+                cards=[],
+            )
+            with patch("final_audit.git_changed_paths", return_value={"pkg/__pycache__/mod.cpython-312.pyc"}):
+                with patch("final_audit.file_has_diff", return_value=True):
+                    violations = run_tier1(ctx)
+            classes = [v.class_name for v in violations]
+            self.assertNotIn("unplanned_change", classes)
 
 
 if __name__ == "__main__":

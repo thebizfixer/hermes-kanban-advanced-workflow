@@ -16,7 +16,7 @@ Added checks in v1.1: `test -x` (not just `test -f`) for cron scripts, and herme
 
 ### Parallel subagent gate (optional)
 
-When `subagent_gate.enabled` is not `false` (default **true**) and the orchestrator profile has the `delegation` toolset, the orchestrator runs plan/env/infra checks via Hermes `delegate_task` in parallel instead of invoking this script. Attestation and `coding_agent_auth_prewarm` still run serially after collection. Falls back to this script when parallel is disabled, delegation is missing, or E022. `kanban_handoff.py` always uses this script at handoff build. See `plugin/data/references/parallel-subagent-gate.md`.
+When `subagent_gate.enabled` is not `false` (default **true**) and the orchestrator profile has the `delegation` toolset, the orchestrator runs plan/env/infra checks via Hermes `delegate_task` in parallel instead of invoking this script. Attestation and `coding_agent_auth_prewarm` still run serially after collection. Falls back to this script when parallel is disabled, delegation is missing, or E022. When parallel is the default path, `kanban_handoff.py` defers serial gate at handoff build (`pre_dispatch_gate: DEFERRED`); set `enabled: false` to run this script at handoff. See `plugin/data/references/parallel-subagent-gate.md`.
 
 ## Board validation (`validate_board.sh`)
 
@@ -94,13 +94,15 @@ Per-plan cron lifecycle for wave progression and optional lifecycle notify. Uses
 |-----|----------|-----------|------|
 | `kanban-auto-unblock-1m` | every 1m | `local` | always at decomposition |
 | `kanban-board-keeper-3m` | every 3m | `local` | always at decomposition |
-| `kanban-lifecycle-notify-5m` | every 5m | gateway default | when `notify_lifecycle: true` (default) |
+| `kanban-lifecycle-notify-5m` | every 5m | resolved home channel (`scripts/lib/resolve_notify_deliver.sh`) | when `notify_lifecycle: true` (default) |
+
+Wave crons use `deliver=local` (file-only). Lifecycle/completion crons print to **stdout**; Hermes routes output to the resolved platform (`telegram`, `discord`, `all`, etc.) — never hardcode a platform. Resolver order: overlay `notify_deliver` → `cron.default_deliver` in `~/.hermes/config.yaml` → single configured `*_HOME_CHANNEL` → `all`. `--check` fails when lifecycle job is missing, inactive, or `Deliver: local`.
 
 **Not** called at init — create at decomposition (`--create --plan-id <id>`), remove at cleanup (`--remove`). Stores job IDs in `.hermes/kanban/memory/<plan_id>.json`. Lifecycle script reads active plan id from `.hermes/kanban/logs/lifecycle_plan_id` (written at create). `--check` WARNs when session `HERMES_HOME` is profile-scoped.
 
 ### `kanban_lifecycle_notify.sh`
 
-State-diff lifecycle messages (start / running / done / catastrophic re-block) after the gate card completes. Separate from intervention notify (`kanban-advanced:kanban-notify`). Logs to `.hermes/kanban/logs/lifecycle.jsonl`. Config: `notify_lifecycle` in overlay (default `true`) or `NOTIFY_LIFECYCLE=false` to disable.
+State-diff lifecycle messages (start / running / done / catastrophic re-block) after the gate card completes. Requires gate card `plan_id:` in body (matches decompose/handoff gate create). Prints messages to **stdout** for cron deliver — not `hermes message send`. Separate from intervention notify (`kanban-advanced:kanban-notify`). Logs to `.hermes/kanban/logs/lifecycle.jsonl`. Config: `notify_lifecycle` in overlay (default `true`) or `NOTIFY_LIFECYCLE=false` to disable.
 
 ### `kanban_completion_notify.sh`
 
@@ -191,7 +193,7 @@ Init / dashboard **Update Plugin** use the same list via `plugin/script_material
 python hermes-kanban-advanced-workflow/scripts/kanban_decompose.py --plan <file> [--dry-run]
 ```
 
-Governed card creation from a plan file.  Reads the plan, extracts workstreams, creates cards with proper `Files:`/`Mode:`/`agent -p` blocks, wires parent-child dependencies. **Auto-stamps** `Parent-branches:`, `Call-sites:`, `Acceptance:`, `plan_file`, and `Iteration-budget:` from plan bundles (`scripts/lib/decompose_stamp.py`). The final audit card includes `Type: audit`, **`Audit-baseline-sha:`** (frozen `git rev-parse HEAD` at decompose), and a pointer to `final_audit_sanity.py`. Exits **7** when `plan_id` cards already exist (idempotent re-decompose guard). `--max-retries 2` caps decomposition retries.
+Governed card creation from a plan file.  Reads the plan, extracts workstreams, creates cards with proper `Files:`/`Mode:`/`agent -p` blocks, wires parent-child dependencies. **Auto-stamps** `Parent-branches:`, `Call-sites:`, `Acceptance:`, `plan_file`, and `Iteration-budget:` from plan bundles (`scripts/lib/decompose_stamp.py`). The final audit card includes `Type: audit`, **`Audit-baseline-sha:`** (frozen `git rev-parse HEAD` at decompose), and a pointer to `final_audit_sanity.py`. **Fail-fast:** exits non-zero when `hermes kanban create` returns no task id (no silent partial boards). Exits **7** when `plan_id` cards already exist (idempotent re-decompose guard). `--max-retries 2` caps decomposition retries.
 
 ## Evaluation chain (`kanban_evaluation_chain.py`)
 

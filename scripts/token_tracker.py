@@ -43,12 +43,14 @@ def log_token_run(
     cursor_model: str = "",
     hermes_turns: int = 0,
     hermes_model: str = "",
+    hermes_total: int = 0,
     duration_seconds: float = 0.0,
     status: str = "completed",
     source: str = "agent",  # "agent" | "estimated" | "worker-direct" | "orchestrator-direct"
     extra: dict[str, Any] | None = None,
 ) -> None:
     """Append one token record to the JSONL log."""
+    estimate_total = hermes_total or (hermes_turns * 3000 if hermes_turns else 0)
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "plan_id": plan_id,
@@ -71,6 +73,7 @@ def log_token_run(
         "hermes": {
             "model": hermes_model,
             "turns": hermes_turns,
+            "total": estimate_total,
         },
     }
     if extra:
@@ -172,11 +175,14 @@ def log_orchestrator_tokens(
         note: Human-readable context (e.g., "Plan hardened, 13 agent blocks").
     """
     hermes_estimate = turns * 3000  # system prompt + tool schemas ≈ 3K/turn
-    return log_token_run(
+    log_token_run(
         plan_id=plan_id,
         task_id="",  # orchestrator sessions aren't kanban tasks
-        hermes_total_tokens=hermes_estimate,
         hermes_turns=turns,
+        hermes_total=hermes_estimate,
         status=checkpoint,
         source="orchestrator",
+        extra={"checkpoint": checkpoint, "note": note},
     )
+
+    return str(_token_log_path())

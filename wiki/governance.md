@@ -141,13 +141,13 @@ bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 | 11 | `gateway_running` | WARN |
 | 12 | `coding_agent_auth_prewarm` (OAuth flock + smoke) | WARN (after blocking checks pass) |
 
-`kanban_handoff.py` runs this at card creation and stamps `pre_dispatch_gate: PASSED at …` on the card body so the orchestrator **skips re-run** when already passed.
+`kanban_handoff.py` runs serial gate at card creation when parallel gate is disabled (`pre_dispatch_gate: PASSED at …`). When parallel gate is enabled (default), it stamps `pre_dispatch_gate: DEFERRED at …` and `parallel_gate: enabled` — orchestrator runs Step 1 from the handoff runbook. Handoff cards with `PASSED` skip re-run; `DEFERRED` runs parallel Step 1 only.
 
 **Parallel path (default):** When `subagent_gate.enabled` is not `false` and the orchestrator profile has the `delegation` toolset, run plan/env/infra checks via Hermes `delegate_task` in parallel, then attestation + prewarm serially. Blocking/warning severities match the table below. Serial `pre_dispatch_gate.sh` is fallback when parallel is disabled, delegation is missing, or E022 fires. See `plugin/data/references/parallel-subagent-gate.md` and `wiki/configuration.md` § `subagent_gate`. Sad-path: E022.
 
 ### Layer 3 — Handoff preconditions (`kanban_handoff.py`)
 
-When a non-orchestrator profile triggers execution. Stamps `BUNDLE_ROOT`, `gate_script`, `cards_yaml`, `pre_dispatch_gate`. See **[[decomposition-workflow]]** § Board-mediated handoff.
+When a non-orchestrator profile triggers execution. Stamps `BUNDLE_ROOT`, `gate_script`, `cards_yaml`, `pre_dispatch_gate`, and `parallel_gate`. See **[[decomposition-workflow]]** § Board-mediated handoff.
 
 | Check | Exit if fail |
 |-------|----------------|

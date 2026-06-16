@@ -35,6 +35,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `PREFLIGHT_SKIP_API` | Skip API health check | unset |
 | `PREFLIGHT_SKIP_FS_CHECK` | Skip filesystem coherence check | unset |
 | `notify_lifecycle` | Per-card start/running/done gateway messages after gate completes (`kanban-lifecycle-notify-5m` cron) | `true` |
+| `notify_deliver` | Optional override for lifecycle/completion cron `--deliver` (`telegram`, `discord`, `all`, …). When omitted, `scripts/lib/resolve_notify_deliver.sh` resolves home channel | auto |
 | `walk_away_mode` | Unattended post-execution after final audit + completion notify (`kanban_walk_away_post_exec.sh`) | `false` |
 | `gateway_timeout_seconds` | Gateway timeout hint for commit-cadence advice | unset |
 | `final_audit_max_remediation_rounds` | Max post-flight remediation rounds before escalation (`final_audit_sanity.py`) | `2` |
@@ -46,7 +47,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 
 ### Parallel subagent gate (`subagent_gate`)
 
-**Default on.** Orchestrator runs plan/env/infra checks via Hermes `delegate_task` in parallel, then attestation + prewarm serially. **Serial fallback:** `pre_dispatch_gate.sh` when `enabled: false`, `delegation` toolset missing, parallel timeout (E022), or malformed subagent JSON. Absent `subagent_gate` block in overlay → treated as enabled (`plugin/config_overlay.py`). Handoff still runs serial gate at card build.
+**Default on.** Orchestrator runs plan/env/infra checks via Hermes `delegate_task` in parallel, then attestation + prewarm serially. **Serial fallback:** `pre_dispatch_gate.sh` when `enabled: false`, `delegation` toolset missing, parallel timeout (E022), or malformed subagent JSON. Absent `subagent_gate` block in overlay → treated as enabled (`plugin/config_overlay.py`). When parallel is the default path, `kanban_handoff.py` **defers** serial gate at handoff build (`pre_dispatch_gate: DEFERRED`); set `enabled: false` to run serial gate at handoff as before.
 
 ```yaml
 subagent_gate:

@@ -17,6 +17,10 @@ Every plan execution produces a reconciliation report and postmortem with these 
 | **plan_scope_gaps**           | Tier 1 violations from `{plan_id}_audit_tier1.json`                                | 0 at cleanup |
 | **doc_coverage_gaps**         | Tier 2 violations from `{plan_id}_audit_tier2.json`                                | 0 at cleanup |
 | **uncaught_violation_count**  | Gaps that reached cleanup without remediation; **`null`** when tier JSON absent    | 0 (not `null`) |
+| **parser_miss_count**           | Tier 1/2 heuristic false positives excluded from uncaught count                    | 0 |
+| **thrash_outliers**             | Tasks with `reblock_count ≥ 3` in `{plan_id}_kpi.json` (objects: `task_id`, `reblock_count`, `event_count`) | 0 |
+| **auth_escalation_count**     | Tasks classified `auth_error` in failure taxonomy                                  | 0 |
+| **token_tracker_available**     | Whether `token_tracker.py` was reachable at postmortem generation                  | `true` when token logging expected |
 | **KPI artifact**              | `{plan_id}_kpi.json` + `kpi_history.jsonl` from `generate_postmortem.py`         | Trend across plans          |
 | **Failure-mode distribution** | Count by category: protocol violation, timeout, auth, crash, evaluation chain deny | No single category > 30% |
 | **First-pass yield**          | Tasks completed on first dispatch attempt (no retries)                             | > 80%                    |

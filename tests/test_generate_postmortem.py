@@ -194,6 +194,99 @@ class TestGeneratePostmortem(unittest.TestCase):
         self.assertIn("## 9. Operator Ground Truth", report)
         self.assertIn("Data confidence", report)
 
+    def test_wall_clock_caps_at_audit_completion(self) -> None:
+        from datetime import datetime, timedelta, timezone
+
+        t0 = datetime(2026, 6, 15, 10, 0, tzinfo=timezone.utc)
+        t_end = t0 + timedelta(hours=2)
+        t_late = t0 + timedelta(hours=6)
+        impl = pm.TaskRecord(
+            task_id="t_impl",
+            title="Card 1",
+            status="done",
+            body="plan_id: p1\n",
+            created_at=t0,
+            updated_at=t_end,
+        )
+        audit = pm.TaskRecord(
+            task_id="t_audit",
+            title="Final audit — p1",
+            status="done",
+            body="plan_id: p1\nType: audit\n",
+            created_at=t0 + timedelta(minutes=30),
+            updated_at=t_end,
+        )
+        handoff = pm.TaskRecord(
+            task_id="t_handoff",
+            title="Decompose: p1",
+            status="ready",
+            body="Type: orchestrator-handoff\nplan_id: p1\n",
+            created_at=t0,
+            updated_at=t_late,
+        )
+        hours = pm._wall_clock_hours([impl, audit, handoff])
+        self.assertAlmostEqual(hours or 0, 2.0, places=1)
+
+    def test_build_kpi_json_accepts_corrections(self) -> None:
+        kpi = pm.build_kpi_json(
+            plan_id="p1",
+            tasks=[],
+            token_entries=[],
+            intervention_count=0,
+            intervention_log=[],
+            scope_violations=[],
+            kpi_corrections={
+                "wall_clock_hours_corrected": 2.5,
+                "_source": "operator review",
+            },
+        )
+        self.assertEqual(kpi["wall_clock_hours_corrected"], 2.5)
+        self.assertEqual(kpi["correction_source"], "operator review")
+
+    def test_build_kpi_json_excludes_foreign_token_rows(self) -> None:
+        entries = [
+            {"plan_id": "other-plan", "task_id": "t_x", "cursor": {"total": 9000}},
+            {"plan_id": "p1", "task_id": "t_a", "cursor": {"total": 100}},
+        ]
+        kpi = pm.build_kpi_json(
+            plan_id="p1",
+            tasks=[],
+            token_entries=entries,
+            intervention_count=0,
+            intervention_log=[],
+            scope_violations=[],
+        )
+        self.assertEqual(kpi["token_totals"]["cursor"], 100)
+
+    def test_merge_tasks_with_tokens_skips_empty_plan_id(self) -> None:
+        tasks = [
+            pm.TaskRecord(task_id="t_a", body="plan_id: p1", status="done"),
+        ]
+        entries = [
+            {"plan_id": "", "task_id": "t_foreign", "cursor": {"total_tokens": 50}},
+            {"plan_id": "p1", "task_id": "t_b", "cursor": {"total_tokens": 10}},
+        ]
+        merged = pm._merge_tasks_with_tokens(tasks, entries, "p1")
+        ids = {t.task_id for t in merged}
+        self.assertIn("t_a", ids)
+        self.assertIn("t_b", ids)
+        self.assertNotIn("t_foreign", ids)
+
+    def test_build_report_does_not_count_blocked_as_failed_when_done(self) -> None:
+        done = pm.TaskRecord(task_id="t_ok", body="plan_id: p1", status="done")
+        blocked = pm.TaskRecord(task_id="t_blk", body="plan_id: p1", status="blocked")
+        report = pm.build_report(
+            plan_id="p1",
+            tasks=[done, blocked],
+            token_entries=[],
+            intervention_count=0,
+            intervention_log=[],
+            scope_violations=[],
+            source_notes=[],
+        )
+        self.assertIn("**Completed:** 1", report)
+        self.assertIn("**Failed / blocked:** 1", report)
+
 
 if __name__ == "__main__":
     unittest.main()

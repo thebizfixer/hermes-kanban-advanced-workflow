@@ -498,7 +498,7 @@ Then repeat **execute the plan**. Plugin reference: `plugin/data/references/prof
 **Checks (in order):**
 
 1. **Gateway running** — `hermes gateway status` or `hermes cron status`. Crons tick inside the gateway process; CLI chat alone does not fire them.
-2. **Wave crons exist** — `hermes cron list` must show `kanban-auto-unblock-1m` and `kanban-board-keeper-3m` as `[active]` with `Deliver: local`. When `notify_lifecycle: true` (default), also expect `kanban-lifecycle-notify-5m` (gateway messaging — not `deliver=local`). Jobs must include `--workdir <repo-root>` (re-create with `provision_kanban_crons.sh --create --workdir "$(git rev-parse --show-toplevel)"` if logs never update).
+2. **Wave crons exist** — `hermes cron list` must show `kanban-auto-unblock-1m` and `kanban-board-keeper-3m` as `[active]` with `Deliver: local`. When `notify_lifecycle: true` (default), also expect `kanban-lifecycle-notify-5m` with **non-local** deliver (resolved home channel via `scripts/lib/resolve_notify_deliver.sh` — not `deliver=local`). Silent lifecycle → check gate card body includes `plan_id:` and lifecycle deliver is not local. Jobs must include `--workdir <repo-root>` (re-create with `provision_kanban_crons.sh --create --workdir "$(git rev-parse --show-toplevel)"` if logs never update).
 3. **Created per plan** — jobs are provisioned at decomposition (`provision_kanban_crons.sh --create`), **not** at init. Re-run create during an active plan if missing.
 4. **Logs** — prefer project `.hermes/kanban/logs/auto-unblock.log` (SSOT); falls back to `$HERMES_HOME/kanban/logs/` when no project kanban dir. `board_keeper.sh` warns when logs are stale >3m while cards are active.
 5. **Messaging optional** — missing Telegram/Discord does **not** stop script crons (`deliver=local`).
@@ -528,13 +528,13 @@ kanban-advanced works around several vanilla Hermes behaviors. When something fe
 
 | Gap | Symptom | kanban-advanced mitigation |
 |-----|---------|---------------------------|
-| **1 — Thrash / event churn** | Card burns retries with no durable state change | `board_keeper.sh` flags >40 events on active cards; postmortem `thrash_outliers`; iteration budget stamped at decompose |
+| **1 — Thrash / event churn** | Card burns retries with no durable state change | `board_keeper.sh` flags high event counts on active cards; postmortem `thrash_outliers` when `reblock_count ≥ 3`; iteration budget stamped at decompose |
 | **3 — Triage without auto_decompose** | `--triage` cards stuck forever | `auto_decompose=false` + block-on-create; preflight WARN if auto_decompose true |
 | **4 — Profile-scoped HERMES_HOME** | Crons created in profile store never tick | `gateway_hermes_home` resolver; `provision_kanban_crons` uses gateway store |
 | **6 — OAuth parallel stampede** | Intermittent auth on wave unblocks | `auto_unblock` stagger + `--max-unblock 1`; blocking prewarm in gate; auth lock file |
 | **7 — dispatch_stale_timeout default** | Stale dispatches never time out | Bootstrap sets `kanban.dispatch_stale_timeout_seconds=14400`; manual: `hermes config set kanban.dispatch_stale_timeout_seconds 14400` (not an overlay key). See [dispatch-stale-timeout.md](../plugin/data/references/dispatch-stale-timeout.md). |
 
-**Messaging crons vs wave crons:** Walk-away monitor / lifecycle notify jobs must be registered from the **default gateway-bound profile** (main `HERMES_HOME`). Wave progression crons (`auto_unblock`, `board_keeper`) use `deliver=local` and are exempt. `provision_kanban_crons.sh --check` WARNs when session `HERMES_HOME` is profile-scoped.
+**Messaging crons vs wave crons:** Lifecycle/completion notify crons use resolved home-channel deliver (`notify_deliver` overlay override optional). Wave progression crons (`auto_unblock`, `board_keeper`) use `deliver=local` only. `provision_kanban_crons.sh --check` fails when lifecycle is local while `notify_lifecycle` is enabled. WARNs when session `HERMES_HOME` is profile-scoped.
 
 **post_tool_call context:** Hook-driven `auto_unblock` uses gateway `HERMES_HOME` + repo cwd; if gateway context is unavailable the hook fails silently (cron remains fallback).
 

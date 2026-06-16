@@ -58,6 +58,18 @@ class TestCrossPlanMemory(unittest.TestCase):
         self.assertIn("completeness_remediation", classes)
         self.assertIn("thrash", classes)
 
+    def test_lessons_from_kpi_dict_thrash_outliers(self) -> None:
+        kpi = {
+            "plan_id": "p1",
+            "thrash_outliers": [
+                {"task_id": "t_abc12345", "reblock_count": 4, "event_count": 42},
+            ],
+        }
+        lessons = cpm.lessons_from_kpi(kpi)
+        thrash = [l for l in lessons if l["failure_class"] == "thrash"]
+        self.assertEqual(len(thrash), 1)
+        self.assertEqual(thrash[0]["pattern"], "t_abc12345")
+
 
 if __name__ == "__main__":
     unittest.main()

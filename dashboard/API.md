@@ -50,6 +50,8 @@ Returning to the tab reuses **sessionStorage** for probe results; plugin update 
   },
   "policy_profile": "balanced",
   "notify_lifecycle": true,
+  "notify_deliver": "",
+  "notify_deliver_resolved": "discord",
   "walk_away_mode": false,
   "max_turns": 180,
   "profiles": {
@@ -200,6 +202,8 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
   "coding_agent_model": "auto",
   "policy_profile": "balanced",
   "notify_lifecycle": true,
+  "notify_deliver": "",
+  "notify_deliver_resolved": "discord",
   "walk_away_mode": false,
   "max_turns": 180
 }
@@ -209,7 +213,9 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 
 `policy_profile`: `advisory` | `balanced` | `strict` — governance enforcement level (default `balanced`).
 
-`notify_lifecycle`: when `true` (default), provisions the per-card lifecycle notify cron at decomposition and sends gateway messages for card start/running/done after the gate completes.
+`notify_lifecycle`: when `true` (default), decomposition runs `provision_kanban_crons.sh --create`, which registers `kanban-lifecycle-notify-5m` with resolved home-channel deliver (not `local`). Dashboard toggle writes overlay only — it does not create/remove cron jobs until the next `--create`. Lifecycle messages print to stdout; Hermes cron deliver routes to the operator's configured home channel.
+
+`notify_deliver`: optional overlay override (`telegram` | `discord` | `slack` | `signal` | `whatsapp` | `all` | `local`). Empty/absent → auto-resolve via `notify_deliver_resolved` in status (same order as `scripts/lib/resolve_notify_deliver.sh`). POST `/save` accepts `notify_deliver`; set to `""` or omit override to clear. Completion notify uses the same resolved deliver when `walk_away_mode` is on.
 
 `walk_away_mode`: when `true`, `board_keeper.sh` runs unattended post-execution (reconciliation artifact, postmortem, archive, cleanup, completion notify) after final audit. Default `false` — orchestrator stops at post-execution checkpoints. See `plugin/data/references/walk-away-mode.md`.
 

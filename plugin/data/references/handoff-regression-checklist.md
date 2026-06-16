@@ -15,7 +15,8 @@ Confirm stamped fields:
 |-------|----------|
 | `BUNDLE_ROOT` | Absolute path to plugin bundle |
 | `cards_yaml` | Path when `.hermes/kanban/memory/<plan_id>.yaml` exists |
-| `pre_dispatch_gate` | `PASSED …` when gate ran before handoff |
+| `pre_dispatch_gate` | `PASSED …` when serial gate ran at build; `DEFERRED …` when parallel gate enabled |
+| `parallel_gate` | `enabled` or `disabled` |
 | `gate_script` | Absolute path to `pre_dispatch_gate.sh` |
 
 ## 2. Worker SOUL consistency

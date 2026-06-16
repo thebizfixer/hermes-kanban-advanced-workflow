@@ -139,7 +139,7 @@ done
 
 echo ""
 echo "--- Blocked card salvage ---"
-BLOCKED_IDS=$(hermes kanban list 2>/dev/null | grep '⊘' | awk '{print $2}')
+BLOCKED_IDS=$(hermes kanban list 2>/dev/null | grep '⊘' | awk '{print $2}' || true)
 SALVAGE_COUNT=0
 for tid in $BLOCKED_IDS; do
     INFO=$(hermes kanban show "$tid" 2>/dev/null)
@@ -218,7 +218,7 @@ done
 
 echo ""
 echo "--- Stuck ready cards ---"
-READY_IDS=$(hermes kanban list 2>/dev/null | grep '▶' | awk '{print $2}')
+READY_IDS=$(hermes kanban list 2>/dev/null | grep '▶' | awk '{print $2}' || true)
 STUCK_COUNT=0
 for tid in $READY_IDS; do
     # Check how long it's been ready
@@ -312,7 +312,7 @@ fi
 
 echo ""
 echo "--- Unmerged done cards ---"
-DONE_IDS=$(hermes kanban list 2>/dev/null | grep '✓' | awk '{print $2}')
+DONE_IDS=$(hermes kanban list 2>/dev/null | grep '✓' | awk '{print $2}' || true)
 UNMERGED=0
 MERGED_COUNT=0
 DISK_OK=true
@@ -419,7 +419,7 @@ fi
 
 # ── Post-final-audit: walk-away post-exec or orchestrator checkpoint signal ──
 PIPELINE_CURRENT=$(cat "$PIPELINE_STATE" 2>/dev/null || echo "")
-AUDIT_DONE_IDS=$(hermes kanban list 2>/dev/null | grep '✓' | awk '{print $2}')
+AUDIT_DONE_IDS=$(hermes kanban list 2>/dev/null | grep '✓' | awk '{print $2}' || true)
 AUDIT_COMPLETE=false
 
 for tid in $AUDIT_DONE_IDS; do

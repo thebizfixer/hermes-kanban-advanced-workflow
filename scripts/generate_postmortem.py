@@ -19,6 +19,7 @@ import os
 import re
 import sqlite3
 import statistics
+import subprocess
 import sys
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -53,6 +54,18 @@ FAILURE_KINDS = (
 )
 
 PLAN_ID_RE = re.compile(r"^plan_id:\s*(\S+)", re.MULTILINE | re.IGNORECASE)
+OPEN_STATUSES = frozenset({"todo", "ready", "running", "blocked"})
+TERMINAL_STATUSES = frozenset({"done", "completed", "archived"})
+PARSER_MISS_CLASSES = frozenset({
+    "acceptance_miss",
+    "call_site_miss",
+    "plan_file_zero_diff",
+    "unplanned_change",
+    "doc_coverage_gap",
+})
+PROCEDURAL_ACCEPTANCE_RE = re.compile(
+    r"(?i)(done when|verify:|pytest|bash\s|python3?\s|\brg\b|hermes\s)",
+)
 
 
 def _hermes_home() -> Path:
@@ -398,7 +411,12 @@ def load_task_history(
             row_plan = str(_row_value(row, plan_col, "") or _extract_plan_id(body, metadata))
             task_id = str(_row_value(row, id_col, "unknown"))
             if task_id_filter is not None:
-                matched = task_id in task_id_filter
+                if task_id not in task_id_filter:
+                    continue
+                body_plan = _extract_plan_id(body, metadata)
+                if body_plan and body_plan != plan_id:
+                    continue
+                matched = True
             else:
                 matched = (
                     row_plan == plan_id
@@ -474,7 +492,8 @@ def _merge_tasks_with_tokens(
 ) -> list[TaskRecord]:
     by_id = {task.task_id: task for task in tasks}
     for entry in token_entries:
-        if entry.get("plan_id") and entry.get("plan_id") != plan_id:
+        entry_plan = str(entry.get("plan_id") or "").strip()
+        if not entry_plan or entry_plan != plan_id:
             continue
         task_id = _task_id_from_token(entry)
         if task_id not in by_id:
@@ -482,19 +501,124 @@ def _merge_tasks_with_tokens(
     return list(by_id.values())
 
 
-def _wall_clock_hours(tasks: list[TaskRecord]) -> float | None:
-    timestamps: list[datetime] = []
-    for task in tasks:
-        for ts in (task.created_at, task.updated_at):
-            if ts:
-                timestamps.append(ts)
-        for event in task.events:
-            if event.timestamp:
-                timestamps.append(event.timestamp)
-    if len(timestamps) < 2:
+def _is_audit_task(task: TaskRecord) -> bool:
+    if re.search(r"Type:\s*audit", task.body, re.IGNORECASE):
+        return True
+    return bool(re.search(r"final[ -]audit", task.title, re.IGNORECASE))
+
+
+def _is_handoff_task(task: TaskRecord) -> bool:
+    return (
+        "orchestrator-handoff" in task.body
+        or task.title.lower().startswith("decompose:")
+    )
+
+
+def _task_terminal_timestamp(task: TaskRecord) -> datetime | None:
+    if task.status.lower() not in TERMINAL_STATUSES:
         return None
-    delta = max(timestamps) - min(timestamps)
-    return round(delta.total_seconds() / 3600.0, 2)
+    if task.updated_at:
+        return task.updated_at
+    event_times = [e.timestamp for e in task.events if e.timestamp]
+    return max(event_times) if event_times else None
+
+
+def _wall_clock_hours(tasks: list[TaskRecord]) -> float | None:
+    if not tasks:
+        return None
+    starts = [t.created_at for t in tasks if t.created_at]
+    if not starts:
+        return None
+    run_start = min(starts)
+    open_impl = [
+        t
+        for t in tasks
+        if t.status.lower() in OPEN_STATUSES and not _is_handoff_task(t)
+    ]
+    if open_impl:
+        end = datetime.now(timezone.utc)
+    else:
+        audit_ends = [
+            ts
+            for t in tasks
+            if _is_audit_task(t)
+            for ts in [_task_terminal_timestamp(t)]
+            if ts is not None
+        ]
+        if audit_ends:
+            end = max(audit_ends)
+        else:
+            terminal_ends = [
+                ts
+                for t in tasks
+                if not _is_handoff_task(t)
+                for ts in [_task_terminal_timestamp(t)]
+                if ts is not None
+            ]
+            if not terminal_ends:
+                return None
+            end = max(terminal_ends)
+    return round((end - run_start).total_seconds() / 3600.0, 2)
+
+
+def _reblock_count(task: TaskRecord) -> int:
+    return sum(1 for event in task.events if "block" in event.kind.lower())
+
+
+def _count_parser_misses(
+    tier1: dict[str, Any] | None, tier2: dict[str, Any] | None
+) -> int:
+    count = 0
+    for payload in (tier1, tier2):
+        if not payload:
+            continue
+        for violation in payload.get("violations") or []:
+            if violation.get("class") in PARSER_MISS_CLASSES:
+                count += 1
+    return count
+
+
+def _load_operational_context(project_root: Path, plan_id: str) -> dict[str, Any]:
+    preflight_path = project_root / ".hermes" / "kanban" / "preflight_cache.json"
+    preflight_failures: list[str] = []
+    if preflight_path.is_file():
+        try:
+            data = json.loads(preflight_path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                for key, val in data.items():
+                    if isinstance(val, dict) and str(val.get("status", "")).lower() == "fail":
+                        preflight_failures.append(str(key))
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    gateway_running = None
+    try:
+        result = subprocess.run(
+            ["hermes", "gateway", "status"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+        )
+        gateway_running = result.returncode == 0 and "running" in (result.stdout or "").lower()
+    except (OSError, subprocess.TimeoutExpired):
+        gateway_running = False
+
+    token_tracker_available = False
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+        from token_tracker_import import probe_token_tracker  # noqa: E402
+
+        token_tracker_available = probe_token_tracker(project_root)
+    except Exception:
+        token_tracker_available = False
+
+    return {
+        "preflight_failures": preflight_failures,
+        "gateway_running": gateway_running,
+        "token_tracker_available": token_tracker_available,
+    }
 
 
 def _classify_failure(task: TaskRecord) -> str | None:
@@ -591,20 +715,14 @@ def build_report(
     source_notes: list[str],
 ) -> str:
     plan_tokens = [entry for entry in token_entries if entry.get("plan_id") == plan_id]
-    if not plan_tokens:
-        plan_tokens = token_entries
 
-    total_tasks = len(tasks) if tasks else len({ _task_id_from_token(e) for e in plan_tokens })
+    total_tasks = len(tasks) if tasks else len({_task_id_from_token(e) for e in plan_tokens})
     completed = sum(
         1
         for task in tasks
-        if task.status.lower() in {"done", "completed", "archived"}
+        if task.status.lower() in TERMINAL_STATUSES
     )
-    failed = sum(
-        1
-        for task in tasks
-        if task.status.lower() in {"crashed", "gave_up", "timed_out", "blocked"}
-    )
+    failed = sum(1 for task in tasks if _classify_failure(task) is not None)
     autonomous = completed
     takeovers = sum(
         1
@@ -988,24 +1106,28 @@ def _audit_kpi_fields(
 ) -> dict[str, Any]:
     plan_scope_gaps = len((tier1 or {}).get("violations") or [])
     doc_coverage_gaps = len((tier2 or {}).get("violations") or [])
+    parser_miss_count = _count_parser_misses(tier1, tier2)
     audit_round = audit_round_from_card
     if audit_round == 0:
         if tier1 and tier1.get("audit_round") is not None:
             audit_round = int(tier1["audit_round"])
         elif tier2 and tier2.get("audit_round") is not None:
             audit_round = int(tier2["audit_round"])
+        elif (tier1 or tier2) and audit_round == 0:
+            audit_round = 1
 
     if tier1 is None and tier2 is None:
         uncaught: int | None = None
     else:
         spawned = len(remediation_cards)
         total_gaps = plan_scope_gaps + doc_coverage_gaps
-        uncaught = max(0, total_gaps - spawned) if total_gaps else 0
+        uncaught = max(0, total_gaps - spawned - parser_miss_count) if total_gaps else 0
 
     return {
         "final_audit_rounds": audit_round,
         "plan_scope_gaps": plan_scope_gaps,
         "doc_coverage_gaps": doc_coverage_gaps,
+        "parser_miss_count": parser_miss_count,
         "uncaught_violation_count": uncaught,
     }
 
@@ -1018,19 +1140,16 @@ def build_kpi_json(
     intervention_log: list[dict[str, Any]],
     scope_violations: list[dict[str, Any]],
     repo_root: Path | None = None,
+    kpi_corrections: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Machine-readable KPI artifact for dashboards and cross-run trend."""
     plan_tokens = [entry for entry in token_entries if entry.get("plan_id") == plan_id]
-    if not plan_tokens:
-        plan_tokens = token_entries
 
     total_tasks = len(tasks) if tasks else len({_task_id_from_token(e) for e in plan_tokens})
     completed = sum(
-        1 for task in tasks if task.status.lower() in {"done", "completed", "archived"}
+        1 for task in tasks if task.status.lower() in TERMINAL_STATUSES
     )
-    failed = sum(
-        1 for task in tasks if task.status.lower() in {"crashed", "gave_up", "timed_out", "blocked"}
-    )
+    failed = sum(1 for task in tasks if _classify_failure(task) is not None)
     takeovers = sum(
         1
         for task in tasks
@@ -1050,7 +1169,13 @@ def build_kpi_json(
 
     auth_escalations = len(failure_rows.get("auth_error", []))
     thrash_outliers = [
-        task.task_id for task in tasks if len(task.events) > 40
+        {
+            "task_id": task.task_id,
+            "reblock_count": _reblock_count(task),
+            "event_count": len(task.events),
+        }
+        for task in tasks
+        if _reblock_count(task) >= 3
     ]
 
     cursor_total = sum(_cursor_total(entry) for entry in plan_tokens)
@@ -1073,7 +1198,26 @@ def build_kpi_json(
         tier1, tier2, remediation_cards, _audit_round_from_tasks(tasks)
     )
 
-    return {
+    memory_ids, _ = load_plan_memory_task_ids(root, plan_id)
+    known_ids = memory_ids or set()
+    manual_interventions = [
+        entry
+        for entry in intervention_log
+        if not entry.get("card_key")
+        and str(entry.get("task_id") or "") not in known_ids
+    ]
+    operational = _load_operational_context(root, plan_id)
+    log_lines = {
+        task.task_id: len(task.events)
+        for task in tasks
+        if len(task.events) > 0
+    }
+
+    token_note = None
+    if not plan_tokens:
+        token_note = "No plan-scoped token rows — totals omitted (foreign rows excluded)."
+
+    kpi: dict[str, Any] = {
         "plan_id": plan_id,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "success_rate": round(success_rate, 2),
@@ -1090,6 +1234,7 @@ def build_kpi_json(
             "cache_read": cache_read,
             "cache_input": cache_input,
             "cache_ratio": round(cache_ratio, 4),
+            "source_note": token_note,
         },
         "subsystem_failures": {k: len(v) for k, v in failure_rows.items()},
         "auth_escalation_count": auth_escalations,
@@ -1102,15 +1247,29 @@ def build_kpi_json(
             "worker_catch_count": worker_catch_count,
             "orchestrator_catch_count": orchestrator_catch_count,
             "uncaught_violation_count": audit_fields["uncaught_violation_count"],
+            "parser_miss_count": audit_fields["parser_miss_count"],
             "first_pass_clean_cards": max(0, completed - len(remediation_cards)),
         },
         "final_audit_rounds": audit_fields["final_audit_rounds"],
         "plan_scope_gaps": audit_fields["plan_scope_gaps"],
         "doc_coverage_gaps": audit_fields["doc_coverage_gaps"],
+        "parser_miss_count": audit_fields["parser_miss_count"],
+        "preflight_failures": operational["preflight_failures"],
+        "gateway_running": operational["gateway_running"],
+        "manual_interventions": manual_interventions,
+        "log_lines": log_lines,
+        "token_tracker_available": operational["token_tracker_available"],
         "audit_tier_notes": audit_notes,
         "scope_violations": len(scope_violations),
         "intervention_log_entries": len(intervention_log),
     }
+    if kpi_corrections:
+        for key in ("wall_clock_hours_corrected", "success_rate_corrected"):
+            if key in kpi_corrections:
+                kpi[key] = kpi_corrections[key]
+        if kpi_corrections.get("_source"):
+            kpi["correction_source"] = kpi_corrections["_source"]
+    return kpi
 
 
 def write_kpi_json(kpi: dict[str, Any], output: Path, plan_id: str) -> Path:
@@ -1177,7 +1336,11 @@ def main(argv: list[str] | None = None) -> int:
     db_path = args.db or _kanban_db_path()
     interventions_path = args.interventions or _interventions_count_path()
 
-    token_entries = read_jsonl(token_path)
+    token_entries = [
+        entry
+        for entry in read_jsonl(token_path)
+        if str(entry.get("plan_id") or "").strip() == plan_id
+    ]
     intervention_count = read_intervention_count(interventions_path)
     intervention_log = [
         entry

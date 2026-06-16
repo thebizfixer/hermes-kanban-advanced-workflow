@@ -112,6 +112,87 @@ class TestKanbanHandoff(unittest.TestCase):
             "/e/Projects/foo/scripts/pre_dispatch_gate.sh",
         )
 
+    def test_resolve_subagent_gate_enabled_default_true(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.assertTrue(handoff._resolve_subagent_gate_enabled(root, {}))
+
+    def test_resolve_subagent_gate_enabled_false_in_overlay(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            overlay_dir = root / ".hermes" / "kanban-overrides"
+            overlay_dir.mkdir(parents=True)
+            (overlay_dir / "kanban-config.yaml").write_text(
+                "subagent_gate:\n  enabled: false\n",
+                encoding="utf-8",
+            )
+            self.assertFalse(handoff._resolve_subagent_gate_enabled(root, {}))
+
+    def test_build_body_includes_first_action_and_gate_body(self) -> None:
+        body = handoff._build_body(
+            "p1",
+            Path("/tmp/plan.plan.md"),
+            Path("/tmp/repo"),
+            "main",
+            "kanban-advanced-orchestrator",
+            bundle_root=ROOT,
+            gate_status="DEFERRED at test",
+            parallel_gate_enabled=True,
+            gateway_at_handoff="running (ok)",
+        )
+        self.assertIn("## FIRST ACTION", body)
+        self.assertIn("gateway_at_handoff: running", body)
+        self.assertIn('plan_id: p1', body)
+        self.assertIn("Gate card. All implementation cards link to gate", body)
+        self.assertIn("resolved home-channel deliver", body)
+        body = handoff._build_body(
+            "p1",
+            Path("/tmp/plan.plan.md"),
+            Path("/tmp/repo"),
+            "main",
+            "kanban-advanced-orchestrator",
+            bundle_root=ROOT,
+            gate_status="DEFERRED at 2026-06-15T00:00:00Z (parallel subagent gate — orchestrator Step 1)",
+            parallel_gate_enabled=True,
+        )
+        self.assertIn("pre_dispatch_gate: DEFERRED", body)
+        self.assertIn("parallel_gate: enabled", body)
+        self.assertIn("Step 1 — Pre-dispatch gate", body)
+        self.assertIn("gate-subagent-plan.md", body)
+
+    def test_deferred_handoff_skips_serial_gate_subprocess(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            overlay_dir = root / ".hermes" / "kanban-overrides"
+            overlay_dir.mkdir(parents=True)
+            (overlay_dir / "kanban-config.yaml").write_text(
+                "subagent_gate:\n  enabled: true\n",
+                encoding="utf-8",
+            )
+            plan = root / ".agent" / "plans" / "defer.plan.md"
+            plan.parent.mkdir(parents=True)
+            plan.write_text("---\nplan_id: defer-test\n---\n", encoding="utf-8")
+
+            gate_called: list[str] = []
+
+            def fake_gate(plan_id: str, repo_root: Path, overlay: dict) -> tuple[str, Path | None]:
+                gate_called.append(plan_id)
+                return "PASSED at test", None
+
+            original = handoff._run_pre_dispatch_gate
+            handoff._run_pre_dispatch_gate = fake_gate  # type: ignore[method-assign]
+            try:
+                enabled = handoff._resolve_subagent_gate_enabled(root, {})
+                self.assertTrue(enabled)
+                if enabled:
+                    gate_status = "DEFERRED at test"
+                else:
+                    handoff._run_pre_dispatch_gate("defer-test", root, {})
+                self.assertEqual(gate_called, [])
+                self.assertTrue(gate_status.startswith("DEFERRED"))
+            finally:
+                handoff._run_pre_dispatch_gate = original  # type: ignore[method-assign]
+
 
 if __name__ == "__main__":
     unittest.main()

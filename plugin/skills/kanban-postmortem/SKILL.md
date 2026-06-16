@@ -78,6 +78,8 @@ When tier JSON exists, the markdown report includes **### Final audit** under Ag
 | --- | --- | --- |
 | `uncaught_violation_count: null` | Tier JSON missing — **unknown**, not a pass | Re-run `final_audit_sanity.py` before archive; `final-audit-sanity-check.md` |
 | `uncaught_violation_count > 0` | Gaps reached cleanup without matching remediation | `kanban-orchestrator` § Final audit; tier JSON paths |
+| `parser_miss_count > 0` | Tier1/2 heuristic false positives (acceptance/call-site/doc coverage) — excluded from uncaught | `final-audit-sanity-check.md` § heuristic limits |
+| `wall_clock_hours` | Capped at final audit completion when all impl cards terminal (not postmortem generation time) | Compare to plan estimates |
 | `final_audit_rounds` high vs overlay max | Remediation loop ran many times | `wiki/configuration.md`; operator triage |
 | WARN in `audit_tier_notes` | Missing `{plan_id}_audit_tier1.json` or tier2 | Re-run audit with default JSON writes |
 
