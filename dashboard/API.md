@@ -189,7 +189,7 @@ Cursor uses `agent --list-models`. Other supported binaries return curated defau
 
 Runs the equivalent of `hermes kanban-advanced init --force` with the provided parameters.
 
-**Dispatch profiles:** Creates `kanban-advanced-orchestrator` and `kanban-advanced-worker` via `hermes profile create --no-skills`, installs `SOUL.md` from plugin prompts, seeds role-only profile skills (2 / 9), writes `.no-bundled-skills`, and verifies. Logs `HERMES_HOME:` and resolved profile paths in `output`. Sets `kanban.auto_decompose=false` and `kanban.dispatch_stale_timeout_seconds=14400` via `hermes config set`. See `wiki/bootstrap.md` and `plugin/data/references/dispatch-stale-timeout.md`.
+**Dispatch profiles:** Creates `kanban-advanced-orchestrator` and `kanban-advanced-worker` via `hermes profile create --no-skills`, installs `SOUL.md` from plugin prompts, seeds role-only profile skills (3 / 9), writes `.no-bundled-skills`, and verifies. Logs `HERMES_HOME:` and resolved profile paths in `output`. Sets `kanban.auto_decompose=false` and `kanban.dispatch_stale_timeout_seconds=14400` via `hermes config set`. See `wiki/bootstrap.md` and `plugin/data/references/dispatch-stale-timeout.md`.
 
 **Re-init behavior:** If `kanban-config.yaml` already exists, `working_branch`, `trigger_branch`, and `policy_profile` are **preserved from the file** unless the request body includes overrides. First-time bootstrap uses form values. Bootstrap re-runs profile reconciliation (safe for fixing skill/SOUL drift). To change settings on an initialized project, edit fields and click **Save**. **Save** persists form values and also reconciles profiles. To update the plugin package itself, use **Update Plugin** on the tab.
 
@@ -230,7 +230,7 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
     "   OK kanban-advanced-worker: model configured",
     "   OK kanban-advanced-orchestrator: max_turns = 180",
     "   OK kanban-advanced-worker: SOUL.md <- worker.md (.../profiles/kanban-advanced-worker)",
-    "   OK kanban-advanced-worker: 2 skills seeded [...] (.../profiles/kanban-advanced-worker)",
+    "   OK kanban-advanced-worker: 3 skills seeded [...] (.../profiles/kanban-advanced-worker)",
     "   OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)",
     "   OK 'agent' found on PATH",
     "   coding_agent_binary: agent",

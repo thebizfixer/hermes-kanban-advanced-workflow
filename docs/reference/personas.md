@@ -5,7 +5,7 @@ The workflow uses two agent profiles with a strict separation of concerns.
 | Persona | Belt | Role | Key skills | Sad-path first load |
 | ------- | ---- | ---- | ---------- | ------------------- |
 | **Orchestrator** | MBB | Plans, attests, decomposes, monitors, reconciles | `kanban-planning`, `kanban-orchestrator`, `kanban-preflight`, … | `kanban-orchestrator-governance` + in-flight index L0–L4 |
-| **Worker** | BB | Supervises coding agent; eval chain | `kanban-worker`, `kanban-worker-governance` | `kanban-worker-governance` + in-flight index L5–L6 |
+| **Worker** | BB | Supervises coding agent; eval chain | `kanban-git`, `kanban-worker`, `kanban-worker-governance` | `kanban-worker-governance` + in-flight index L5–L6 |
 | **Coding agent** | GB | Implements within `Files:` / `Mode:` | (external CLI) | Escalation via worker only |
 | **Crons** | Yellow | `auto_unblock`, `board_keeper` | (scripts) | `wiki/governance.md` § Auto-progression |
 

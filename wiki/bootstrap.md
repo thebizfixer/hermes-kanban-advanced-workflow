@@ -22,7 +22,7 @@ Bootstrap and init are the **same operation** from two entry points:
 5. **Coding agent binary** (step 1c) — pick headless CLI on PATH → `coding_agent_binary` + `KANBAN_CODING_AGENT`.
 6. **Coding agent model** (step 1c-ii) — pick `auto` or a CLI model ID → `coding_agent_model` + `KANBAN_CODING_AGENT_MODEL`. Cursor: `agent --list-models`. Runs smoke via `build_smoke_argv` when binary is on PATH (same flags as `scripts/coding_agent_invoke.sh smoke`). Workers re-smoke from each worktree at card flight.
 7. **Config overlay** — write `.hermes/kanban-overrides/kanban-config.yaml` (preserves existing branches and coding-agent model on re-init unless overridden).
-8. **Materialize shared skills** — copy all 11 plugin skills to `$HERMES_HOME/skills/kanban-advanced/` (discoverable from any profile via `<available_skills>`).
+8. **Materialize shared skills** — copy all 12 plugin skills to `$HERMES_HOME/skills/kanban-advanced/` (discoverable from any profile via `<available_skills>`).
 9. **Reconcile dispatch profiles** — SOUL.md, role-only profile skills, verification (see [Profile reconciliation](#profile-reconciliation)).
 10. **Cron scripts (files only)** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py`, `scripts/lib/resolve_notify_deliver.sh`, `scripts/lib/hermes_notify_deliver.py` → `$HERMES_HOME/scripts/` (and `lib/`). Does **not** create Hermes cron **jobs** — those are per-plan at decomposition (`provision_kanban_crons.sh --create`).
 
@@ -139,7 +139,7 @@ SOUL includes **sad-path paragraphs** (re-applied on every init/reconcile):
 - Worker: evaluation-chain DENY → `kanban-worker-governance` + in-flight index; no raw `git worktree add`.
 - Orchestrator: gate FAIL → `kanban-orchestrator-governance` + in-flight index.
 
-Governance skills are profile-local (2 worker / 9 orchestrator skills). The in-flight index SSOT lives at `plugin/skills/kanban-advanced/references/in-flight-governance-index.md`. Init materializes `kanban-advanced` with that index **plus** every `plugin/data/references/*.md` file under `references/` (except the pointer stub overwrites are skipped when the SSOT index already exists). Orchestrator profile-local copy includes the same tree. Load via `skill_view("kanban-advanced:kanban-advanced", "references/<file>.md")` — not a separate profile skill.
+Governance skills are profile-local (3 worker / 9 orchestrator skills). The in-flight index SSOT lives at `plugin/skills/kanban-advanced/references/in-flight-governance-index.md`. Init materializes `kanban-advanced` with that index **plus** every `plugin/data/references/*.md` file under `references/` (except the pointer stub overwrites are skipped when the SSOT index already exists). Orchestrator profile-local copy includes the same tree. Load via `skill_view("kanban-advanced:kanban-advanced", "references/<file>.md")` — not a separate profile skill.
 
 ### 2. Role-only skills (profile-local)
 
@@ -147,7 +147,7 @@ Wipes `<profile-home>/skills/` completely, then copies **only** these plugin ski
 
 | Profile | Skill count | Skills |
 | --- | ---: | --- |
-| `kanban-advanced-worker` | 2 | `kanban-worker`, `kanban-worker-governance` |
+| `kanban-advanced-worker` | 3 | `kanban-git`, `kanban-worker`, `kanban-worker-governance` |
 | `kanban-advanced-orchestrator` | 9 | `kanban-advanced`, `kanban-cleanup`, `kanban-notify`, `kanban-orchestrator`, `kanban-orchestrator-governance`, `kanban-planning`, `kanban-postmortem`, `kanban-preflight`, `kanban-reconciliation` |
 
 Each skill is a directory with `SKILL.md` (and `references/` when present) copied from `plugin/skills/<name>/` in the **installed plugin** (`$HERMES_HOME/plugins/kanban-advanced/`), not from a random dev checkout unless that is the install path.
@@ -167,7 +167,7 @@ Bootstrap output includes the **resolved profile path** on SOUL/skills lines, e.
 
 ```text
 OK kanban-advanced-worker: SOUL.md <- worker.md (/path/to/.hermes/profiles/kanban-advanced-worker)
-OK kanban-advanced-worker: 2 skills seeded [...] (/path/to/.hermes/profiles/kanban-advanced-worker)
+OK kanban-advanced-worker: 3 skills seeded [...] (/path/to/.hermes/profiles/kanban-advanced-worker)
 OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)
 ```
 
@@ -177,8 +177,8 @@ OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role
 
 | Location | Contents | Who sees it |
 | --- | --- | --- |
-| `$HERMES_HOME/skills/kanban-advanced/` | All 11 plugin skills (materialized at init) | Every profile — `<available_skills>` index |
-| `$HERMES_HOME/profiles/<dispatch-profile>/skills/` | Role-only subset (2 or 9) | That profile when dispatched |
+| `$HERMES_HOME/skills/kanban-advanced/` | All 12 plugin skills (materialized at init) | Every profile — `<available_skills>` index |
+| `$HERMES_HOME/profiles/<dispatch-profile>/skills/` | Role-only subset (3 or 9) | That profile when dispatched |
 
 Dispatch profiles must **not** inherit Hermes bundled skills in their profile-local `skills/` tree. The shared materialized tree is intentional for `skill_view()` discovery.
 
@@ -222,11 +222,11 @@ Run profile checks from init output, then optional plugin tests ([[plugin-verifi
 # 1. Confirm home
 hermes profile show kanban-advanced-worker | grep -E '^(Profile|Path|Skills):'
 hermes profile show kanban-advanced-orchestrator | grep -E '^(Profile|Path|Skills):'
-# Skills: should be 2 and 9 respectively
+# Skills: should be 3 and 9 respectively
 
 # 2. Worker profile home
 WP=$(hermes profile show kanban-advanced-worker | awk '/^Path:/ {print $2}')
-ls "$WP/skills"                    # exactly: kanban-worker  kanban-worker-governance
+ls "$WP/skills"                    # exactly: kanban-git  kanban-worker  kanban-worker-governance
 test -f "$WP/.no-bundled-skills"
 head -1 "$WP/SOUL.md"              # # Worker Prompt
 

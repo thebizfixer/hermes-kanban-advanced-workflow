@@ -132,7 +132,7 @@ grep -E 'coding_agent_invoke|terminal\(\)' \
   "$HERMES_HOME/skills/kanban-advanced/kanban-worker/SKILL.md"
 ```
 
-Also confirm the worker profile loads **plugin** skills (`kanban-worker` from `$HERMES_HOME/skills/kanban-advanced/`), not the built-in `devops/kanban-worker` copy. `hermes profile show kanban-advanced-worker | grep Skills:` should list only role skills (count 2), with content from the materialized plugin tree.
+Also confirm the worker profile loads **plugin** skills (`kanban-git`, `kanban-worker`, `kanban-worker-governance` from profile-local `skills/` — sourced from the installed plugin), not the built-in `devops/kanban-worker` copy. `hermes profile show kanban-advanced-worker | grep Skills:` should list only role skills (count **3**), with content from the materialized plugin tree.
 
 **In-flight index:** Workers and orchestrators should load `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` for symptom-keyed recovery (delegation, stale skill, E021, scratch workspace). Operator regression pass: `plugin/data/references/handoff-regression-checklist.md`.
 

@@ -84,7 +84,7 @@ fi
 KANBAN_WORKFLOW_DIR="$BUNDLE_PATH"
 
 declare -A PROFILE_SKILL_SETS
-PROFILE_SKILL_SETS["$WORKER_PROFILE_NAME"]="kanban-worker kanban-worker-governance"
+PROFILE_SKILL_SETS["$WORKER_PROFILE_NAME"]="kanban-git kanban-worker kanban-worker-governance"
 PROFILE_SKILL_SETS["$ORCH_PROFILE_NAME"]="kanban-advanced kanban-cleanup kanban-notify kanban-orchestrator kanban-orchestrator-governance kanban-planning kanban-postmortem kanban-preflight kanban-reconciliation"
 
 check_profile_skills() {

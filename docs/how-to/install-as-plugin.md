@@ -85,7 +85,7 @@ Init:
 - Creates profiles with `hermes profile create <name> --no-skills` (no Hermes bundled skills)
 - Copies model/auth `config.yaml` / `.env` from default
 - Installs `SOUL.md` from `plugin/data/prompts/orchestrator.md` and `worker.md`
-- Seeds **role-only** skills into each profile's `skills/` directory (2 worker / 9 orchestrator)
+- Seeds **role-only** skills into each profile's `skills/` directory (3 worker / 9 orchestrator)
 - Writes `.no-bundled-skills` to prevent `hermes update` from re-injecting default skills
 - Verifies the end state (fails if verification does not pass)
 
@@ -112,7 +112,7 @@ Configure **Hermes dispatch profile** models (orchestrator / worker) separately 
 hermes kanban-advanced --help
 
 # Dispatch profile skill counts
-hermes profile show kanban-advanced-worker | grep Skills:      # expect 2
+hermes profile show kanban-advanced-worker | grep Skills:      # expect 3
 hermes profile show kanban-advanced-orchestrator | grep Skills:  # expect 9
 
 # SOUL prompts

@@ -52,7 +52,7 @@ HERMES_HOME: /path/to/your-project/.hermes
 OK Created 'kanban-advanced-worker' (no default skills)
 OK Created 'kanban-advanced-orchestrator' (no default skills)
 OK kanban-advanced-worker: SOUL.md <- worker.md (.../profiles/kanban-advanced-worker)
-OK kanban-advanced-worker: 2 skills seeded [...]
+OK kanban-advanced-worker: 3 skills seeded [...]
 OK kanban-advanced-orchestrator: 9 skills seeded [...]
 OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)
 ```

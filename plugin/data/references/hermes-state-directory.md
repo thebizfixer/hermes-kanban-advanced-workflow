@@ -62,7 +62,7 @@ Init manages two dispatch profiles under `$HERMES_HOME/profiles/`:
 | Profile | SOUL source | Profile-local skills |
 | --- | --- | ---: |
 | `kanban-advanced-orchestrator` | `plugin/data/prompts/orchestrator.md` | 9 orchestrator skills |
-| `kanban-advanced-worker` | `plugin/data/prompts/worker.md` | 2 worker skills |
+| `kanban-advanced-worker` | `plugin/data/prompts/worker.md` | 3 worker skills (`kanban-git`, `kanban-worker`, `kanban-worker-governance`) |
 
 Each dispatch profile also has `.no-bundled-skills` (opts out of Hermes bundled skill sync on `hermes update`).
 

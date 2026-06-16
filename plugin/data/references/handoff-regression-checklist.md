@@ -58,9 +58,13 @@ Expected: **OK** (index SSOT + at least one bundled `plugin/data/references/` fi
 ## 4. Stale-skills cross-link
 
 - `wiki/troubleshooting.md` documents plugin vs built-in `kanban-worker`.
+- Worker profile home has **exactly three** role skills: `kanban-git`, `kanban-worker`, `kanban-worker-governance`.
 - Materialized skill: `$HERMES_HOME/skills/kanban-advanced/kanban-worker/SKILL.md` contains `terminal()` dispatch and `execute_code` prohibition.
 
 ```bash
+WP=$(hermes profile show kanban-advanced-worker | awk '/^Path:/ {print $2}')
+ls "$WP/skills" | sort -u
+# expect: kanban-git  kanban-worker  kanban-worker-governance
 grep -q 'terminal()' "$HERMES_HOME/skills/kanban-advanced/kanban-worker/SKILL.md" && echo OK || echo FAIL
 ```
 
