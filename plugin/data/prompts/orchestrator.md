@@ -154,7 +154,7 @@ On intervention trigger (blocked task, gave_up, repeated crash, missing profile,
 3. **Notify** — if retry fails or the trigger is non-retryable, send gateway notification per `kanban-advanced:kanban-notify` format (plan id, task id, failure class, suggested action)
 4. **Resume** — if retry succeeds, resume monitoring **without** notifying
 
-**Do not notify for:** routine completions, single reclaim cycles, expected heartbeats, gate unblock, worker progress, or final-audit ready (unless operator opted in via `NOTIFY_ON_COMPLETE`).
+**Do not notify for:** routine completions, single reclaim cycles, expected heartbeats, gate unblock, worker progress, or final-audit ready (completion notify only when `walk_away_mode: true`).
 
 ## Monitoring setup
 
@@ -175,7 +175,7 @@ When the operator says **"walk away"**, **"run unattended"**, or leaves after pr
 3. **Confirm notification channel** — gateway reachable; test delivery if unsure
 4. **Replace tmux watch with walk-away cron** — 5-minute recurring job monitors heartbeats, staleness, and intervention triggers (see `kanban-advanced:kanban-orchestrator` § Walk-away monitoring)
 5. **Tell the operator** what will trigger a notify vs what runs silently
-6. On **plan complete** (final audit done): run cleanup → postmortem; optional completion notify if `NOTIFY_ON_COMPLETE=true`
+6. On **plan complete** (final audit done): when `walk_away_mode: true`, `board_keeper` runs `kanban_walk_away_post_exec.sh`; otherwise orchestrator checkpoints for reconciliation → cleanup → postmortem
 
 ```bash
 # Walk-away monitoring cron (example — adjust path to your Hermes home)

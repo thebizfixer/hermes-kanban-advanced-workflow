@@ -95,3 +95,32 @@ _load_escalation_config() {
     fi
     return 0
 }
+
+# walk_away_mode: full unattended run including auto post-exec + completion notify.
+# Legacy: notify_on_complete key, NOTIFY_ON_COMPLETE / WALK_AWAY_MODE env.
+_walk_away_mode_enabled() {
+    local config_file="${1:-}"
+    local val="${WALK_AWAY_MODE:-}"
+    if [[ -z "$val" && -n "${NOTIFY_ON_COMPLETE:-}" ]]; then
+        val="${NOTIFY_ON_COMPLETE}"
+    fi
+    if [[ -z "$val" && -n "$config_file" && -f "$config_file" ]]; then
+        val="$(_read_config_key walk_away_mode "$config_file")"
+        if [[ -z "$val" ]]; then
+            val="$(_read_config_key notify_on_complete "$config_file")"
+        fi
+    fi
+    if [[ -z "$val" ]]; then
+        val="false"
+    fi
+    [[ "$val" == "true" || "$val" == "1" ]]
+}
+
+_resolve_active_plan_id() {
+    local repo_root="${1:-}"
+    local plan_id="${HERMES_KANBAN_PLAN_ID:-}"
+    if [[ -z "$plan_id" && -n "$repo_root" && -f "$repo_root/.hermes/kanban/logs/lifecycle_plan_id" ]]; then
+        plan_id="$(<"$repo_root/.hermes/kanban/logs/lifecycle_plan_id")"
+    fi
+    printf '%s\n' "$plan_id"
+}

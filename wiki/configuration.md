@@ -35,6 +35,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `PREFLIGHT_SKIP_API` | Skip API health check | unset |
 | `PREFLIGHT_SKIP_FS_CHECK` | Skip filesystem coherence check | unset |
 | `notify_lifecycle` | Per-card start/running/done gateway messages after gate completes (`kanban-lifecycle-notify-5m` cron) | `true` |
+| `walk_away_mode` | Unattended post-execution after final audit + completion notify (`kanban_walk_away_post_exec.sh`) | `false` |
 | `gateway_timeout_seconds` | Gateway timeout hint for commit-cadence advice | unset |
 | `final_audit_max_remediation_rounds` | Max post-flight remediation rounds before escalation (`final_audit_sanity.py`) | `2` |
 | `final_audit_overrides` | Tier 2 doc-coverage allowlist (array of `signal`, `path`, `rationale`) | `[]` |
@@ -60,7 +61,7 @@ subagent_gate:
 
 Blocking/warning severities match serial gate (preflight `fail` = WARN, not block). Full design: `plugin/data/references/parallel-subagent-gate.md`. Sad-path: E022 in `kanban-orchestrator-governance`.
 
-Set `notify_lifecycle: false` in `kanban-config.yaml` or dashboard **Cron → Lifecycle notify** (toggle off) to skip lifecycle cron provisioning. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged — lifecycle notify is a separate, lower-noise channel.
+Set `notify_lifecycle: false` or dashboard **Cron → Lifecycle notify** off to skip lifecycle cron provisioning. Set `walk_away_mode: true` or dashboard **Cron → Walk-away mode** on for unattended reconciliation → cleanup → postmortem → completion notify after final audit. Full contract: `plugin/data/references/walk-away-mode.md`. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged.
 
 ## Coding agent resolution
 

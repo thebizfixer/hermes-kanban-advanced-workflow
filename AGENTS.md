@@ -23,6 +23,7 @@ Load the relevant wiki page for detailed instructions:
 | How does governance work? | `wiki/governance.md` (§ Full pre-execution governance stack) |
 | Why block-on-create / decomposition workflow? | `wiki/decomposition-workflow.md` |
 | Parallel subagent pre-dispatch gate (default on) | `plugin/data/references/parallel-subagent-gate.md` + `wiki/configuration.md` § `subagent_gate` |
+| Walk-away mode (post-exec automation + completion notify) | `plugin/data/references/walk-away-mode.md` + `wiki/configuration.md` § `walk_away_mode` |
 | Something is broken | `wiki/troubleshooting.md` |
 | Supervisor hit a rail mid-card / mid-decompose | `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` or `wiki/in-flight-navigation.md` |
 | Coding agent auth / smoke failed (bootstrap passed, workers block) | `plugin/data/references/coding-agent-auth.md` → then `wiki/troubleshooting.md` |

@@ -11,6 +11,7 @@ DEFAULT_CODING_AGENT = "agent"
 DEFAULT_CODING_AGENT_MODEL = "auto"
 DEFAULT_POLICY_PROFILE = "balanced"
 DEFAULT_NOTIFY_LIFECYCLE = True
+DEFAULT_WALK_AWAY_MODE = False
 DEFAULT_SUBAGENT_GATE_ENABLED = True
 VALID_POLICY_PROFILES = frozenset({"advisory", "balanced", "strict"})
 
@@ -49,6 +50,7 @@ _MANAGED_KEYS = frozenset({
     "trigger_branch",
     "policy_profile",
     "notify_lifecycle",
+    "walk_away_mode",
     "orchestrator_profile",
     "worker_profile",
     "preflight_profiles",
@@ -326,6 +328,64 @@ def normalize_notify_lifecycle(value: str | bool | None) -> bool:
     return DEFAULT_NOTIFY_LIFECYCLE
 
 
+def normalize_walk_away_mode(value: str | bool | None) -> bool:
+    if value is None:
+        return DEFAULT_WALK_AWAY_MODE
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    if s in ("false", "0", "no", "off"):
+        return False
+    if s in ("true", "1", "yes", "on"):
+        return True
+    return DEFAULT_WALK_AWAY_MODE
+
+
+def normalize_notify_on_complete(value: str | bool | None) -> bool:
+    """Legacy alias for ``normalize_walk_away_mode``."""
+    return normalize_walk_away_mode(value)
+
+
+def resolve_walk_away_mode(
+    project_root: Path,
+    *,
+    walk_away_mode: str | bool | None = None,
+    config: dict[str, str] | None = None,
+    env: dict[str, str] | None = None,
+) -> bool:
+    """Explicit arg > walk_away_mode in YAML > legacy notify_on_complete > env > default false."""
+    if walk_away_mode is not None:
+        return normalize_walk_away_mode(walk_away_mode)
+    if config is None:
+        config = read_overlay_config(overlay_path(project_root))
+    if "walk_away_mode" in config:
+        return normalize_walk_away_mode(config["walk_away_mode"])
+    if "notify_on_complete" in config:
+        return normalize_walk_away_mode(config["notify_on_complete"])
+    env = env or {}
+    if env.get("WALK_AWAY_MODE"):
+        return normalize_walk_away_mode(env["WALK_AWAY_MODE"])
+    if env.get("NOTIFY_ON_COMPLETE"):
+        return normalize_walk_away_mode(env["NOTIFY_ON_COMPLETE"])
+    return DEFAULT_WALK_AWAY_MODE
+
+
+def resolve_notify_on_complete(
+    project_root: Path,
+    *,
+    notify_on_complete: str | bool | None = None,
+    config: dict[str, str] | None = None,
+    env: dict[str, str] | None = None,
+) -> bool:
+    """Legacy alias — prefer ``resolve_walk_away_mode``."""
+    return resolve_walk_away_mode(
+        project_root,
+        walk_away_mode=notify_on_complete,
+        config=config,
+        env=env,
+    )
+
+
 def resolve_notify_lifecycle(
     project_root: Path,
     *,
@@ -468,6 +528,8 @@ def build_overlay_yaml(
     coding_agent_model: str | None = None,
     policy_profile: str = DEFAULT_POLICY_PROFILE,
     notify_lifecycle: str | bool | None = None,
+    walk_away_mode: str | bool | None = None,
+    notify_on_complete: str | bool | None = None,
     bundle_path: Path | str,
     hermes_home: Path | str,
     existing: dict[str, str] | None = None,
@@ -498,6 +560,15 @@ def build_overlay_yaml(
             else existing.get("notify_lifecycle")
         )
         else "false",
+        "walk_away_mode": "true"
+        if normalize_walk_away_mode(
+            walk_away_mode
+            if walk_away_mode is not None
+            else notify_on_complete
+            if notify_on_complete is not None
+            else existing.get("walk_away_mode", existing.get("notify_on_complete"))
+        )
+        else "false",
         "orchestrator_profile": orchestrator_profile,
         "worker_profile": worker_profile,
         "preflight_profiles": preflight_profiles,
@@ -520,8 +591,8 @@ def build_overlay_yaml(
             lines.append(f'preflight_profiles: "{val}"')
         elif key in ("schema_version", "policy_profile", "coding_agent_model"):
             lines.append(f'{key}: "{val}"')
-        elif key == "notify_lifecycle":
-            lines.append(f"notify_lifecycle: {val}")
+        elif key in ("notify_lifecycle", "walk_away_mode"):
+            lines.append(f"{key}: {val}")
         else:
             lines.append(f"{key}: {val}")
 

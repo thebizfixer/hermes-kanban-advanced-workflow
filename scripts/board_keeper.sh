@@ -417,53 +417,35 @@ elif [ "$RUNNING" -eq 0 ] && [ "$READY" -eq 0 ] && [ "$TODO" -eq 0 ] && [ "$BLOC
     echo "⚠ ALL CARDS BLOCKED ($BLOCKED) — orchestrator intervention required"
 fi
 
-# ── Post-final-audit: trigger postmortem + cleanup (checked on subsequent ticks) ──
+# ── Post-final-audit: walk-away post-exec or orchestrator checkpoint signal ──
 PIPELINE_CURRENT=$(cat "$PIPELINE_STATE" 2>/dev/null || echo "")
 AUDIT_DONE_IDS=$(hermes kanban list 2>/dev/null | grep '✓' | awk '{print $2}')
 AUDIT_COMPLETE=false
 
-# Check if a final-audit card exists and is done
 for tid in $AUDIT_DONE_IDS; do
     TITLE=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1)
-    if echo "$TITLE" | grep -qi 'final.audit\|final audit'; then
+    if echo "$TITLE" | grep -qiE 'final[ -]audit'; then
         AUDIT_COMPLETE=true
         break
     fi
 done
 
 if [[ "$AUDIT_COMPLETE" == "true" ]] && [[ "$PIPELINE_CURRENT" == "READY_FOR_AUDIT" || "$PIPELINE_CURRENT" == "AUDIT_ISSUES" || "$PIPELINE_CURRENT" == "AUDIT_SKIPPED" ]]; then
-    echo ""
-    echo "=== Pipeline Stage 2-4: Postmortem + Cleanup ==="
-    
-    # Stage 2: Generate postmortem
-    if [[ -f "$GENERATE_POSTMORTEM" ]]; then
-        echo "→ Generating postmortem..."
-        PLAN_ID="${HERMES_KANBAN_PLAN_ID:-post_execution_governance_git_hygiene}"
-        python "$GENERATE_POSTMORTEM" --plan-id "$PLAN_ID" --output "$REPO_ROOT/.hermes/kanban/reports/" 2>&1 || true
-        echo "  Postmortem written"
-    else
-        yellow "  generate_postmortem.py not found — skipping"
-    fi
-    
-    # Stage 3: Git cleanup
-    if [[ -x "$GIT_SAFE_CLEANUP" ]]; then
-        echo "→ Running git cleanup..."
-        if [ "$DRY_RUN" = false ]; then
-            bash "$GIT_SAFE_CLEANUP" --clean --staging "$INTEGRATION_BRANCH" || true
+    PLAN_ID="$(_resolve_active_plan_id "$REPO_ROOT")"
+    if _walk_away_mode_enabled "$CONFIG_FILE" 2>/dev/null; then
+        echo ""
+        echo "=== Walk-away mode: unattended post-execution ==="
+        if [[ -f "$SCRIPT_DIR/kanban_walk_away_post_exec.sh" ]]; then
+            bash "$SCRIPT_DIR/kanban_walk_away_post_exec.sh" --plan-id "$PLAN_ID" || true
         else
-            bash "$GIT_SAFE_CLEANUP" --clean --dry-run --staging "$INTEGRATION_BRANCH" || true
+            yellow "  kanban_walk_away_post_exec.sh not found — skipping"
         fi
-        echo "  Cleanup complete"
+        echo "PIPELINE_COMPLETE" > "$PIPELINE_STATE"
     else
-        yellow "  git_safe_cleanup.sh not found — skipping"
+        echo ""
+        echo "KANBAN_COMPLETE — final audit done; orchestrator checkpoints required (walk_away_mode off)"
+        echo "PIPELINE_AWAITING_OPERATOR" > "$PIPELINE_STATE"
     fi
-    
-    # Stage 4: Remove monitoring crons (the board keeper self-removal note)
-    echo "→ Pipeline complete. Monitoring cron should be removed by cleanup script."
-    echo "PIPELINE_COMPLETE" > "$PIPELINE_STATE"
-    
-    echo ""
-    echo "🏁 PIPELINE COMPLETE — board archived, crons removed, worktrees cleaned"
 fi
 
 echo ""

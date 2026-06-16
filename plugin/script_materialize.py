@@ -8,6 +8,8 @@ HERMES_SCRIPT_NAMES = (
     "auto_unblock.sh",
     "board_keeper.sh",
     "kanban_lifecycle_notify.sh",
+    "kanban_completion_notify.sh",
+    "kanban_walk_away_post_exec.sh",
     "kanban_intervention_inc.sh",
     "kanban_git_ops.sh",
     "token_tracker.py",

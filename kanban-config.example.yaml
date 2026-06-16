@@ -68,8 +68,9 @@ gateway_timeout_seconds: 1800
 #   kanban.dispatch_stale_timeout_seconds = 14400  (via hermes config set at init)
 # Rationale: plugin/data/references/dispatch-stale-timeout.md
 
-# Notifications — per-card start/running/done after gate completes (walk-away lifecycle cron)
+# Notifications — per-card lifecycle cron; optional full walk-away (post-exec + completion notify)
 notify_lifecycle: true
+walk_away_mode: false
 
 # ---------------------------------------------------------------------------
 # Final audit (Tier 1/2 sanity + post-flight remediation)

@@ -42,12 +42,14 @@ Cross-reference: `kanban-advanced:kanban-postmortem` skill for section semantics
 
 ### 1. Archive all kanban tasks
 
-**Only after Step 0 succeeds.**
+**Only after Step 0 succeeds** (interactive path when `walk_away_mode: false`).
 
 ```bash
 hermes kanban archive <task_id>  # repeat for each task
 # Verify: hermes kanban list should show "(no matching tasks)"
 ```
+
+**Walk-away path (`walk_away_mode: true`):** do **not** run Steps 0–7 manually. After the final audit card completes, `board_keeper.sh` invokes `kanban_walk_away_post_exec.sh` (postmortem → archive → cleanup → completion notify). See `plugin/data/references/walk-away-mode.md`.
 
 ### 2. Remove wave crons (mandatory) + optional monitor cron
 ```bash
@@ -88,17 +90,19 @@ hermes kanban list
 # Should show "(no matching tasks)"
 ```
 
-## Completion notification opt-in
+## Walk-away completion notify
 
-**Off by default.** Walk-away runs stay silent on plan completion unless the operator opts in.
+When `walk_away_mode: true` (dashboard **Cron → Walk-away mode**), post-execution automation sends a non-intervention summary after postmortem and archive. When off (default), the orchestrator prompts through reconciliation, cleanup, and postmortem checkpoints.
 
-| Variable | Default | When `true` |
+| Config | Default | When enabled |
 | --- | --- | --- |
-| `NOTIFY_ON_COMPLETE` | unset / `false` | After **postmortem generation (Step 0)** and **board archive (Step 1)**, send a non-intervention summary via the Hermes gateway operator chat |
+| `walk_away_mode` | `false` | `kanban_walk_away_post_exec.sh` after final audit: reconciliation artifact → postmortem → archive → cleanup → gateway completion message |
 
-```bash
-export NOTIFY_ON_COMPLETE=true
+```yaml
+walk_away_mode: true
 ```
+
+See `plugin/data/references/walk-away-mode.md`.
 
 Completion message (no intervention prefix — see `kanban-advanced:kanban-notify`):
 

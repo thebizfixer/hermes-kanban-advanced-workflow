@@ -45,6 +45,7 @@ The dashboard loads **`/status`** first (fast), then **`/status?probe=1&git_fetc
   },
   "policy_profile": "balanced",
   "notify_lifecycle": true,
+  "walk_away_mode": false,
   "max_turns": 180,
   "profiles": {
     "kanban-advanced-orchestrator": {
@@ -194,6 +195,7 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
   "coding_agent_model": "auto",
   "policy_profile": "balanced",
   "notify_lifecycle": true,
+  "walk_away_mode": false,
   "max_turns": 180
 }
 ```
@@ -203,6 +205,8 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 `policy_profile`: `advisory` | `balanced` | `strict` — governance enforcement level (default `balanced`).
 
 `notify_lifecycle`: when `true` (default), provisions the per-card lifecycle notify cron at decomposition and sends gateway messages for card start/running/done after the gate completes.
+
+`walk_away_mode`: when `true`, `board_keeper.sh` runs unattended post-execution (reconciliation artifact, postmortem, archive, cleanup, completion notify) after final audit. Default `false` — orchestrator stops at post-execution checkpoints. See `plugin/data/references/walk-away-mode.md`.
 
 **Response:**
 ```json

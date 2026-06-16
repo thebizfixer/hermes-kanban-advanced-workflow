@@ -102,6 +102,25 @@ Per-plan cron lifecycle for wave progression and optional lifecycle notify. Uses
 
 State-diff lifecycle messages (start / running / done / catastrophic re-block) after the gate card completes. Separate from intervention notify (`kanban-advanced:kanban-notify`). Logs to `.hermes/kanban/logs/lifecycle.jsonl`. Config: `notify_lifecycle` in overlay (default `true`) or `NOTIFY_LIFECYCLE=false` to disable.
 
+### `kanban_completion_notify.sh`
+
+```bash
+bash scripts/kanban_completion_notify.sh \
+  --plan-id <plan_id> \
+  --done <n> \
+  --postmortem .hermes/kanban/reports/<plan_id>_postmortem_<date>.md
+```
+
+One-shot non-intervention gateway summary after walk-away post-execution (`kanban_walk_away_post_exec.sh`). Idempotent via `.hermes/kanban/logs/completion_notified_<plan_id>`. Requires `walk_away_mode: true` (dashboard **Cron → Walk-away mode**).
+
+### `kanban_walk_away_post_exec.sh`
+
+```bash
+bash scripts/kanban_walk_away_post_exec.sh --plan-id <plan_id>
+```
+
+Unattended post-execution pipeline when `walk_away_mode: true`: token report → postmortem → cron removal → archive → git cleanup → completion notify. Invoked by `board_keeper.sh` after final audit. Idempotent via `.hermes/kanban/logs/post_exec_complete_<plan_id>`. SSOT: `plugin/data/references/walk-away-mode.md`.
+
 ### `kanban_escalation_tracker.sh`
 
 ```bash
@@ -162,7 +181,7 @@ Syncs canonical skill files from `plugin/skills/` to `$HERMES_HOME/skills/kanban
 
 | Top-level | `lib/` |
 |-----------|--------|
-| `auto_unblock.sh`, `board_keeper.sh`, `kanban_lifecycle_notify.sh`, `kanban_intervention_inc.sh`, `kanban_git_ops.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py`, `gateway_hermes_home.sh`, `auto_unblock_core.sh`, `decompose_stamp.py`, `cross_plan_memory.py`, `plan_parse.py`, `cli_output_parse.py`, … |
+| `auto_unblock.sh`, `board_keeper.sh`, `kanban_lifecycle_notify.sh`, `kanban_completion_notify.sh`, `kanban_walk_away_post_exec.sh`, `kanban_intervention_inc.sh`, `kanban_git_ops.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py`, `gateway_hermes_home.sh`, `auto_unblock_core.sh`, `decompose_stamp.py`, `cross_plan_memory.py`, `plan_parse.py`, `cli_output_parse.py`, … |
 
 Init / dashboard **Update Plugin** use the same list via `plugin/script_materialize.py`. `--check` mode exits non-zero if materialized files have drifted from canonical.
 

@@ -197,9 +197,9 @@ If none apply, use `delegate_task` or answer directly.
 - **If no specialist fits, ask the user which profile to create.**
 This skill is the deeper playbook when you're an orchestrator profile whose whole job is routing.
 
-**Interaction model:** The user moves through the workflow with explicit trigger phrases. Planning: `"Plan this out"` → `"Do a sanity check"` → `"Harden the plan"` → `"Optimize for Kanban"`. Execution: `"Execute the plan"`. Post-execution: the orchestrator MUST stop at each checkpoint and ask before proceeding. Never auto-advance.
+**Interaction model:** The user moves through the workflow with explicit trigger phrases. Planning: `"Plan this out"` → `"Do a sanity check"` → `"Harden the plan"` → `"Optimize for Kanban"`. Execution: `"Execute the plan"`. Post-execution: when `walk_away_mode: false` (default), the orchestrator MUST stop at each checkpoint and ask before proceeding. When `walk_away_mode: true` (dashboard **Cron → Walk-away mode**), `board_keeper.sh` runs `kanban_walk_away_post_exec.sh` after final audit — do not wait for operator yes at reconciliation/cleanup/postmortem. See `plugin/data/references/walk-away-mode.md`.
 
-### Post-execution checkpoint sequence (mandatory)
+### Post-execution checkpoint sequence (mandatory when walk_away_mode off)
 
 After the last implementation card completes and the final audit passes:
 
@@ -207,7 +207,7 @@ After the last implementation card completes and the final audit passes:
 2. **Cleanup checkpoint** — Remove crons, archive board, clean worktrees. Ask: "Proceed to postmortem? Say yes."
 3. **Postmortem checkpoint** — Generate report, confirm all 8 sections. Present file path.
 
-At each checkpoint the orchestrator MUST present findings and wait for the user's explicit "yes" before proceeding. Silently finishing or skipping checkpoints is a governance violation. See `plugin/data/references/interaction-model.md` for the full contract with exact phrasing and anti-patterns.
+At each checkpoint the orchestrator MUST present findings and wait for the user's explicit "yes" before proceeding — **unless** `walk_away_mode: true` (then `kanban_walk_away_post_exec.sh` handles stages 1–3 autonomously after final audit). Silently finishing or skipping checkpoints without walk-away mode is a governance violation. See `plugin/data/references/interaction-model.md` and `plugin/data/references/walk-away-mode.md`.
 
 **Known vanilla hermes bugs:** See `plugin/data/references/vanilla-kanban-known-issues.md` — maps 12 upstream kanban bugs to structural workarounds. Load during Step 0b (Preflight) and apply fixes before decomposition.
 
@@ -714,7 +714,7 @@ tmux kill-session -t kanban-watch 2>/dev/null || true
    - `hermes gateway status` passes
    - Operator chat channel configured in Hermes config
    - Send a **test intervention-shaped message** and confirm receipt
-   - State the **8 intervention triggers**, **7 silent events**, and whether `NOTIFY_ON_COMPLETE` is set (handoff script in **`kanban-advanced:kanban-notify`**)
+   - State the **8 intervention triggers**, **7 silent events**, and whether **walk-away mode** is on (`walk_away_mode`)
 
 Optional: `hermes kanban notify-subscribe <audit_task_id>` for instant audit-ready ping.
 
@@ -724,9 +724,9 @@ Optional: `hermes kanban notify-subscribe <audit_task_id>` for instant audit-rea
    - Run **`kanban-advanced:kanban-cleanup`** (postmortem generation, board archive) — see **`kanban-advanced:kanban-postmortem`** / cleanup skill.
    - Remove monitoring cron (`cronjob(action="remove", job_id="<id>")`).
    - Complete the stranded root card if it auto-promoted to `ready`.
-   - Send completion notification per **`kanban-advanced:kanban-notify`** after postmortem is written (on by default; set `NOTIFY_ON_COMPLETE=false` to suppress).
+   - Post-execution runs via `kanban_walk_away_post_exec.sh` when walk-away mode is on; completion notify is the final step of that pipeline.
 
-**Operator boundary (walk-away):** Gateway pages are for true manual interventions only. Everything else — progress, heartbeats, successful auto-retry, non-intervention blocks — stays silent unless completion notify is opted in.
+**Operator boundary (walk-away):** Gateway pages are for true manual interventions only. Everything else — progress, heartbeats, successful auto-retry, non-intervention blocks — stays silent. A **plan complete** gateway summary is sent only when `walk_away_mode: true` (end of `kanban_walk_away_post_exec.sh`).
 
 ## Walk-away monitoring
 

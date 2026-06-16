@@ -30,6 +30,7 @@ from plugin.config_overlay import (  # noqa: E402
     normalize_optional_branch,
     normalize_policy_profile,
     normalize_notify_lifecycle,
+    normalize_walk_away_mode,
     overlay_path,
     read_overlay_config,
     resolve_branch_settings,
@@ -38,6 +39,7 @@ from plugin.config_overlay import (  # noqa: E402
     resolve_dispatch_profiles,
     resolve_hermes_home,
     resolve_notify_lifecycle,
+    resolve_walk_away_mode,
     resolve_plugin_install_dir,
     resolve_plugin_skills_src,
     resolve_policy_profile,
@@ -593,6 +595,9 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         "coding_agent_cli": coding_agent_cli,
         "policy_profile": resolve_policy_profile(project_root, env=env),
         "notify_lifecycle": resolve_notify_lifecycle(project_root, config=config),
+        "walk_away_mode": resolve_walk_away_mode(
+            project_root, config=config, env=env
+        ),
         "max_turns": _get_max_turns(
             project_root, orchestrator_config_show=orch_config_show
         ),
@@ -816,6 +821,17 @@ async def init(request: Request):
     else:
         notify_lifecycle = resolve_notify_lifecycle(project_root, env=env)
     output.append(f"   Notifications (lifecycle): {'on' if notify_lifecycle else 'off'}")
+    if "walk_away_mode" in body:
+        walk_away_mode = normalize_walk_away_mode(body.get("walk_away_mode"))
+    elif "notify_on_complete" in body:
+        walk_away_mode = normalize_walk_away_mode(body.get("notify_on_complete"))
+    elif "walk_away_mode" in existing_config:
+        walk_away_mode = normalize_walk_away_mode(existing_config["walk_away_mode"])
+    elif "notify_on_complete" in existing_config:
+        walk_away_mode = normalize_walk_away_mode(existing_config["notify_on_complete"])
+    else:
+        walk_away_mode = resolve_walk_away_mode(project_root, env=env)
+    output.append(f"   Walk-away mode: {'on' if walk_away_mode else 'off'}")
     if kept:
         output.append("   Preserved branch settings from existing kanban-config.yaml")
 
@@ -895,6 +911,7 @@ async def init(request: Request):
             coding_agent_model=coding_agent_model,
             policy_profile=policy_profile,
             notify_lifecycle=notify_lifecycle,
+            walk_away_mode=walk_away_mode,
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
             existing=existing_config,
@@ -1018,6 +1035,13 @@ async def save(request: Request):
     output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
     output.append(f"   Governance profile: {policy_profile}")
     output.append(f"   Notifications (lifecycle): {'on' if notify_lifecycle else 'off'}")
+    if "walk_away_mode" in body:
+        walk_away_mode = normalize_walk_away_mode(body.get("walk_away_mode"))
+    elif "notify_on_complete" in body:
+        walk_away_mode = normalize_walk_away_mode(body.get("notify_on_complete"))
+    else:
+        walk_away_mode = resolve_walk_away_mode(project_root, config=config, env=env)
+    output.append(f"   Walk-away mode: {'on' if walk_away_mode else 'off'}")
     _append_coding_agent_cli_log(
         output, coding_agent, coding_agent_model, probe=True
     )
@@ -1034,6 +1058,7 @@ async def save(request: Request):
             coding_agent_model=coding_agent_model,
             policy_profile=policy_profile,
             notify_lifecycle=notify_lifecycle,
+            walk_away_mode=walk_away_mode,
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
             existing=config,

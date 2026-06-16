@@ -232,7 +232,8 @@
     var _useState22 = useState("medium"), pendingReasoningEffort = _useState22[0], setPendingReasoningEffort = _useState22[1];
     var _useState23 = useState("medium"), initialReasoningEffort = _useState23[0], setInitialReasoningEffort = _useState23[1];
     var _useState24 = useState(true), notifyLifecycle = _useState24[0], setNotifyLifecycle = _useState24[1];
-    var _useState25 = useState(false), notifySaving = _useState25[0], setNotifySaving = _useState25[1];
+    var _useState25 = useState(false), walkAwayMode = _useState25[0], setWalkAwayMode = _useState25[1];
+    var _useState26 = useState(false), notifySaving = _useState26[0], setNotifySaving = _useState26[1];
 
     function resolvedCodingBinary() {
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
@@ -258,6 +259,15 @@
         setNotifyLifecycle(s.notify_lifecycle);
       } else if (s.notify_lifecycle != null) {
         setNotifyLifecycle(String(s.notify_lifecycle).toLowerCase() === "true" || s.notify_lifecycle === true);
+      }
+      if (typeof s.walk_away_mode === "boolean") {
+        setWalkAwayMode(s.walk_away_mode);
+      } else if (s.walk_away_mode != null) {
+        setWalkAwayMode(String(s.walk_away_mode).toLowerCase() === "true" || s.walk_away_mode === true);
+      } else if (typeof s.notify_on_complete === "boolean") {
+        setWalkAwayMode(s.notify_on_complete);
+      } else if (s.notify_on_complete != null) {
+        setWalkAwayMode(String(s.notify_on_complete).toLowerCase() === "true" || s.notify_on_complete === true);
       }
     }
 
@@ -323,7 +333,8 @@
         max_turns: parseInt(maxTurns) || 180,
         trigger_branch: triggerBranch.trim(),
         policy_profile: policyProfile,
-        notify_lifecycle: notifyLifecycle
+        notify_lifecycle: notifyLifecycle,
+        walk_away_mode: walkAwayMode
       };
     }
 
@@ -337,6 +348,22 @@
         reloadStatus();
       }).catch(function (e) {
         setNotifyLifecycle(!next);
+        addLines(["ERROR: " + e.message], "line-err");
+      }).finally(function () {
+        setNotifySaving(false);
+      });
+    }
+
+    function persistWalkAwayMode(next) {
+      setWalkAwayMode(next);
+      if (!initialized) return;
+      setNotifySaving(true);
+      var data = getFormData();
+      data.walk_away_mode = next;
+      apiSave(data).then(function () {
+        reloadStatus();
+      }).catch(function (e) {
+        setWalkAwayMode(!next);
         addLines(["ERROR: " + e.message], "line-err");
       }).finally(function () {
         setNotifySaving(false);
@@ -730,8 +757,34 @@
                   })
                 )
               ),
+              React.createElement("div", {
+                className: "flex items-center justify-between py-1.5 px-3 rounded-md border",
+                onClick: function (e) { e.stopPropagation(); }
+              },
+                React.createElement("span", { className: "text-sm" }, "Walk-away mode"),
+                React.createElement("button", {
+                  type: "button",
+                  role: "switch",
+                  "aria-checked": walkAwayMode,
+                  "aria-label": walkAwayMode ? "Walk-away mode on" : "Walk-away mode off",
+                  disabled: notifySaving || bootstrapping,
+                  className: cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    walkAwayMode ? "bg-primary" : "bg-muted",
+                    (notifySaving || bootstrapping) ? "opacity-60 cursor-not-allowed" : ""
+                  ),
+                  onClick: function () { persistWalkAwayMode(!walkAwayMode); }
+                },
+                  React.createElement("span", {
+                    className: cn(
+                      "pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform",
+                      walkAwayMode ? "translate-x-4" : "translate-x-0"
+                    )
+                  })
+                )
+              ),
               React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
-                "Gateway messages on card start, running, and done via kanban-lifecycle-notify cron. Off skips lifecycle cron provisioning; intervention paging is unchanged."
+                "Lifecycle: per-card progress via kanban-lifecycle-notify cron. Walk-away: unattended reconciliation, cleanup, postmortem, and completion notify after final audit (off = prompt through post-execution). Intervention paging unchanged."
               )
             )
           ),

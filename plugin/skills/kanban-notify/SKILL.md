@@ -49,7 +49,7 @@ bash ${bundle_path}/scripts/kanban_intervention_inc.sh
 
 ## Do not notify (non-intervention list)
 
-These events are **silent** during walk-away unless the operator opted into completion notify (`NOTIFY_ON_COMPLETE=true`):
+These events are **silent** during walk-away unless `walk_away_mode: true` (completion notify at end of post-exec pipeline):
 
 1. **Routine task completions** — worker `kanban_complete` and next-card promotion.
 2. **Single reclaim cycles** — first dispatcher reclaim (~15 min idle); orchestrator heartbeats and retries internally.
@@ -162,7 +162,7 @@ Before the operator walks away, state explicitly:
 - Gateway status (pass/fail)
 - The **8 intervention triggers** that will page them
 - The **7 silent events** above
-- Whether `NOTIFY_ON_COMPLETE` is set
+- Whether **walk-away mode** is on (`walk_away_mode: false` default — dashboard **Cron → Walk-away mode**)
 - Whether **lifecycle notify** is on (`notify_lifecycle: true` default — per-card progress, not intervention)
 
 ## Lifecycle notify (separate from intervention)
@@ -173,17 +173,18 @@ Before the operator walks away, state explicitly:
 |---------|--------|------|--------|
 | Intervention | orchestrator + `kanban_intervention_inc.sh` | 8 triggers only (auth exhausted, human gate, …) | 🚨 |
 | Lifecycle | `kanban_lifecycle_notify.sh` | Per-card start / running / done + catastrophic re-block **after gate completes** | ℹ️ (no 🚨) |
+| Completion | `kanban_completion_notify.sh` | One summary after postmortem + board archive | ✅ (no 🚨) |
 
 Lifecycle state-diff logs: `.hermes/kanban/logs/lifecycle.jsonl`. Disable with `notify_lifecycle: false` or dashboard toggle off — wave crons (`auto_unblock`, `board_keeper`) still run.
 
 **Do not** increment `interventions.count` for lifecycle messages. **Do not** use lifecycle notify for evaluation-chain denies — those are worker/orchestrator remediation unless they hit an intervention trigger.
 
-### Completion notification opt-in
+### Walk-away completion notify
 
-Off by default. When set, send a **non-intervention** summary after postmortem generation and board archive:
+**Off by default** (`walk_away_mode: false`). When walk-away mode is on, `kanban_walk_away_post_exec.sh` finishes with a **non-intervention** gateway summary:
 
-```bash
-export NOTIFY_ON_COMPLETE=true
+```yaml
+walk_away_mode: true
 ```
 
 Completion message (no 🚨 prefix):
@@ -213,7 +214,7 @@ Cross-reference: `hermes-kanban-advanced-workflow/prompts/orchestrator.md` § In
 - **Skipping intervention log.** Postmortem § Intervention Log reads `interventions.jsonl` and `interventions.count` — log every notify.
 - **Paging for token burn advisories.** >50K token alerts are orchestrator-only investigation; do not gateway-notify unless the task also hits an intervention trigger.
 - **CLI-only environments.** Do not promise push; use tmux `kanban watch` and log fallback.
-- **Final-audit subscribe vs intervention list.** `notify-subscribe` on the audit card is optional convenience; default walk-away stays silent until `NOTIFY_ON_COMPLETE=true`.
+- **Final-audit subscribe vs intervention list.** `notify-subscribe` on the audit card is optional convenience; completion notify runs only when `walk_away_mode: true`.
 - **Notifying after exhausted code-problem retries.** If all three escalation levels (coding agent → worker → orchestrator) failed to resolve a code or test failure, the correct response is a plan review, not a gateway page. Notify only if the block cause is environmental or requires approval outside the agents' authority (`HUMAN_INTERVENTION` from `board_keeper.sh`).
 
 ## When to notify vs stay silent (load in order)
@@ -225,7 +226,7 @@ Cross-reference: `hermes-kanban-advanced-workflow/prompts/orchestrator.md` § In
 | Final audit **exit 2** / max rounds / `gave_up` remediation | Yes (intervention) | `final-audit-sanity-check.md`; index L7 |
 | Final audit exit 1 mid-remediation wave | No (unless stuck > policy) | Orchestrator § Final audit problem router |
 | Token burn advisory only | No | Orchestrator investigates |
-| Plan complete + postmortem | Optional | `NOTIFY_ON_COMPLETE=true` — `kanban-cleanup` |
+| Plan complete + postmortem | When walk-away on | `walk_away_mode: true` — `kanban_walk_away_post_exec.sh` |
 | Unknown trigger | No until classified | This skill § Intervention trigger table |
 
 ## Cross-references

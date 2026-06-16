@@ -1,6 +1,6 @@
 # Interaction Model — Post-Execution Checkpoints
 
-After the last implementation card completes, the orchestrator MUST stop at each checkpoint and ask the user before proceeding. Never auto-advance.
+After the last implementation card completes, the orchestrator MUST stop at each checkpoint and ask the user before proceeding — **unless** `walk_away_mode: true` in overlay (dashboard **Cron → Walk-away mode**). When walk-away mode is on, `board_keeper.sh` invokes `kanban_walk_away_post_exec.sh` after final audit without operator prompts. See `plugin/data/references/walk-away-mode.md`.
 
 ## Checkpoint sequence (mandatory)
 
@@ -57,11 +57,13 @@ Board complete. Review the postmortem before the next plan.
 
 ## Timing
 
-The orchestrator should present each checkpoint within 1-2 turns of the previous step completing. If the user doesn't respond, wait — do not auto-advance. If >30 minutes pass with no response, surface a summary of what's waiting.
+When `walk_away_mode: false` (default), the orchestrator should present each checkpoint within 1-2 turns of the previous step completing. If the user doesn't respond, wait — do not auto-advance. If >30 minutes pass with no response, surface a summary of what's waiting.
+
+When `walk_away_mode: true`, `board_keeper.sh` runs `kanban_walk_away_post_exec.sh` after final audit — checkpoints 2–4 are automated; do not wait for operator yes.
 
 ## Anti-patterns
 
-- **Silently finishing.** The orchestrator completes the final audit and says nothing. The user has to check the board manually.
-- **Skipping checkpoints.** "All done — reconciliation, cleanup, and postmortem complete." All three in one message with no user gate.
+- **Silently finishing (walk_away_mode off).** The orchestrator completes the final audit and says nothing. The user has to check the board manually.
+- **Skipping checkpoints without walk-away mode.** "All done — reconciliation, cleanup, and postmortem complete." All three in one message with no user gate when `walk_away_mode: false`.
 - **Assuming consent.** "I'll proceed to reconciliation now." The user didn't say yes.
 - **Missing data.** Token log or intervention counter missing → flag it, don't skip the section. Estimate from logs if data sources are absent.
