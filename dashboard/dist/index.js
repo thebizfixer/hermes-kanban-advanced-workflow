@@ -626,30 +626,40 @@
         )
       ),
 
-      // ── Two-column grid (row 1: Project | Coding Agent; row 2: Profiles | Cron + Governance) ──
+      // ── Settings grid (left: Profiles → Cron → Project; right: Coding Agent → Governance) ──
       React.createElement("div", { className: "grid grid-cols-2 gap-4 items-stretch" },
 
-          // Project
-          React.createElement(Card, { className: "h-full" },
+          // Profiles (top left — pairs with Coding Agent row height)
+          React.createElement(Card, { className: "h-full min-h-0 flex flex-col" },
             React.createElement(CardHeader, null,
-              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Project")
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Profiles")
             ),
-            React.createElement(CardContent, { className: "space-y-4" },
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Working branch"),
-                React.createElement(Input, { value: workingBranch, onChange: function (e) { setWorkingBranch(e.target.value); }, placeholder: "main", className: "h-9" }),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Integration branch for worktree commits. Defaults to your git checkout / origin default.")
-              ),
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Trigger branch"),
-                React.createElement(Input, { value: triggerBranch, onChange: function (e) { setTriggerBranch(e.target.value); }, placeholder: "Optional", className: "h-9" }),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "The protected branch agents should NOT push to. Optional.")
+            React.createElement(CardContent, { className: "flex flex-col flex-1 space-y-4" },
+              (function () {
+                var dispatch = (status && status.dispatch_profiles) || { orchestrator: "kanban-advanced-orchestrator", worker: "kanban-advanced-worker" };
+                var rows = [
+                  { key: "orchestrator", label: dispatch.orchestrator || "kanban-advanced-orchestrator" },
+                  { key: "worker", label: dispatch.worker || "kanban-advanced-worker" }
+                ];
+                return rows.map(function (row) {
+                  return React.createElement("div", {
+                    key: row.label,
+                    className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors",
+                    onClick: function () { openModelPicker(row.label); }
+                  },
+                    React.createElement("span", { className: "text-sm" }, row.label),
+                    profileBadge(status && status.profiles && status.profiles[row.label])
+                  );
+                });
+              })(),
+              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-auto leading-snug" },
+                "Click a profile to change model and reasoning effort."
               )
             )
           ),
 
-          // Coding agent
-          React.createElement(Card, { className: "h-full" },
+          // Coding agent (top right)
+          React.createElement(Card, { className: "h-full min-h-0 flex flex-col" },
             React.createElement(CardHeader, null,
               React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Coding Agent")
             ),
@@ -688,96 +698,89 @@
             )
           ),
 
-          // Profiles (stretched to match Governance & Tuning row height)
-          React.createElement(Card, { className: "h-full flex flex-col" },
+          // Cron (middle left)
+          React.createElement(Card, { className: "h-full min-h-0 flex flex-col" },
             React.createElement(CardHeader, null,
-              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Profiles")
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Cron")
             ),
-            React.createElement(CardContent, { className: "flex flex-col flex-1 space-y-2" },
-              (function () {
-                var dispatch = (status && status.dispatch_profiles) || { orchestrator: "kanban-advanced-orchestrator", worker: "kanban-advanced-worker" };
-                var rows = [
-                  { key: "orchestrator", label: dispatch.orchestrator || "kanban-advanced-orchestrator" },
-                  { key: "worker", label: dispatch.worker || "kanban-advanced-worker" }
-                ];
-                return rows.map(function (row) {
-                  return React.createElement("div", {
-                    key: row.label,
-                    className: "flex items-center justify-between py-1.5 px-3 rounded-md border hover:bg-accent/5 cursor-pointer transition-colors",
-                    onClick: function () { openModelPicker(row.label); }
-                  },
-                    React.createElement("span", { className: "text-sm" }, row.label),
-                    profileBadge(status && status.profiles && status.profiles[row.label])
-                  );
-                });
-              })(),
-              React.createElement("p", { className: "text-[11px] text-muted-foreground mt-auto leading-snug" },
-                "Click a profile to change model and reasoning effort."
+            React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", {
+                className: "flex items-center justify-between py-1.5 px-3 rounded-md border",
+                onClick: function (e) { e.stopPropagation(); }
+              },
+                React.createElement("span", { className: "text-sm" }, "Lifecycle notify"),
+                React.createElement("button", {
+                  type: "button",
+                  role: "switch",
+                  "aria-checked": notifyLifecycle,
+                  "aria-label": notifyLifecycle ? "Lifecycle cron notifications on" : "Lifecycle cron notifications off",
+                  disabled: notifySaving || bootstrapping,
+                  className: cn(
+                    "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+                    notifyLifecycle ? "bg-primary" : "bg-muted",
+                    (notifySaving || bootstrapping) ? "opacity-60 cursor-not-allowed" : ""
+                  ),
+                  onClick: function () { persistNotifyLifecycle(!notifyLifecycle); }
+                },
+                  React.createElement("span", {
+                    className: cn(
+                      "pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform",
+                      notifyLifecycle ? "translate-x-4" : "translate-x-0"
+                    )
+                  })
+                )
+              ),
+              React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
+                "Gateway messages on card start, running, and done via kanban-lifecycle-notify cron. Off skips lifecycle cron provisioning; intervention paging is unchanged."
               )
             )
           ),
 
-          // Cron + Governance (stacked in one grid cell — same row height as Profiles)
-          React.createElement("div", { className: "flex flex-col gap-4 h-full min-h-0" },
-            React.createElement(Card, { className: "shrink-0" },
-              React.createElement(CardHeader, { className: "pb-2" },
-                React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Cron")
-              ),
-              React.createElement(CardContent, { className: "space-y-2 pt-0" },
-                React.createElement("div", {
-                  className: "flex items-center justify-between py-1.5 px-3 rounded-md border",
-                  onClick: function (e) { e.stopPropagation(); }
-                },
-                  React.createElement("span", { className: "text-sm" }, "Lifecycle notify"),
-                  React.createElement("button", {
-                    type: "button",
-                    role: "switch",
-                    "aria-checked": notifyLifecycle,
-                    "aria-label": notifyLifecycle ? "Lifecycle cron notifications on" : "Lifecycle cron notifications off",
-                    disabled: notifySaving || bootstrapping,
-                    className: cn(
-                      "relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
-                      notifyLifecycle ? "bg-primary" : "bg-muted",
-                      (notifySaving || bootstrapping) ? "opacity-60 cursor-not-allowed" : ""
-                    ),
-                    onClick: function () { persistNotifyLifecycle(!notifyLifecycle); }
-                  },
-                    React.createElement("span", {
-                      className: cn(
-                        "pointer-events-none block h-4 w-4 rounded-full bg-background shadow transition-transform",
-                        notifyLifecycle ? "translate-x-4" : "translate-x-0"
-                      )
-                    })
-                  )
-                ),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground leading-snug" },
-                  "Gateway messages on card start, running, and done via kanban-lifecycle-notify cron. Off skips lifecycle cron provisioning; intervention paging is unchanged."
-                )
-              )
+          // Spacer (middle right — keeps row 2 aligned with Cron only on the left)
+          React.createElement("div", { "aria-hidden": true, className: "min-h-0" }),
+
+          // Project (bottom left — pairs with Governance row height)
+          React.createElement(Card, { className: "h-full min-h-0 flex flex-col" },
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Project")
             ),
-            React.createElement(Card, { className: "flex-1 flex flex-col min-h-0" },
-              React.createElement(CardHeader, null,
-                React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Governance & Tuning")
+            React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Working branch"),
+                React.createElement(Input, { value: workingBranch, onChange: function (e) { setWorkingBranch(e.target.value); }, placeholder: "main", className: "h-9" }),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Integration branch for worktree commits. Defaults to your git checkout / origin default.")
               ),
-              React.createElement(CardContent, { className: "space-y-4" },
-                React.createElement("div", { className: "space-y-1.5" },
-                  React.createElement(Label, { className: "text-xs" }, "Governance profile"),
-                  React.createElement("select", {
-                    value: policyProfile,
-                    onChange: function (e) { setPolicyProfile(e.target.value); },
-                    className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  },
-                    POLICY_PROFILES.map(function (p) {
-                      return React.createElement("option", { key: p.value, value: p.value }, p.label);
-                    })
-                  ),
-                  React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Controls card policy, evaluation chain, and validation gates. Use strict for walk-away execution.")
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Trigger branch"),
+                React.createElement(Input, { value: triggerBranch, onChange: function (e) { setTriggerBranch(e.target.value); }, placeholder: "Optional", className: "h-9" }),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "The protected branch agents should NOT push to. Optional.")
+              )
+            )
+          ),
+
+          // Governance & Tuning (bottom right)
+          React.createElement(Card, { className: "h-full min-h-0 flex flex-col" },
+            React.createElement(CardHeader, null,
+              React.createElement(CardTitle, { className: "text-sm font-semibold uppercase tracking-wide text-muted-foreground" }, "Governance & Tuning")
+            ),
+            React.createElement(CardContent, { className: "space-y-4" },
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Governance profile"),
+                React.createElement("select", {
+                  value: policyProfile,
+                  onChange: function (e) { setPolicyProfile(e.target.value); },
+                  className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                },
+                  POLICY_PROFILES.map(function (p) {
+                    return React.createElement("option", { key: p.value, value: p.value }, p.label);
+                  })
                 ),
-                React.createElement("div", { className: "space-y-1.5" },
-                  React.createElement(Label, { className: "text-xs" }, "Max turns"),
-                  React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
-                  React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for plan decomposition. Default is 90.")
-                )
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Controls card policy, evaluation chain, and validation gates. Use strict for walk-away execution.")
+              ),
+              React.createElement("div", { className: "space-y-1.5" },
+                React.createElement(Label, { className: "text-xs" }, "Max turns"),
+                React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
+                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for plan decomposition. Default is 90.")
               )
             )
           )
