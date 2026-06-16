@@ -279,6 +279,7 @@
         opts.forceFull ||
         !sessionGreen && (!(cached && cached.probedAt) || !cached.probeGreen)
       );
+      var needGitFetch = opts.full !== false && !needProbe;
 
       setLoading(true);
       return apiStatus().then(function (s) {
@@ -291,20 +292,37 @@
         });
         setLoading(false);
 
-        if (!needProbe) return merged;
+        if (needProbe) {
+          setStatusProbing(true);
+          return apiStatus("probe=1&git_fetch=1").then(function (full) {
+            var complete = mergeStatusFields(merged, full);
+            setStatus(complete);
+            applyStatusToForm(complete);
+            writeSessionStatus(complete, { probed: true });
+            setStatusProbing(false);
+            return complete;
+          }).catch(function () {
+            setStatusProbing(false);
+            return merged;
+          });
+        }
 
-        setStatusProbing(true);
-        return apiStatus("probe=1&git_fetch=1").then(function (full) {
-          var complete = mergeStatusFields(merged, full);
-          setStatus(complete);
-          applyStatusToForm(complete);
-          writeSessionStatus(complete, { probed: true });
-          setStatusProbing(false);
-          return complete;
-        }).catch(function () {
-          setStatusProbing(false);
-          return merged;
-        });
+        if (needGitFetch) {
+          return apiStatus("git_fetch=1").then(function (gitStatus) {
+            var complete = mergeStatusFields(merged, gitStatus);
+            setStatus(complete);
+            applyStatusToForm(complete);
+            writeSessionStatus(complete, {
+              keepProbedAt: sessionGreen && cached ? cached.probedAt : 0,
+              keepProbeGreen: sessionGreen
+            });
+            return complete;
+          }).catch(function () {
+            return merged;
+          });
+        }
+
+        return merged;
       }).catch(function (e) {
         setLoading(false);
         setStatusProbing(false);
