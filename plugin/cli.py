@@ -471,6 +471,7 @@ def _handle_init(args) -> int:
             bundle_path=plugin_root,
             hermes_home=hermes_home,
             existing=existing_config,
+            project_root=project_root,
         ),
         encoding="utf-8",
     )

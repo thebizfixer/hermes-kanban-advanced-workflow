@@ -1,7 +1,7 @@
 ---
 name: kanban-orchestrator-governance
 description: Load when pre-dispatch gate FAILs, attestation blocks, validate_board fails, or decomposition stalls. Pitfalls + A/P/G codes — not the happy-path SOP.
-version: 1.1.0
+version: 1.2.0
 metadata:
   hermes:
     tags: [kanban, governance, reference, pitfalls, orchestrator]
@@ -40,6 +40,20 @@ Detail: `wiki/governance.md` § Layer 2. Run: `bash <BUNDLE>/scripts/pre_dispatc
 | cron_scripts | FAIL |
 | cron_hermes_path | FAIL |
 | gateway_running | WARN |
+
+## Parallel subagent gate (E022)
+
+Default orchestrator path when `subagent_gate.enabled` is not `false` and `delegate_task` / `delegation` is available. Serial fallback: `pre_dispatch_gate.sh`.
+
+| Symptom | Tier | Recovery |
+|---------|------|----------|
+| Subagent timeout (plan/env/infra) | T2 | E022 — note domain; run serial `pre_dispatch_gate.sh` |
+| Malformed subagent JSON | T2 | Serial fallback |
+| `delegation` toolset missing | T1 | Serial fallback (parallel default needs delegation) |
+| Parallel pass but serial fail | T3 | Investigate skipped check — prefer serial until resolved |
+| Force serial only | T1 | `subagent_gate.enabled: false` in overlay |
+
+Detail: `plugin/data/references/parallel-subagent-gate.md`. Config: `wiki/configuration.md` § `subagent_gate`.
 
 ## Attestation A001–A003
 

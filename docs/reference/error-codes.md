@@ -27,6 +27,7 @@ Canonical registry: `plugin/data/registry/error-codes.yaml` (bundled with the pl
 | E019      | error         | Destructive git op (reset --hard / theirs)    | Yes   |
 | E020      | error         | Agent output unparseable / missing usage      | Yes   |
 | E021      | error         | Worktree incomplete (missing kanban scripts)  | No    |
+| E022      | error         | Parallel subagent gate domain timeout           | Yes   |
 | P001-P009 | error/warning | Card body policy violations                   | No    |
 | A001-A003 | error         | Attestation missing/stale/tampered            | No    |
 | PR001     | error         | Profile no config                             | No    |

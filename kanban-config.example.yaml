@@ -87,3 +87,16 @@ escalation_max_attempts:
   coding_agent: 3
   worker: 3
   orchestrator: 3
+
+# ---------------------------------------------------------------------------
+# Parallel subagent gate (default on — Hermes delegate_task; serial fallback)
+# Set enabled: false to force pre_dispatch_gate.sh only. See parallel-subagent-gate.md
+# ---------------------------------------------------------------------------
+subagent_gate:
+  enabled: true
+  timeouts:
+    plan_gate: 30
+    env_gate: 120
+    infra_gate: 15
+    plan_parse: 60
+    cron_setup: 30

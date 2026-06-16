@@ -1,0 +1,3 @@
+# Shell scripts ship LF-only (sanity_check.sh enforces). Git Bash / WSL / Linux run them directly;
+# Windows checkouts should not rewrite to CRLF on commit.
+*.sh text eol=lf

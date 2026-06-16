@@ -14,6 +14,10 @@ After all blocking checks pass, runs **`coding_agent_auth_prewarm`**: when `KANB
 
 Added checks in v1.1: `test -x` (not just `test -f`) for cron scripts, and hermes PATH verification so crons can invoke `hermes kanban` commands.
 
+### Parallel subagent gate (optional)
+
+When `subagent_gate.enabled` is not `false` (default **true**) and the orchestrator profile has the `delegation` toolset, the orchestrator runs plan/env/infra checks via Hermes `delegate_task` in parallel instead of invoking this script. Attestation and `coding_agent_auth_prewarm` still run serially after collection. Falls back to this script when parallel is disabled, delegation is missing, or E022. `kanban_handoff.py` always uses this script at handoff build. See `plugin/data/references/parallel-subagent-gate.md`.
+
 ## Board validation (`validate_board.sh`)
 
 ```bash

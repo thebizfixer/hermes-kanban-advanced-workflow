@@ -34,6 +34,7 @@ done
 | `A001`/`A002` attestation | L1 | T2 | MBB | `python3 "$BUNDLE/scripts/kanban_attestation.py" <plan_id>` | PASS stamped | `wiki/governance.md` § L1 |
 | `A003` tamper | L1 | T3 | Op | Re-run preflight + attestation from clean state | New attestation checksum | T3 — investigate |
 | gate FAIL | L2 | T2 | MBB | `bash "$BUNDLE/scripts/pre_dispatch_gate.sh" <plan_id>` | 0 failures | `wiki/governance.md` § L2 |
+| subagent gate timeout / E022 | L2 | T2 | MBB | Serial fallback: `pre_dispatch_gate.sh` | Match or fix domain | `parallel-subagent-gate.md` |
 | model ping / stepfun silent | L1 | T2 | MBB | `preflight.sh`; fix profile model YAML | `model_reachability` pass | `coding-agent-auth.md` |
 | `Unknown provider nous portal` | L1 | T3 | Op | Set `model.provider: nous` in profile config | Worker chat responds | `wiki/troubleshooting.md` |
 

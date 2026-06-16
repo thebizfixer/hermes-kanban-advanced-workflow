@@ -11,6 +11,7 @@ DEFAULT_CODING_AGENT = "agent"
 DEFAULT_CODING_AGENT_MODEL = "auto"
 DEFAULT_POLICY_PROFILE = "balanced"
 DEFAULT_NOTIFY_LIFECYCLE = True
+DEFAULT_SUBAGENT_GATE_ENABLED = True
 VALID_POLICY_PROFILES = frozenset({"advisory", "balanced", "strict"})
 
 DEFAULT_WORKER_PROFILE = "kanban-advanced-worker"
@@ -341,6 +342,59 @@ def resolve_notify_lifecycle(
     return DEFAULT_NOTIFY_LIFECYCLE
 
 
+def _parse_subagent_gate_enabled_from_text(text: str) -> bool | None:
+    """Return enabled flag when subagent_gate block is present; else None (use default)."""
+    in_block = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("subagent_gate:"):
+            in_block = True
+            continue
+        if in_block:
+            if ":" in stripped and not line[:1].isspace():
+                break
+            if stripped.startswith("enabled:"):
+                val = stripped.split(":", 1)[1].strip().strip('"').strip("'").lower()
+                return val in ("true", "1", "yes", "on")
+    return None
+
+
+def normalize_subagent_gate_enabled(value: str | bool | None) -> bool:
+    if value is None:
+        return DEFAULT_SUBAGENT_GATE_ENABLED
+    if isinstance(value, bool):
+        return value
+    s = str(value).strip().lower()
+    if s in ("false", "0", "no", "off"):
+        return False
+    if s in ("true", "1", "yes", "on"):
+        return True
+    return DEFAULT_SUBAGENT_GATE_ENABLED
+
+
+def resolve_subagent_gate_enabled(
+    project_root: Path,
+    *,
+    subagent_gate_enabled: str | bool | None = None,
+    config: dict[str, str] | None = None,
+) -> bool:
+    """Explicit arg > kanban-config.yaml subagent_gate.enabled > default true."""
+    if subagent_gate_enabled is not None:
+        return normalize_subagent_gate_enabled(subagent_gate_enabled)
+    config_path = overlay_path(project_root)
+    if config_path.is_file():
+        parsed = _parse_subagent_gate_enabled_from_text(
+            config_path.read_text(encoding="utf-8")
+        )
+        if parsed is not None:
+            return parsed
+    if config and "subagent_gate_enabled" in config:
+        return normalize_subagent_gate_enabled(config["subagent_gate_enabled"])
+    return DEFAULT_SUBAGENT_GATE_ENABLED
+
+
 def sync_dispatch_runtime_env(
     project_root: Path,
     env: dict[str, str] | None = None,
@@ -417,6 +471,7 @@ def build_overlay_yaml(
     bundle_path: Path | str,
     hermes_home: Path | str,
     existing: dict[str, str] | None = None,
+    project_root: Path | None = None,
 ) -> str:
     """Build overlay YAML, preserving user keys not managed by init/save."""
     from plugin.coding_agent import normalize_coding_agent_model
@@ -455,6 +510,10 @@ def build_overlay_yaml(
     if trigger_branch:
         managed["trigger_branch"] = trigger_branch
 
+    subagent_enabled = DEFAULT_SUBAGENT_GATE_ENABLED
+    if project_root is not None:
+        subagent_enabled = resolve_subagent_gate_enabled(project_root)
+
     lines = ["# kanban-advanced config overlay"]
     for key, val in managed.items():
         if key == "preflight_profiles":
@@ -479,6 +538,15 @@ def build_overlay_yaml(
         "  coding_agent: 3",
         "  worker: 3",
         "  orchestrator: 3",
+        "",
+        "subagent_gate:",
+        f"  enabled: {'true' if subagent_enabled else 'false'}",
+        "  timeouts:",
+        "    plan_gate: 30",
+        "    env_gate: 120",
+        "    infra_gate: 15",
+        "    plan_parse: 60",
+        "    cron_setup: 30",
         "",
     ])
     return "\n".join(lines)

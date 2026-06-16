@@ -183,6 +183,14 @@ codes:
     source: worker_sanity_step_3
     retry: false
 
+  E022:
+    code: E022_SUBAGENT_GATE_TIMEOUT
+    severity: error
+    description: "Parallel pre-dispatch subagent did not return within configured domain timeout (plan, env, or infra gate)"
+    recovery: "Fall back to bash <BUNDLE>/scripts/pre_dispatch_gate.sh <plan_id>. Increase subagent_gate.timeouts in overlay or set subagent_gate.enabled: false for serial-only. See plugin/data/references/parallel-subagent-gate.md."
+    source: orchestrator_pre_dispatch
+    retry: true
+
   # ── Card body policy errors (Workstream 3) ──
   P001:
     code: P001_MISSING_FILES_LINE

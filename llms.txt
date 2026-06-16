@@ -97,6 +97,7 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 - Data: `plugin/data/` (references, registry, policies, prompts)
 - Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, check_coding_agent_cli.py, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py, verify_goal_cards.py, final_audit_sanity.py, generate_postmortem.py)
 - Handoff: `kanban_handoff.py` stamps `pre_dispatch_gate`, `BUNDLE_ROOT`, `gate_script`, `cards_yaml`; orchestrator skips gate re-run when PASSED — see `wiki/decomposition-workflow.md` § Board-mediated handoff
+- Parallel subagent gate (default on): `subagent_gate.enabled` in overlay (default true when absent) + orchestrator `delegation` toolset — `plugin/data/references/parallel-subagent-gate.md`; serial fallback `pre_dispatch_gate.sh`; E022 on domain timeout
 - In-flight sad-path: index `plugin/skills/kanban-advanced/references/in-flight-governance-index.md` (`skill_view`); hub `wiki/in-flight-navigation.md`; regression `plugin/data/references/handoff-regression-checklist.md`
 - Install/bootstrap verification: `wiki/plugin-verification.md` — `smoke_test_plugin.py`, `sanity_check.sh`, `provision.sh --check`, `governance_integrity.sh`, unit test suite; platforms: `PLATFORM_NOTES.md`
 - Worker E021: Step 3 blocks incomplete worktrees (missing `.hermes/scripts/` in worktree) before smoke — not eval-chain

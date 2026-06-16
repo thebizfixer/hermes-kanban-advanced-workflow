@@ -898,6 +898,7 @@ async def init(request: Request):
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
             existing=existing_config,
+            project_root=project_root,
         ),
         encoding="utf-8",
     )
@@ -1036,6 +1037,7 @@ async def save(request: Request):
             bundle_path=plugin_root,
             hermes_home=str(hermes_home),
             existing=config,
+            project_root=project_root,
         ),
         encoding="utf-8",
     )

@@ -152,6 +152,50 @@
           }
         }
       }
+    },
+    "subagent_gate": {
+      "type": "object",
+      "description": "Optional parallel pre-dispatch gate via Hermes delegate_task subagents. When enabled=false or delegation toolset unavailable, orchestrator falls back to pre_dispatch_gate.sh.",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Use parallel subagent gate in orchestrator session instead of serial pre_dispatch_gate.sh.",
+          "default": true
+        },
+        "timeouts": {
+          "type": "object",
+          "description": "Per-domain wall-clock timeouts (seconds) before orchestrator treats subagent as failed.",
+          "additionalProperties": false,
+          "properties": {
+            "plan_gate": {
+              "type": "integer",
+              "minimum": 5,
+              "default": 30
+            },
+            "env_gate": {
+              "type": "integer",
+              "minimum": 15,
+              "default": 120
+            },
+            "infra_gate": {
+              "type": "integer",
+              "minimum": 5,
+              "default": 15
+            },
+            "plan_parse": {
+              "type": "integer",
+              "minimum": 10,
+              "default": 60
+            },
+            "cron_setup": {
+              "type": "integer",
+              "minimum": 5,
+              "default": 30
+            }
+          }
+        }
+      }
     }
   }
 }

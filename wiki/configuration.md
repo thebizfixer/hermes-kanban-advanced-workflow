@@ -38,8 +38,27 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `gateway_timeout_seconds` | Gateway timeout hint for commit-cadence advice | unset |
 | `final_audit_max_remediation_rounds` | Max post-flight remediation rounds before escalation (`final_audit_sanity.py`) | `2` |
 | `final_audit_overrides` | Tier 2 doc-coverage allowlist (array of `signal`, `path`, `rationale`) | `[]` |
+| `subagent_gate.enabled` | Parallel pre-dispatch gate via Hermes `delegate_task` (orchestrator session); serial fallback when `false` or no `delegation` toolset | `true` |
+| `subagent_gate.timeouts` | Per-domain seconds before E022 (`plan_gate`, `env_gate`, `infra_gate`, `plan_parse`, `cron_setup`) | see example YAML |
 
 `final_audit_overrides` is **operator-owned**: read at audit time from overlay YAML but **not** in init `_MANAGED_KEYS` — re-run `hermes kanban-advanced init` does not overwrite your allowlist. Edit `.hermes/kanban-overrides/kanban-config.yaml` directly; schema in `schema/kanban-config.schema.json`. See `plugin/data/references/final-audit-doc-coverage.md`.
+
+### Parallel subagent gate (`subagent_gate`)
+
+**Default on.** Orchestrator runs plan/env/infra checks via Hermes `delegate_task` in parallel, then attestation + prewarm serially. **Serial fallback:** `pre_dispatch_gate.sh` when `enabled: false`, `delegation` toolset missing, parallel timeout (E022), or malformed subagent JSON. Absent `subagent_gate` block in overlay → treated as enabled (`plugin/config_overlay.py`). Handoff still runs serial gate at card build.
+
+```yaml
+subagent_gate:
+  enabled: true   # set false to force serial gate only
+  timeouts:
+    plan_gate: 30
+    env_gate: 120
+    infra_gate: 15
+    plan_parse: 60
+    cron_setup: 30
+```
+
+Blocking/warning severities match serial gate (preflight `fail` = WARN, not block). Full design: `plugin/data/references/parallel-subagent-gate.md`. Sad-path: E022 in `kanban-orchestrator-governance`.
 
 Set `notify_lifecycle: false` in `kanban-config.yaml` or dashboard **Cron → Lifecycle notify** (toggle off) to skip lifecycle cron provisioning. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged — lifecycle notify is a separate, lower-noise channel.
 

@@ -1,7 +1,7 @@
 ---
 name: kanban-orchestrator
 description: Decomposition playbook + anti-temptation rules + six-sigma audit for orchestrator profiles routing work through Kanban.
-version: 5.4.0
+version: 5.5.1
 metadata:
   hermes:
     tags: [kanban, multi-agent, orchestration, routing]
@@ -217,13 +217,40 @@ At each checkpoint the orchestrator MUST present findings and wait for the user'
 
 ### Pre-dispatch gate (replaces Steps 0a–0e)
 
-A single script gates all pre-decomposition checks. Run before any card creation:
+**Default path (parallel):** Run the parallel subagent gate unless `subagent_gate.enabled: false` in overlay **or** the orchestrator profile lacks the `delegation` toolset. Full design: `plugin/data/references/parallel-subagent-gate.md`.
+
+```
+# Opt-out check — serial fallback when disabled or delegation missing
+grep -E 'enabled:\s*false' .hermes/kanban-overrides/kanban-config.yaml 2>/dev/null | grep -q . && use_serial_gate=1
+hermes tools list 2>/dev/null | grep -q delegation || use_serial_gate=1
+
+# Wave 1 — three domains in parallel (toolsets: ["terminal"] only)
+delegate_task(tasks=[
+  { goal: <from gate-subagent-plan.md>,   context: <substituted>, toolsets: ["terminal"] },
+  { goal: <from gate-subagent-env.md>,   context: <substituted>, toolsets: ["terminal"] },
+  { goal: <from gate-subagent-infra.md>, context: <substituted>, toolsets: ["terminal"] },
+])
+
+# Wave 2 — collect JSON; blocking fail / timeout / malformed → report ALL failures; serial fallback
+# Warnings alone do not block (serial WARN parity)
+# Serial wave 2 after all domains pass:
+python3 <BUNDLE>/scripts/kanban_attestation.py <plan_id> --verify   # generate if missing
+# coding_agent_auth_prewarm (blocking when KANBAN_CODING_AGENT=agent) — same as serial gate tail
+```
+
+Context templates: `plugin/data/prompts/gate-subagent-plan.md`, `gate-subagent-env.md`, `gate-subagent-infra.md`. Substitute `{REPO_ROOT}`, `{PLAN_ID}`, `{BUNDLE_PATH}`, `{WORKING_BRANCH}`, `{PLAN_MEMORY_PATH}`, `{HERMES_HOME}`, `{CODING_AGENT_PROBE_TIMEOUT}` (from `PREFLIGHT_CODING_AGENT_PROBE_TIMEOUT`, default `15`). Per-domain timeouts from overlay `subagent_gate.timeouts` (default env 120s, plan 30s, infra 15s). On subagent timeout (E022) or parallel/serial mismatch → fall back to `pre_dispatch_gate.sh` — load `kanban-orchestrator-governance`.
+
+**Serial fallback:** When parallel is disabled, delegation unavailable, or parallel collection fails:
 
 ```bash
 bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 ```
 
-This runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py` — separate from Hermes profile model reachability) → attestation → card policy present → plan memory seeded → DB integrity. Fails on any blocking check with a specific error.
+This runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** → attestation → card policy present → plan memory seeded → DB integrity. Fails on any blocking check with a specific error.
+
+**Decomposition prep (when parallel enabled):** Before standard process Step 1, wave 1 may parallelize Subagent D (`gate-subagent-plan-parse.md`) + Subagent E (`gate-subagent-cron-setup.md`, needs `cronjob` toolset). Card creation (Steps 6–11) stays **serial** — parallel `kanban_create` risks SQLite torn-extend.
+
+Handoff cards with `pre_dispatch_gate: PASSED` skip both paths. `kanban_handoff.py` still runs the serial gate at handoff build time.
 
 **Coding-agent auth gate (blocking):** Bootstrap smoke is **advisory only** — init can succeed while auth is broken. If `coding_agent_cli` or preflight `coding_agent_cli_reachability` fails, **do not decompose**. Load `plugin/data/references/coding-agent-auth.md`. Common fixes: API key in `.env`, vendor login on gateway host, `HOME=` in `.env` or systemd. Cursor: `agent status` can lie when `HOME` is unset or OAuth in `~/.config/cursor/auth.json` is expired — operator runs `agent login` (or fixes `HOME`), `hermes gateway restart` → delete `.hermes/kanban/preflight_cache.json` → re-run gate. Bootstrap alone does not prove workers can dispatch the coding CLI.
 
@@ -234,7 +261,7 @@ After the gate passes, proceed directly to the Standard process. Plans may sit f
 3. **Stop. Wait. Do nothing.** No decomposition. No card creation. No triage.
 4. Only proceed when the user says "go", "proceed", "execute", "decompose", or equivalent.
 
-When ready, run the pre-dispatch gate — a single script that runs all checks (plan on `${working_branch}`, preflight, attestation, card policy, plan memory, DB integrity):
+When ready, run the pre-dispatch gate — **parallel subagents by default** (see § Pre-dispatch gate above); use serial `pre_dispatch_gate.sh` only when parallel is disabled or delegation is unavailable:
 
 ```bash
 bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
