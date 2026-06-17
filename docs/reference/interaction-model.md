@@ -13,7 +13,7 @@ The workflow moves through distinct stages. Each stage has a trigger phrase — 
 
 Iterate on harden → revise as many times as needed. Optimize is the final gate — once you say it, the plan is locked for decomposition. You can still revise after optimizing, but you'll need to re-optimize to regenerate agent-prompt blocks and line budget.
 
-**Walk-away point:** After the plan is written but before you say "execute." The plan sits in `.agent/plans/` — come back hours or days later and say "execute this plan."
+**Walk-away point:** After the plan is written but before you say "execute." The plan sits in `.agent/plans/` (or your configured plan directory) — come back hours or days later and say "execute this plan."
 
 ## Execution stage
 

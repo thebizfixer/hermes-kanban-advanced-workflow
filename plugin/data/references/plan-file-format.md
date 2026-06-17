@@ -1,6 +1,6 @@
 # Plan file format (markdown + YAML)
 
-SSOT for how agents write `.agent/plans/*.plan.md` (and optional `plan_search_dirs` paths). Applies during **Draft**, **Harden**, **Optimize**, and any edit that touches plan markdown.
+SSOT for how agents write plans (to `.agent/plans/` by default, or configurable via `plan_search_dirs` in overlay). Applies during **Draft**, **Harden**, **Optimize**, and any edit that touches plan markdown.
 
 Cross-refs: `kanban-advanced:kanban-planning` (structure + checklists), `worker-actionability-audit.md` (per-section gates).
 
