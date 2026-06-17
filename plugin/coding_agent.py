@@ -19,6 +19,7 @@ from plugin.coding_agent_env import (
     describe_prerequisite_issues,
     ensure_coding_agent_runtime_env,
     is_home_unbound_error,
+    normalize_auth_profile_key,
 )
 
 CODING_AGENT_MODEL_AUTO = "auto"
@@ -179,6 +180,11 @@ def resolve_adapter(binary: str) -> CodingAgentAdapter:
         list_models_argv=None,
         default_models=((CODING_AGENT_MODEL_AUTO, "Default (CLI auto)"),),
     )
+
+
+def is_cursor_binary(binary: str) -> bool:
+    """True for cursor-agent and agent (Cursor CLI)."""
+    return resolve_adapter(binary).binary == "agent"
 
 
 def is_contested_binary_name(name: str) -> bool:
@@ -458,7 +464,7 @@ def _interpret_smoke_result(
         "unknown model",
         "workspace trust required",
     )
-    if binary in {"agent", "claude"} and json_attempt:
+    if (is_cursor_binary(binary) or binary == "claude") and json_attempt:
         text = (stdout or "").strip()
         if text:
             try:
@@ -479,31 +485,43 @@ def _interpret_smoke_result(
     return None
 
 
-def _cursor_status_suggests_logged_in(run: Callable[..., object] | None = None) -> bool:
-    """Cursor `agent status` can show OAuth present while headless execution still fails."""
-    if not binary_on_path("agent"):
+def _cursor_status_suggests_logged_in(
+    binary: str = "agent",
+    run: Callable[..., object] | None = None,
+) -> bool:
+    """Cursor status can show OAuth present while headless execution still fails."""
+    if not is_cursor_binary(binary):
         return False
-    try:
-        if run is not None:
-            result = run(["agent", "status"], timeout=10)
-            stdout = getattr(result, "stdout", "") or ""
-            stderr = getattr(result, "stderr", "") or ""
-        else:
-            completed = subprocess.run(
-                ["agent", "status"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-            stdout = completed.stdout or ""
-            stderr = completed.stderr or ""
-        combined = f"{stdout}\n{stderr}".lower()
-        return any(
-            token in combined
-            for token in ("logged in", "authenticated", "auth.json")
-        )
-    except Exception:
+    status_cmds: list[str] = []
+    for cmd_name in (binary, "cursor-agent", "agent"):
+        if cmd_name not in status_cmds and binary_on_path(cmd_name):
+            status_cmds.append(cmd_name)
+    if not status_cmds:
         return False
+    for cmd_name in status_cmds:
+        try:
+            if run is not None:
+                result = run([cmd_name, "status"], timeout=10)
+                stdout = getattr(result, "stdout", "") or ""
+                stderr = getattr(result, "stderr", "") or ""
+            else:
+                completed = subprocess.run(
+                    [cmd_name, "status"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                stdout = completed.stdout or ""
+                stderr = completed.stderr or ""
+            combined = f"{stdout}\n{stderr}".lower()
+            if any(
+                token in combined
+                for token in ("logged in", "authenticated", "auth.json")
+            ):
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def describe_smoke_failure(
@@ -526,7 +544,7 @@ def describe_smoke_failure(
         base = (
             f"{binary}: smoke timed out — headless execution did not complete"
         )
-        if binary == "agent":
+        if is_cursor_binary(binary):
             base += (
                 " (expired Cursor OAuth often hangs instead of returning "
                 "'Authentication required')"
@@ -555,13 +573,13 @@ def describe_smoke_failure(
         tail = snippet[-1] if snippet else "no output"
         base = f"{binary}: smoke failed ({tail})"
 
-    profile = AUTH_PROFILES.get(binary)
+    profile = AUTH_PROFILES.get(normalize_auth_profile_key(binary))
     if profile:
         if profile.login_hint:
             base += f". Fix: {profile.login_hint}"
         if profile.notes:
             base += f" ({profile.notes})"
-    if binary == "agent" and _cursor_status_suggests_logged_in(run):
+    if is_cursor_binary(binary) and _cursor_status_suggests_logged_in(binary, run):
         if not is_home_unbound_error(stdout, stderr):
             base += (
                 "; agent status looks logged in — if HOME is set, token may be "
@@ -584,7 +602,7 @@ def smoke_test_coding_agent(
     if adapter.binary not in ADAPTERS and not shutil.which(binary):
         return None
     try:
-        if binary == "agent":
+        if is_cursor_binary(binary):
             probe_timeout = min(timeout, AUTH_PROBE_TIMEOUT_SECONDS)
             plain_argv = build_smoke_argv(binary, model, json_output=False)
             try:
@@ -611,14 +629,15 @@ def smoke_test_coding_agent(
             argv = build_smoke_argv(
                 binary,
                 model,
-                json_output=binary in {"agent", "claude", "codex", "gemini"},
+                json_output=is_cursor_binary(binary)
+                or binary in {"claude", "codex", "gemini"},
             )
             fast_timeout = min(timeout, AUTH_PROBE_TIMEOUT_SECONDS)
             result = _run_binary_command(
                 argv,
                 run,
                 timeout=fast_timeout,
-                use_auth_lock=(binary == "agent"),
+                use_auth_lock=is_cursor_binary(binary),
             )
             return _interpret_smoke_result(
                 binary,
@@ -633,12 +652,14 @@ def smoke_test_coding_agent(
             json_argv,
             run,
             timeout=timeout,
-            use_auth_lock=(binary == "agent"),
+            use_auth_lock=is_cursor_binary(binary),
         )
         returncode = getattr(result, "returncode", 1)
         stdout = getattr(result, "stdout", "") or ""
         stderr = getattr(result, "stderr", "") or ""
-        json_attempt = binary in {"agent", "claude"} and "--output-format" in json_argv
+        json_attempt = (
+            is_cursor_binary(binary) or binary == "claude"
+        ) and "--output-format" in json_argv
         interpreted = _interpret_smoke_result(
             binary,
             returncode=returncode,
@@ -648,7 +669,7 @@ def smoke_test_coding_agent(
         )
         if interpreted is not None:
             return interpreted
-        if binary == "agent" and (
+        if is_cursor_binary(binary) and (
             _agent_smoke_json_unsupported(stdout, stderr) or returncode != 0
         ):
             plain = _run_binary_command(

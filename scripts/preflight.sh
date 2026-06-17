@@ -16,19 +16,10 @@ PREFLIGHT_PROFILES="${PREFLIGHT_PROFILES:-kanban-advanced-worker,kanban-advanced
 PREFLIGHT_REQUIRED_SECRETS="${PREFLIGHT_REQUIRED_SECRETS:-}"
 WORKER_PROFILE="${WORKER_PROFILE:-kanban-advanced-worker}"
 
-find_repo_root() {
-  local dir="$SCRIPT_DIR"
-  while [[ "$dir" != "/" ]]; do
-    if [[ -f "$dir/.env" || -d "$dir/.git" ]]; then
-      printf '%s\n' "$dir"
-      return 0
-    fi
-    dir="$(dirname "$dir")"
-  done
-  printf '%s\n' "$(cd "$SCRIPT_DIR/.." && pwd)"
-}
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh"
 
-REPO_ROOT="$(find_repo_root)"
+REPO_ROOT="$(resolve_project_root "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
 OVERLAY_CONFIG="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
@@ -279,7 +270,7 @@ check_coding_agent_cli_reachability() {
   local wall_timeout=$((probe_timeout + 5))
 
   out="$(run_with_timeout "$wall_timeout" sh -c \
-    "cd \"${REPO_ROOT}\" && PYTHONPATH=\"${REPO_ROOT}\" python3 \"${SCRIPT_DIR}/check_coding_agent_cli.py\" --timeout \"${probe_timeout}\"" \
+    "cd \"${REPO_ROOT}\" && PYTHONPATH=\"${SCRIPT_DIR}/..:${REPO_ROOT}\" python3 \"${SCRIPT_DIR}/check_coding_agent_cli.py\" --timeout \"${probe_timeout}\"" \
     2>&1)" \
     || rc=$?
 

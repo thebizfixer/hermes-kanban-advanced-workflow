@@ -18,6 +18,7 @@ from plugin.coding_agent import (
     get_available_coding_binaries,
     is_auto_model,
     is_contested_binary_name,
+    is_cursor_binary,
     normalize_coding_agent_model,
     parse_cursor_list_models,
     resolve_adapter,
@@ -212,6 +213,21 @@ class TestCodingAgentDiscovery(unittest.TestCase):
         adapter = resolve_adapter("cursor-agent")
         self.assertEqual(adapter.display_name, "Cursor CLI")
         self.assertEqual(adapter.binary, "agent")
+        self.assertTrue(is_cursor_binary("cursor-agent"))
+        self.assertTrue(is_cursor_binary("agent"))
+        self.assertFalse(is_cursor_binary("claude"))
+
+    def test_interpret_smoke_cursor_agent_json(self) -> None:
+        payload = '{"is_error": false, "result": "ok"}\n'
+        self.assertTrue(
+            _interpret_smoke_result(
+                "cursor-agent",
+                returncode=0,
+                stdout=payload,
+                stderr="",
+                json_attempt=True,
+            )
+        )
 
     @patch("plugin.coding_agent.binary_on_path")
     def test_get_available_cursor_agent(self, on_path) -> None:

@@ -31,21 +31,10 @@ WARNINGS=0
 WORKER_PROFILE="${WORKER_PROFILE:-kanban-advanced-worker}"
 ORCHESTRATOR_PROFILE="${ORCHESTRATOR_PROFILE:-kanban-advanced-orchestrator}"
 
-find_repo_root() {
-  local dir="$SCRIPT_DIR"
-  while [[ "$dir" != "/" ]]; do
-    if [[ -f "$dir/.env" || -d "$dir/.git" ]]; then
-      printf '%s\n' "$dir"
-      return 0
-    fi
-    dir="$(dirname "$dir")"
-  done
-  printf '%s\n' "$BUNDLE_DIR"
-}
-
-REPO_ROOT="$(find_repo_root)"
 # shellcheck source=lib/kanban_config.sh
 source "$SCRIPT_DIR/lib/kanban_config.sh"
+
+REPO_ROOT="$(resolve_project_root "$SCRIPT_DIR")"
 # shellcheck source=lib/governance_profile.sh
 source "$SCRIPT_DIR/lib/governance_profile.sh"
 load_governance_profile "$REPO_ROOT" "$PROFILE_OVERRIDE"

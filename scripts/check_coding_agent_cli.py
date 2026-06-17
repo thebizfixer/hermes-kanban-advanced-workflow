@@ -17,9 +17,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+PLUGIN_ROOT = Path(__file__).resolve().parent.parent
+if str(PLUGIN_ROOT) not in sys.path:
+    sys.path.insert(0, str(PLUGIN_ROOT))
 
 from plugin.coding_agent import (  # noqa: E402
     AUTH_PROBE_TIMEOUT_SECONDS,
@@ -37,7 +37,10 @@ from plugin.coding_agent_auth_cache import write_preflight_cache  # noqa: E402
 from plugin.config_overlay import (  # noqa: E402
     resolve_coding_agent,
     resolve_coding_agent_model,
+    resolve_project_root,
 )
+
+REPO_ROOT = resolve_project_root(start=PLUGIN_ROOT)
 
 
 def _run(

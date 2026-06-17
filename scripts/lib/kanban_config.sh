@@ -2,6 +2,54 @@
 # kanban_config.sh — Shared config resolution for kanban-advanced scripts.
 # Source from other scripts: source "$SCRIPT_DIR/lib/kanban_config.sh"
 
+# resolve_project_root [start_dir]
+# Mirrors plugin.config_overlay.resolve_project_root — prefers kanban overlay over .git
+# (plugin install dirs often have their own .git).
+resolve_project_root() {
+    local start_dir="${1:-${SCRIPT_DIR:-$PWD}}"
+    if [ -n "${KANBAN_PROJECT_ROOT:-}" ]; then
+        (cd "$KANBAN_PROJECT_ROOT" && pwd)
+        return 0
+    fi
+    if [ -n "${HERMES_PROJECT_ROOT:-}" ]; then
+        (cd "$HERMES_PROJECT_ROOT" && pwd)
+        return 0
+    fi
+    if [ -n "${HERMES_KANBAN_CONFIG:-}" ] && [ -f "$HERMES_KANBAN_CONFIG" ]; then
+        (cd "$(dirname "$HERMES_KANBAN_CONFIG")/../.." && pwd)
+        return 0
+    fi
+
+    local dir
+    dir="$(cd "$start_dir" && pwd)"
+    local config_hit="" git_hit="" env_hit=""
+    while [[ "$dir" != "/" ]]; do
+        if [[ -z "$config_hit" && -f "$dir/.hermes/kanban-overrides/kanban-config.yaml" ]]; then
+            config_hit="$dir"
+        fi
+        if [[ -z "$git_hit" && -d "$dir/.git" ]]; then
+            git_hit="$dir"
+        fi
+        if [[ -z "$env_hit" && -f "$dir/.env" ]]; then
+            env_hit="$dir"
+        fi
+        dir="$(dirname "$dir")"
+    done
+    if [[ -n "$config_hit" ]]; then
+        printf '%s\n' "$config_hit"
+        return 0
+    fi
+    if [[ -n "$git_hit" ]]; then
+        printf '%s\n' "$git_hit"
+        return 0
+    fi
+    if [[ -n "$env_hit" ]]; then
+        printf '%s\n' "$env_hit"
+        return 0
+    fi
+    (cd "$start_dir" && pwd)
+}
+
 _read_config_key() {
     local key="$1" config_file="$2"
     grep -E "^${key}:" "$config_file" 2>/dev/null \
