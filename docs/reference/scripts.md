@@ -407,7 +407,7 @@ python3 hermes-kanban-advanced-workflow/scripts/verify_anchors.py --plan <plan>.
 # or: bash hermes-kanban-advanced-workflow/scripts/verify_anchors.sh --plan <plan>.md
 ```
 
-Parses plan markdown for line-number anchors (`L123`, backtick file paths, `**File:**`) and verifies against current HEAD. Implementation is Python (`scripts/lib/plan_parse.py`); the `.sh` entrypoint is a thin wrapper for skill/cron compatibility.
+Parses plan markdown for line-number anchors (`L123`) and resolves file paths from: backtick paths on the same line, `**File:**` / `**Files:**`, `files:` YAML lists in `## Kanban optimization` cards, and plain `Files:` lines in agent blocks. Verifies each anchor against current HEAD. Implementation is Python (`scripts/lib/plan_parse.py`); the `.sh` entrypoint is a thin wrapper for skill/cron compatibility.
 
 ## Plan parsing SSOT (`scripts/lib/plan_parse.py`)
 

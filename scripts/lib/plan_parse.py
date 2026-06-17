@@ -22,7 +22,16 @@ _BACKTICK_FILE_RE = re.compile(
     re.IGNORECASE,
 )
 _LINE_NUM_RE = re.compile(r"L(\d+)")
-_FILE_FIELD_RE = re.compile(r"\*\*File:\*\*\s+(\S+)", re.IGNORECASE)
+_FILE_FIELD_RE = re.compile(r"\*\*Files?:\*\*\s+(.+)", re.IGNORECASE)
+_BOLD_FILES_RE = _FILE_FIELD_RE
+_YAML_FILES_LIST_RE = re.compile(
+    r"^\s*-\s+(\S+\.(?:py|ts|js|sh|yaml|md|mdc))",
+    re.MULTILINE | re.IGNORECASE,
+)
+_PLAIN_FILES_RE = re.compile(
+    r"^Files:\s+(\S+\.(?:py|ts|js|sh|yaml|md|mdc))",
+    re.MULTILINE | re.IGNORECASE,
+)
 _DEF_CLASS_RE = re.compile(r"(?:def|class|function|async def)\s+(\w+)")
 _SYMBOL_BACKTICK_RE = re.compile(r"`([a-zA-Z_][a-zA-Z0-9_]*)`")
 _WORKSTREAM_START_RE = re.compile(r"^### Workstream", re.MULTILINE | re.IGNORECASE)
@@ -155,7 +164,7 @@ def extract_files_from_text(text: str) -> list[str]:
 
 
 def _normalize_file_path(path: str) -> str:
-    return path.strip().strip("`").strip().rstrip(".")
+    return path.strip().strip("`").strip().rstrip(".").rstrip(",")
 
 
 def iter_lines_with_line_numbers(text: str):
@@ -204,10 +213,29 @@ def find_section_file_above(text: str, line_no: int, lookback: int = 50) -> str 
     lines = text.splitlines()
     start = max(0, line_no - lookback - 1)
     window = "\n".join(lines[start:line_no])
-    matches = list(_FILE_FIELD_RE.finditer(window))
-    if not matches:
-        return None
-    return _normalize_file_path(matches[-1].group(1))
+
+    bold_matches = list(_BOLD_FILES_RE.finditer(window))
+    if bold_matches:
+        raw = bold_matches[-1].group(1).strip()
+        first_part = re.split(r",\s*", raw)[0]
+        path = _normalize_file_path(first_part)
+        if path:
+            return path
+
+    last_files_hdr: re.Match[str] | None = None
+    for hdr in re.finditer(r"^files:\s*$", window, re.MULTILINE | re.IGNORECASE):
+        last_files_hdr = hdr
+    if last_files_hdr:
+        sub = window[last_files_hdr.end() :]
+        yaml_entries = _YAML_FILES_LIST_RE.findall(sub)
+        if yaml_entries:
+            return _normalize_file_path(yaml_entries[0])
+
+    plain_matches = list(_PLAIN_FILES_RE.finditer(window))
+    if plain_matches:
+        return _normalize_file_path(plain_matches[-1].group(1))
+
+    return None
 
 
 def find_anchor_symbol_above(text: str, line_no: int, lookback: int = 10) -> str | None:
@@ -232,7 +260,7 @@ def extract_anchors(plan_text: str) -> list[AnchorRef]:
         if not _LINE_NUM_RE.search(line):
             continue
         file_refs = find_backtick_file_refs(line)
-        file_field = extract_markdown_field(line, "File")
+        file_field = extract_markdown_field(line, "File") or extract_markdown_field(line, "Files")
         file_name = file_refs[0] if file_refs else (file_field or "")
         if not file_name:
             file_name = find_section_file_above(plan_text, lineno) or ""

@@ -102,7 +102,7 @@ from lib.plan_parse import (
 |----------|---------|
 | `find_backtick_file_refs(line: str) -> list[str]` | `` `path/to/file.py` `` with allowed extensions |
 | `find_line_number_refs(line: str) -> list[int]` | `L123`, `L123-456` → first line of range |
-| `find_section_file_above(text: str, line_no: int, lookback: int = 50) -> str \| None` | Nearest `**File:**` above anchor line |
+| `find_section_file_above(text: str, line_no: int, lookback: int = 50) -> str \| None` | Nearest file above anchor line: `**File:**` / `**Files:**`, `files:` YAML list, or plain `Files:` (agent block) |
 | `find_anchor_symbol_above(text: str, line_no: int, lookback: int = 10) -> str \| None` | `def foo`, `class Bar`, `` `symbol` `` |
 | `extract_anchors(plan_text: str) -> list[AnchorRef]` | Dataclass: `file`, `line`, `symbol_hint`, `source_line` |
 
@@ -268,8 +268,7 @@ Keep existing `kanban_cli_parse.sh` / `auto_unblock` checks.
 
 | File | Coverage |
 |------|----------|
-| `tests/test_plan_parse.py` | optimization section, card blocks, ordinals, files extraction, frontmatter |
-| `tests/test_plan_parse_anchors.py` | backtick files, L-numbers, section file lookback, symbols |
+| `tests/test_plan_parse.py` | optimization section, card blocks, ordinals, files extraction, frontmatter, anchor lookback (`**Files:**`, YAML `files:`, agent `Files:`) |
 | `tests/test_cli_output_parse.py` | task ids, worktree branch, commit hash, pytest lines, show output fields |
 | `tests/test_verify_anchors.py` | integration with temp repo + fixture plan (git optional mock) |
 | `tests/test_kanban_decompose.py` | **unchanged behavior** after import refactor |
