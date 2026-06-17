@@ -74,6 +74,17 @@ class CodingAgentAdapter:
     version_signature: str = ""  # regex for `binary --version` product identity
 
 
+# Binary to plan search directory mapping (e.g. cursor -> .cursor/plans)
+BINARY_TO_PLAN_DIR: dict[str, str] = {
+    "agent": ".agent/plans",  # Generic / Cursor CLI
+    "cursor-agent": ".cursor/plans",
+    "claude": ".claude/plans",
+    "codex": ".codex/plans",
+    "grok": ".grok/plans",
+    "aider": ".aider/plans",
+    "gemini": ".gemini/plans",
+}
+
 ADAPTERS: dict[str, CodingAgentAdapter] = {
     "agent": CodingAgentAdapter(
         binary="agent",
@@ -185,6 +196,26 @@ def resolve_adapter(binary: str) -> CodingAgentAdapter:
         list_models_argv=None,
         default_models=((CODING_AGENT_MODEL_AUTO, "Default (CLI auto)"),),
     )
+
+
+def resolve_plan_search_dir(binary: str) -> str | None:
+    """Map a coding agent binary to its plan search directory.
+    
+    Returns the directory path (e.g., '.cursor/plans') or None if not mapped.
+    """
+    # Direct lookup
+    if binary in BINARY_TO_PLAN_DIR:
+        return BINARY_TO_PLAN_DIR[binary]
+    
+    # For cursor-agent, use .cursor/plans
+    if binary == "cursor-agent":
+        return ".cursor/plans"
+    
+    # For agent (generic / Cursor CLI), use .agent/plans
+    if binary == "agent":
+        return ".agent/plans"
+    
+    return BINARY_TO_PLAN_DIR.get(binary)
 
 
 def is_cursor_binary(binary: str) -> bool:

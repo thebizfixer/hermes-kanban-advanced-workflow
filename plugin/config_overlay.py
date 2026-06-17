@@ -654,6 +654,27 @@ def build_overlay_yaml(
         if val:
             lines.append(f"{key}: {val}")
 
+    # Auto-add binary-specific plan search directory if not already configured
+    from plugin.coding_agent import resolve_plan_search_dir
+    
+    plan_search_dirs: list[str] = []
+    if "plan_search_dirs" in existing:
+        # Preserve existing plan_search_dirs (already in skip list via MANAGED_KEYS)
+        pass
+    else:
+        # Auto-populate with binary-specific dir if available
+        binary_dir = resolve_plan_search_dir(coding_agent)
+        if binary_dir:
+            plan_search_dirs.append(binary_dir)
+    
+    # Add plan_search_dirs to output if we have any
+    if plan_search_dirs:
+        lines.append("")
+        lines.append("# Auto-configured for the selected coding agent binary:")
+        lines.append(f"plan_search_dirs:")
+        for dir_path in plan_search_dirs:
+            lines.append(f"  - {dir_path}")
+
     lines.extend([
         "escalation_max_attempts:",
         "  coding_agent: 3",
