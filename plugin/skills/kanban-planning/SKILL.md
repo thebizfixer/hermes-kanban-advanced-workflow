@@ -20,7 +20,7 @@ Write implementation plans that decompose cleanly into Kanban task graphs. The q
 
 ## Governance model (AGT + AEP)
 
-Plans are gated by policy before decomposition. The orchestrator runs `kanban_card_policy.py` on every card body before dispatch. Cards without `Files:`, `agent -p` block, or `Mode:` are blocked (P001/P002/P003) **except** carve-outs: `Type: orchestrator-handoff` and `Type: verification` (test-only gates — no `Files:` or agent block). Plans without agent-prompt blocks are rejected at the attestation gate (Step 0c) unless every card is a carve-out type. See `kanban-advanced:kanban-orchestrator` § Step 0c and 0d.
+Plans are gated by policy before decomposition. The orchestrator runs `kanban_card_policy.py` on every card body before dispatch. Cards without `Files:`, `agent -p` block, or `Mode:` are blocked (P001/P002/P003) **except** carve-outs: `Type: orchestrator-handoff`, `Type: verification` / `verification-local`, and `Type: verification-deploy` (test/deploy gates — no `Files:` or agent block). Plans without agent-prompt blocks are rejected at the attestation gate (Step 0c) unless every card is a carve-out type. See `kanban-advanced:kanban-orchestrator` § Step 0c and 0d.
 
 **Verification card template:**
 ```
@@ -110,6 +110,18 @@ Run this during the Optimize stage, after the plan content is hardened. These it
 25. **Spec precision** — Non-trivial agent blocks include `Spec:` + `Anchor:` + `Examples:`; `Contracts:` in `## Kanban optimization` pins every `Call-sites:` symbol; ban vague integration verbs unless followed by a concrete operation (see `plan-file-format.md`).
 26. **Plan memory seed** — At end of Optimize, write `acceptance_matrix` (or equivalent) into plan frontmatter or `.hermes/kanban/memory/{plan_id}.json` for decompose to expand.
 27. **Markup-safe placeholders** — No `<word>` slots anywhere in the plan file; use `{word}` per §Plan file format.
+
+### Frontend decomposition (route micro-cards)
+
+When a workstream changes subscriber-visible layout or motion:
+
+1. **`{feature}-ux-helpers`** — pure functions/hooks with unit tests (no route shell edits).
+2. **`{feature}-route-wiring`** — wire helpers into the route shell (`Files:` includes `{ui_stack.page_glob}`).
+3. **`{feature}-route-layout`** — DOM order + `Acceptance (layout):` grep bullets (line order before/after slot anchors).
+4. **`integration-verify`** — `Type: verification-local` card after the route-layout group; runs pytest + `kanban_layout_acceptance.sh` paths.
+5. **Deploy smoke** — `Type: verification-deploy` with `Deploy:` line; requires `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` before archive.
+
+Declare `Surface-slots:` in the plan and mirror host paths in overlay `ui_stack` (`frontend-neutrality.md`). `verify_optimization.sh` checks 19–21 enforce presentation acceptance at Optimize time.
 
 ### System-agnostic path convention
 

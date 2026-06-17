@@ -49,6 +49,18 @@ plan_memory_path: ".hermes/kanban/memory"
 # plan_search_dirs: []
 
 # ---------------------------------------------------------------------------
+# UI stack (optional — framework-neutral presentation acceptance)
+# See plugin/data/references/frontend-neutrality.md
+# ---------------------------------------------------------------------------
+# ui_stack:
+#   framework: react-next
+#   page_glob: "frontend/app/**/page.tsx"
+#   motion:
+#     reduced_query: "prefers-reduced-motion: reduce"
+#     entry_transition_pattern: "animate-in fade-in|transition-opacity"
+#   test_command: "cd frontend && npm test --"
+
+# ---------------------------------------------------------------------------
 # Environment / secrets  (optional)
 # ---------------------------------------------------------------------------
 # required_secrets: "MONGODB_URI,SECRET_KEY"

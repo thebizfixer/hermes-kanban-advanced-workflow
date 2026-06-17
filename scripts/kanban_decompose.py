@@ -156,6 +156,15 @@ def update_plan_memory(
     mem_dir.mkdir(parents=True, exist_ok=True)
     mem_path = mem_dir / f"{plan_id}.json"
 
+    acceptance_matrix: dict = {}
+    if plan_path and Path(plan_path).is_file():
+        try:
+            from lib.decompose_stamp import load_acceptance_matrix  # noqa: E402
+
+            acceptance_matrix = load_acceptance_matrix(plan_path)
+        except Exception:
+            acceptance_matrix = {}
+
     data: dict = {}
     if mem_path.is_file():
         try:
@@ -183,6 +192,8 @@ def update_plan_memory(
         }
         if branches:
             data["card_branches"] = branches
+    if acceptance_matrix:
+        data["acceptance_matrix"] = acceptance_matrix
 
     mem_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(f"  Plan memory updated: {mem_path} ({impl_card_count} impl cards)")
@@ -467,6 +478,13 @@ def main():
         plan_file_rel=plan_file_rel,
         plan_path=args.plan if args.plan else None,
     )
+
+    if args.plan:
+        from lib.plan_parse import integration_verify_warnings, load_plan_text  # noqa: E402
+
+        plan_text = load_plan_text(args.plan)
+        for warning in integration_verify_warnings(all_cards, plan_text):
+            print(f"WARN: {warning}", file=sys.stderr)
     for card in all_cards:
         if plan_file_rel and "plan_file:" not in card.get("body", ""):
             card["body"] = f"plan_file: {plan_file_rel}\ncard_key: {card.get('key', '')}\n{card['body']}"

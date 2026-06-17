@@ -43,6 +43,9 @@ LIB_PYTHON_NAMES = (
     "cross_plan_memory.py",
     "token_tracker_import.py",
     "hermes_notify_deliver.py",
+    "card_body.py",
+    "presentation_acceptance.py",
+    "verify_optimization_presentation.py",
 )
 
 

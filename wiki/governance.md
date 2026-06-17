@@ -219,6 +219,16 @@ The attestation records: preflight status, profile validity, agent-prompt block 
 
 Error codes: A001 (missing), A002 (stale), A003 (tampered).
 
+**Card attestation (verification-deploy only):** Separate from session attestation. When a card uses `Type: verification-deploy` or includes a `Deploy:` line, the orchestrator must write a JSON file before the card may archive:
+
+```text
+.hermes/kanban/card-attestations/{plan_id}-{card_key}.json
+```
+
+Minimum fields: `plan_id`, `card_key`, `attested_at`, `operator`, `evidence` (URL, screenshot path, or deploy log excerpt). The evaluation chain blocks completion until this file exists. Session `attestation.yaml` does **not** satisfy deploy gates.
+
+Plan memory may also store `acceptance_matrix` (surface slots + presentation acceptance bullets) at decompose time — `final_audit.py` warns when presentation acceptance is declared in the plan but memory is empty.
+
 ### 2. Card body policy (orchestrator-side)
 
 After creating cards but before dispatch, every card body is validated:
@@ -276,9 +286,13 @@ python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_
 | 8 | Agent output JSON captured | E020 |
 | 9 | No destructive git ops in reflog (governance artifact resets skipped) | E019 |
 
-**Verification path (`Type: verification`):** runs steps 3 + 9 only — no coding-agent dispatch, no diff/token checks.
+**Verification path (`Type: verification` / `verification-local`):** runs steps 3 + 9 only — no coding-agent dispatch, no diff/token checks. Use `Tests:` + `Commit: N/A`; no `Files:` or agent blocks (`validate_board.sh` enforces at decomposition).
 
-**Policy carve-outs:** `Type: orchestrator-handoff` and `Type: verification` exempt from P001–P003.
+**Verification-deploy (`Type: verification-deploy` or `Deploy:` line):** orchestrator-only assignee; no worker dispatch. Requires card-attestation JSON (`.hermes/kanban/card-attestations/{plan_id}-{card_key}.json`) before archive. See **Card attestation** above and `frontend-neutrality.md`.
+
+**Presentation acceptance (layout / a11y):** When agent blocks declare `Acceptance (layout):`, `Acceptance (presentation):`, or `Acceptance (a11y):`, the evaluation chain runs `kanban_layout_acceptance.sh` / `presentation_acceptance.py` — **E028** / **E029** on failure.
+
+**Policy carve-outs:** `Type: orchestrator-handoff`, `Type: verification`, `verification-local`, and `verification-deploy` exempt from P001–P003 where policy allows test-only / operator gates.
 
 Direct `kanban_complete` without the chain is a protocol violation.
 
@@ -288,9 +302,13 @@ Direct `kanban_complete` without the chain is a protocol violation.
 
 **E014 — orchestrator-only:** If the card has **neither** an `agent -p` block **nor** a `Files:` line, complete without spawning an agent (gate, audit, root).
 
-**Verification-only (`Type: verification`):** Takes precedence over any `agent -p` block at runtime — run `Tests:` via `terminal()` only, no `coding_agent_invoke.sh`, then the evaluation chain before `kanban_complete`. At decomposition, `validate_board.sh` rejects verification cards that still carry `Files:` or `agent` blocks (use `Type: verification` + `Tests:` only).
+**Verification-only (`Type: verification` / `verification-local`):** Takes precedence over any `agent -p` block at runtime — run `Tests:` via `terminal()` only, no `coding_agent_invoke.sh`, then the evaluation chain before `kanban_complete`. At decomposition, `validate_board.sh` rejects verification cards that still carry `Files:` or `agent` blocks.
 
-Error code: E014 (ORCHESTRATOR_CARD_ON_WORKER / verification contradictions on malformed cards).
+**Verification-deploy:** Orchestrator profile only. Workers must not complete until `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` exists (operator deploy smoke). Evaluation chain blocks archive without attestation.
+
+**Layout / a11y (`Acceptance (layout|presentation|a11y)`):** Evaluation chain step runs grep-verifiable DOM/motion checks — **E028** / **E029**. Overlay `ui_stack` supplies host path globs (`wiki/configuration.md`).
+
+Error code: E014 (ORCHESTRATOR_CARD_ON_WORKER / verification contradictions on malformed cards); E028/E029 for presentation acceptance.
 
 ## Auto-progression (mechanical wave unblocking)
 

@@ -6,16 +6,13 @@
 # Usage:
 #   bash hermes-kanban-advanced-workflow/scripts/governance_integrity.sh
 #   bash hermes-kanban-advanced-workflow/scripts/governance_integrity.sh --json
+#
+# Resolves plugin checkout layout (plugin/data/*, plugin/skills/*) or legacy flat bundle.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-SCRIPTS_DIR="$BUNDLE_DIR/scripts"
-REGISTRY_DIR="$BUNDLE_DIR/registry"
-POLICIES_DIR="$BUNDLE_DIR/policies"
-PROMPTS_DIR="$BUNDLE_DIR/prompts"
-SKILLS_DIR="$BUNDLE_DIR/skills"
+SCRIPTS_DIR="$SCRIPT_DIR"
 
 JSON_OUT=false
 [[ "${1:-}" == "--json" ]] && JSON_OUT=true
@@ -28,6 +25,41 @@ pass() { CHECKS_PASSED=$((CHECKS_PASSED + 1)); }
 fail() { echo "  ✗ FAIL: $*" >&2; FAILURES=$((FAILURES + 1)); }
 warn() { echo "  ⚠ WARN: $*" >&2; WARNINGS=$((WARNINGS + 1)); }
 
+# ── Bundle + data path resolution ───────────────────────────────────────
+BUNDLE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REGISTRY_DIR=""
+POLICIES_DIR=""
+PROMPTS_DIR=""
+REFERENCES_DIR=""
+SKILLS_DIR=""
+SKILL_LAYOUT="plugin"  # plugin | flat
+
+if [[ -d "$BUNDLE_ROOT/plugin/data/registry" ]]; then
+    REGISTRY_DIR="$BUNDLE_ROOT/plugin/data/registry"
+    POLICIES_DIR="$BUNDLE_ROOT/plugin/data/policies"
+    PROMPTS_DIR="$BUNDLE_ROOT/plugin/data/prompts"
+    REFERENCES_DIR="$BUNDLE_ROOT/plugin/data/references"
+    SKILLS_DIR="$BUNDLE_ROOT/plugin/skills"
+elif [[ -d "$BUNDLE_ROOT/registry" ]]; then
+    REGISTRY_DIR="$BUNDLE_ROOT/registry"
+    POLICIES_DIR="$BUNDLE_ROOT/policies"
+    PROMPTS_DIR="$BUNDLE_ROOT/prompts"
+    REFERENCES_DIR="$BUNDLE_ROOT/references"
+    SKILLS_DIR="$BUNDLE_ROOT/skills"
+    SKILL_LAYOUT="flat"
+else
+    fail "Could not resolve registry directory (expected plugin/data/registry or registry/)"
+fi
+
+_resolve_skill_path() {
+    local skill="$1"
+    if [[ "$SKILL_LAYOUT" == "plugin" ]]; then
+        printf '%s/%s/SKILL.md' "$SKILLS_DIR" "$skill"
+    else
+        printf '%s/%s.md' "$SKILLS_DIR" "$skill"
+    fi
+}
+
 # ── 1. Required scripts exist and are executable ────────────────────────
 REQUIRED_SCRIPTS=(
     auto_unblock.sh
@@ -39,6 +71,7 @@ REQUIRED_SCRIPTS=(
     kanban_cron_monitor_log_fallback.sh
     kanban_evaluation_chain.py
     kanban_intervention_inc.sh
+    kanban_layout_acceptance.sh
     kanban_recover.py
     kanban_token_report.py
     post_merge_gate.sh
@@ -59,6 +92,9 @@ REQUIRED_SCRIPTS=(
     lib/cli_output_parse.py
     lib/kanban_cli_parse.sh
     lib/kanban_logs.sh
+    lib/card_body.py
+    lib/presentation_acceptance.py
+    lib/verify_optimization_presentation.py
 )
 
 for script in "${REQUIRED_SCRIPTS[@]}"; do
@@ -82,6 +118,16 @@ for f in "${REQUIRED_REGISTRY[@]}"; do
     fi
 done
 
+if [[ -f "$REGISTRY_DIR/error-codes.yaml" ]]; then
+    for code in E028 E029; do
+        if grep -q "${code}:" "$REGISTRY_DIR/error-codes.yaml"; then
+            pass
+        else
+            fail "Missing error code in registry: $code"
+        fi
+    done
+fi
+
 # ── 3. Policy files present ─────────────────────────────────────────────
 REQUIRED_POLICIES=(card-body-policy.yaml)
 for f in "${REQUIRED_POLICIES[@]}"; do
@@ -102,38 +148,63 @@ for f in "${REQUIRED_PROMPTS[@]}"; do
     fi
 done
 
-# ── 5. Goal-card reference ────────────────────────────────────────────────
-if [[ -f "$BUNDLE_DIR/references/goal-card-selection.md" ]]; then
-    pass
-else
-    fail "Missing references/goal-card-selection.md"
-fi
-
-# ── 6. Skill files present ──────────────────────────────────────────────
-REQUIRED_SKILLS=(kanban-orchestrator.md kanban-worker.md kanban-planning.md 
-                 kanban-preflight.md kanban-cleanup.md kanban-notify.md
-                 kanban-postmortem.md kanban-reconciliation.md)
-for f in "${REQUIRED_SKILLS[@]}"; do
-    if [[ -f "$SKILLS_DIR/$f" ]]; then
+# ── 5. Reference docs ─────────────────────────────────────────────────────
+REQUIRED_REFERENCES=(goal-card-selection.md frontend-neutrality.md)
+for f in "${REQUIRED_REFERENCES[@]}"; do
+    if [[ -f "$REFERENCES_DIR/$f" ]]; then
         pass
     else
-        fail "Missing skill: $f"
+        fail "Missing references/$f"
     fi
 done
 
-# ── 7. Provisioning state ───────────────────────────────────────────────
-REPO_ROOT="$(cd "$BUNDLE_DIR/.." && pwd)"
-PROVISION_RC=0
-if pushd "$REPO_ROOT" >/dev/null; then
-    bash "$SCRIPTS_DIR/provision.sh" --check || PROVISION_RC=$?
-    popd >/dev/null || true
-else
-    PROVISION_RC=1
+# ── 6. Skill files present ──────────────────────────────────────────────
+REQUIRED_SKILLS=(
+    kanban-orchestrator
+    kanban-worker
+    kanban-planning
+    kanban-preflight
+    kanban-cleanup
+    kanban-notify
+    kanban-postmortem
+    kanban-reconciliation
+    kanban-advanced
+)
+for skill in "${REQUIRED_SKILLS[@]}"; do
+    skill_path="$(_resolve_skill_path "$skill")"
+    if [[ -f "$skill_path" ]]; then
+        pass
+    else
+        fail "Missing skill: $skill ($skill_path)"
+    fi
+done
+
+# ── 7. Provisioning state (host project only) ───────────────────────────
+REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-}"
+if [[ -z "$REPO_ROOT" ]]; then
+    REPO_ROOT="$(git -C "$BUNDLE_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
 fi
-if [[ "$PROVISION_RC" -eq 0 ]]; then
-    pass
+if [[ -z "$REPO_ROOT" ]]; then
+    REPO_ROOT="$(cd "$BUNDLE_ROOT/.." && pwd)"
+fi
+
+OVERLAY="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
+if [[ -f "$OVERLAY" ]]; then
+    PROVISION_RC=0
+    if pushd "$REPO_ROOT" >/dev/null; then
+        REPO_ROOT="$REPO_ROOT" bash "$SCRIPTS_DIR/provision.sh" --check || PROVISION_RC=$?
+        popd >/dev/null || true
+    else
+        PROVISION_RC=1
+    fi
+    if [[ "$PROVISION_RC" -eq 0 ]]; then
+        pass
+    else
+        fail "Provisioning drift detected — run provision.sh from repo root to sync materialized skills"
+    fi
 else
-    fail "Provisioning drift detected — run provision.sh from repo root to sync materialized skills"
+    warn "No host overlay at $OVERLAY — skipping provision.sh --check"
+    pass
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────

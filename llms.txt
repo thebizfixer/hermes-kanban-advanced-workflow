@@ -58,6 +58,7 @@ When users ask platform-specific questions, cite upstream sources from `wiki/ext
 - Tutorial: `docs/tutorial/kanban-advanced-tutorial.md` (guided full-lifecycle walkthrough — start here)
 - How-to: `docs/how-to/` (install, governance, goal-cards, preflight, provider-strategy, troubleshooting)
 - Reference: `docs/reference/` (architecture, interaction-model, configuration, error-codes, kpis, personas, scripts, coding-agents, limitations, **dashboard-profile-reasoning**, **platform-neutral-parsing**)
+- Frontend presentation acceptance: `plugin/data/references/frontend-neutrality.md`, overlay `ui_stack` (`wiki/configuration.md`), `scripts/kanban_layout_acceptance.sh`, E028/E029
 - Explanation: `docs/explanation/` (why-kanban-advanced, six-sigma-mapping)
 - Agent wiki: `wiki/` (setup, **bootstrap**, configuration, **governance** § Full pre-execution stack, decomposition-workflow, troubleshooting, provider-strategy, six-sigma-mapping, external-references)
 
@@ -95,7 +96,7 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 - Plugin entry: `__init__.py` → `plugin/__init__.py` → `register(ctx)`
 - Skills: `plugin/skills/<name>/SKILL.md` (12 skills)
 - Data: `plugin/data/` (references, registry, policies, prompts)
-- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, check_coding_agent_cli.py, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py, verify_goal_cards.py, final_audit_sanity.py, generate_postmortem.py)
+- Scripts: `scripts/` (governance, cron, bootstrap, worktree_setup.sh, coding_agent_invoke.sh, check_coding_agent_cli.py, kanban_escalation_tracker.sh, install_pre_push_hook.sh, install_pre_commit_hook.sh, kanban_handoff.py, verify_goal_cards.py, final_audit_sanity.py, generate_postmortem.py, **kanban_layout_acceptance.sh**, verify_optimization.sh checks 19–21)
 - Handoff: `kanban_handoff.py` stamps `pre_dispatch_gate`, `BUNDLE_ROOT`, `gate_script`, `cards_yaml`; orchestrator skips gate re-run when PASSED — see `wiki/decomposition-workflow.md` § Board-mediated handoff
 - Parallel subagent gate (default on): `subagent_gate.enabled` in overlay (default true when absent) + orchestrator `delegation` toolset — `plugin/data/references/parallel-subagent-gate.md`; serial fallback `pre_dispatch_gate.sh`; E022 on domain timeout
 - In-flight sad-path: index `plugin/skills/kanban-advanced/references/in-flight-governance-index.md` (`skill_view`); hub `wiki/in-flight-navigation.md`; regression `plugin/data/references/handoff-regression-checklist.md`

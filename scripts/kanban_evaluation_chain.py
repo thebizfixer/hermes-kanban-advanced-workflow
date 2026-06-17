@@ -61,6 +61,7 @@ if _LIB not in sys.path:
     sys.path.insert(0, _LIB)
 from card_body import (  # noqa: E402
     find_prior_commit,
+    is_verification_deploy,
     is_verification_only,
     parse_card_body,
 )
@@ -533,6 +534,33 @@ def step_excessive_churn(
     return True, None
 
 
+def step_presentation_acceptance(card_body: str, workspace: str) -> Tuple[bool, Optional[str]]:
+    """E028/E029 — layout and a11y acceptance when card body declares presentation acceptance."""
+    if not any(
+        marker in card_body
+        for marker in ("Acceptance (layout):", "Acceptance (presentation):", "Acceptance (a11y):")
+    ):
+        return True, None
+    from presentation_acceptance import run_presentation_checks  # noqa: E402
+
+    ok, err = run_presentation_checks(card_body, workspace)
+    if not ok:
+        return False, err or "E028"
+    return True, None
+
+
+def _card_key_from_body(card_body: str, task_id: str) -> str:
+    m = re.search(r"card_key:\s*(\S+)", card_body, re.I)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"Task\s+\S+:\s*(.+)", card_body)
+    if m:
+        slug = re.sub(r"[^a-z0-9]+", "-", m.group(1).lower()).strip("-")
+        if slug:
+            return slug[:64]
+    return task_id.replace("t_", "", 1) if task_id.startswith("t_") else task_id
+
+
 # ── Main chain ─────────────────────────────────────────────────────────
 
 def run_chain(task_id: str, workspace: str, card_body: str,
@@ -558,6 +586,20 @@ def run_chain(task_id: str, workspace: str, card_body: str,
             return True, f"Advisory pass with warnings: {err}"
         return False, err
 
+    if is_verification_deploy(parsed, card_body):
+        plan_id = parsed.get("plan_id") or ""
+        card_key = _card_key_from_body(card_body, task_id)
+        from presentation_acceptance import verification_deploy_attested  # noqa: E402
+
+        if plan_id and not verification_deploy_attested(Path(workspace), plan_id, card_key):
+            return False, "verification_deploy_requires_attestation"
+        if parsed.get("tests"):
+            ok, err = step_3_tests_pass(parsed["tests"], workspace, parsed.get("files") or [])
+            passed, reason = _finish_step(ok, err)
+            if not passed:
+                return False, reason or err or "verification_deploy test failed"
+        return True, "verification_deploy attested"
+
     if is_verification_only(parsed, card_body):
         if not parsed.get("tests") and "Acceptance:" not in card_body:
             return False, "verification_only: Tests: or Acceptance: required"
@@ -578,8 +620,12 @@ def run_chain(task_id: str, workspace: str, card_body: str,
     memory = {}
     disable_attractor = (
         "Call-sites:" in card_body
+        or "Acceptance (layout):" in card_body
+        or "Acceptance (presentation):" in card_body
+        or "Acceptance (a11y):" in card_body
         or len([f for f in (parsed.get("files") or []) if f and "test" not in f.lower()]) >= 2
     )
+    presentation_step = lambda: step_presentation_acceptance(card_body, workspace)
     if lattice_memory_path and not disable_attractor:
         memory = load_lattice_memory(lattice_memory_path)
         attractor = find_attractor(memory, parsed["files"], parsed["tests"], workspace)
@@ -589,6 +635,7 @@ def run_chain(task_id: str, workspace: str, card_body: str,
             advisory_notes: list[str] = []
             for step_fn in (
                 lambda: step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id),
+                presentation_step,
                 lambda: step_5_exact_token(token_log, task_id),
                 lambda: step_7_agent_output_capture(task_id),
                 lambda: step_6_zero_output(
@@ -615,6 +662,7 @@ def run_chain(task_id: str, workspace: str, card_body: str,
         )),
         ("Unlisted changes", lambda: step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id)),
         ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace, parsed.get("files") or [])),
+        ("Presentation acceptance (E028/E029)", presentation_step),
         ("Commit match", lambda: step_4_commit_match(parsed["commit"], workspace)),
         ("Exact token (E018)", lambda: step_5_exact_token(token_log, task_id)),
         ("Zero-output check", lambda: step_6_zero_output(

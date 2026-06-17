@@ -220,6 +220,28 @@ class TestFinalAuditSanity(unittest.TestCase):
             classes = [v.class_name for v in violations]
             self.assertNotIn("unplanned_change", classes)
 
+    def test_verification_deploy_unattested_tier1(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            body = """plan_id: p1
+card_key: deploy-smoke
+Type: verification-deploy
+Deploy: browser smoke
+"""
+            ctx = AuditContext(
+                plan_id="p1",
+                repo_root=root,
+                baseline="abc",
+                plan_path=root / "plan.md",
+                plan_text="",
+                cards=[{"body": body, "status": "done", "task_id": "t_x"}],
+            )
+            with patch("final_audit.git_changed_paths", return_value=set()):
+                violations = run_tier1(ctx)
+            self.assertTrue(
+                any(v.class_name == "verification_deploy_unattested" for v in violations)
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

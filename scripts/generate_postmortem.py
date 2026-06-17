@@ -639,6 +639,8 @@ def _pitfalls_from_data(
     tasks: list[TaskRecord],
     token_entries: list[dict[str, Any]],
     intervention_count: int,
+    plan_id: str = "",
+    repo_root: Path | None = None,
 ) -> list[str]:
     pitfalls: list[str] = []
     failure_counter = Counter(
@@ -680,9 +682,82 @@ def _pitfalls_from_data(
                 + (" …" if len(set(hot)) > 8 else "")
             )
 
+    deploy_gap = _verification_deploy_attestation_gap(tasks, plan_id, repo_root)
+    if deploy_gap:
+        pitfalls.append(deploy_gap)
+
+    presentation_gap = _presentation_false_completion_gap(tasks)
+    if presentation_gap:
+        pitfalls.append(presentation_gap)
+
     if not pitfalls:
         pitfalls.append("No automated pitfall signatures detected for this plan run.")
     return pitfalls
+
+
+def _verification_deploy_attestation_gap(
+    tasks: list[TaskRecord],
+    plan_id: str,
+    repo_root: Path | None,
+) -> str | None:
+    if not plan_id or repo_root is None:
+        return None
+    lib = Path(__file__).resolve().parent / "lib"
+    if str(lib) not in sys.path:
+        sys.path.insert(0, str(lib))
+    try:
+        from card_body import is_verification_deploy, parse_card_body
+        from presentation_acceptance import verification_deploy_attested
+    except ImportError:
+        return None
+
+    for task in tasks:
+        if task.status.lower() not in TERMINAL_STATUSES:
+            continue
+        parsed = parse_card_body(task.body)
+        if not is_verification_deploy(parsed, task.body):
+            continue
+        card_key = re.sub(
+            r"[^a-z0-9]+",
+            "-",
+            (
+                re.search(r"card_key:\s*(\S+)", task.body, re.I).group(1)
+                if re.search(r"card_key:\s*(\S+)", task.body, re.I)
+                else task.task_id
+            ).lower(),
+        ).strip("-")[:64]
+        if verification_deploy_attested(repo_root, plan_id, card_key):
+            continue
+        return (
+            "verification-deploy card(s) archived without per-card attestation JSON under "
+            f"`.hermes/kanban/card-attestations/{plan_id}-{{card_key}}.json` — "
+            "operator browser/deploy smoke was not recorded (false-completion risk)."
+        )
+    return None
+
+
+def _presentation_false_completion_gap(tasks: list[TaskRecord]) -> str | None:
+    """Detect layout-acceptance cards blocked on E028 during the run."""
+    layout_cards = [
+        t
+        for t in tasks
+        if "Acceptance (layout):" in t.body or "Acceptance (presentation):" in t.body
+    ]
+    if not layout_cards:
+        return None
+    blocked_e028 = []
+    for task in layout_cards:
+        for event in task.events:
+            summary = (event.summary or "") + (event.kind or "")
+            if "E028" in summary or "layout_acceptance" in summary.lower():
+                blocked_e028.append(task.task_id)
+                break
+    if blocked_e028:
+        return (
+            f"{len(blocked_e028)} presentation-acceptance card(s) hit E028 — "
+            "review DOM order / motion patterns before operator sign-off."
+        )
+    return None
 
 
 def _skill_updates(pitfalls: list[str]) -> list[str]:
@@ -759,7 +834,9 @@ def build_report(
         if mode:
             failure_rows[mode].append(task.task_id)
 
-    pitfalls = _pitfalls_from_data(tasks, plan_tokens, intervention_count)
+    pitfalls = _pitfalls_from_data(
+        tasks, plan_tokens, intervention_count, plan_id=plan_id, repo_root=_project_root()
+    )
     skill_updates = _skill_updates(pitfalls)
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")

@@ -59,6 +59,35 @@ bash <bundle>/scripts/worktree_setup.sh --task-id <task_id> --repo-root <repo_ro
 
 Confirm `.worktreeinclude` lists kanban script paths and worktree has `.hermes/scripts/coding_agent_invoke.sh`.
 
+### Layout / presentation acceptance (E028 / E029)
+
+**Symptom:** Worker or evaluation chain blocks with `E028`, `layout_acceptance_failed`, or `E029` / `presentation_a11y_acceptance_failed`.
+
+**Fix:**
+
+1. Open the card body's `Acceptance (layout):` / `Acceptance (a11y):` bullets — they must be grep-verifiable against the route shell (`ui_stack.page_glob` in `.hermes/kanban-overrides/kanban-config.yaml`).
+2. For DOM order: confirm `line(anchor_before) < line(anchor_after)` in the route shell source.
+3. For motion: confirm entry transition classes match `ui_stack.motion.entry_transition_pattern` and a `prefers-reduced-motion` (or overlay `reduced_query`) guard exists.
+4. Re-run locally:
+   ```bash
+   bash hermes-kanban-advanced-workflow/scripts/kanban_layout_acceptance.sh \
+     --workspace . --card-body-file /tmp/card-body.md
+   ```
+
+See `plugin/data/references/frontend-neutrality.md`.
+
+### verification-deploy without attestation
+
+**Symptom:** `verification_deploy_requires_attestation` or final audit `verification_deploy_unattested`.
+
+**Fix:** Orchestrator writes attestation JSON before completing the card:
+
+```text
+.hermes/kanban/card-attestations/{plan_id}-{card_key}.json
+```
+
+Minimum: `plan_id`, `card_key`, `attested_at`, `operator`, `evidence`. Session `attestation.yaml` does **not** satisfy this gate. See `wiki/governance.md` § Card attestation.
+
 ### "Profile has no config.yaml" (PR001)
 
 **Symptom:** Worker fails with HTTP 401. Preflight §5 shows `FAIL: <profile> has no config.yaml`.

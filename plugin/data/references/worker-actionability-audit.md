@@ -14,6 +14,13 @@ Run after anchor-point verification and before declaring a plan ready for decomp
 
 | **Self-audit line** | Agent block missing `Self-audit:` before commit | Add `Self-audit: confirm each Spec/Acceptance bullet; revert files not in Files:` per `plan-file-format.md` |
 
+| # | Check | What "fail" looks like | Fix |
+|---|-------|----------------------|-----|
+| 6 | **Surface slots** | Presentation plan lacks `Surface-slots:` in optimization | Add slot map per `frontend-neutrality.md` |
+| 7 | **Layout acceptance** | Layout/motion verbs + route shell without `Acceptance (layout):` | Add grep-verifiable bullets |
+| 8 | **A11y acceptance** | Motion/choreography without `Acceptance (a11y):` reduced-motion row | Add media-query or utility check |
+| 9 | **Deploy attestation** | Plan has `verification-deploy` / `Deploy:` card without attestation path in optimization notes | Document `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` requirement per `plan-file-format.md` |
+
 ## Additional consistency checks
 
 | Check | What "fail" looks like | Fix |

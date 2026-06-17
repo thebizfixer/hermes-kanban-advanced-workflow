@@ -77,3 +77,18 @@ bash scripts/preflight.sh | python3 -c "import sys,json; d=json.load(sys.stdin);
 ```
 
 All should pass or degraded-only before decomposition.
+
+## 6. Presentation acceptance / ui_stack (frontend plans)
+
+When the host app has a UI stack configured:
+
+```bash
+grep -A6 '^ui_stack:' .hermes/kanban-overrides/kanban-config.yaml
+bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh <plan>.md
+```
+
+Confirm checks **19–21** pass (presentation acceptance, `ui_stack`/Surface-slots, motion+a11y). After decompose, plan memory should include `acceptance_matrix`:
+
+```bash
+python3 -c "import json; print(json.load(open('.hermes/kanban/memory/<plan_id>.json')).get('acceptance_matrix'))"
+```

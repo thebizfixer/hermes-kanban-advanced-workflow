@@ -40,7 +40,7 @@ Supported environments match [PLATFORM_NOTES.md](../PLATFORM_NOTES.md) and [codi
 | **Materialized bundle** | `$HERMES_HOME/scripts/` (+ sibling `registry/`, `policies/`, `prompts/`, `skills/`) | Tier 2 `governance_integrity.sh` |
 | **Host app repo** | Project root with `.hermes/kanban-overrides/kanban-config.yaml` | Tier 2 `provision.sh --check`, Tier 3 preflight |
 
-`governance_integrity.sh` expects the **materialized** flat bundle (scripts + `registry/` at the same root). Running it from an unmaterized monorepo `plugin/` tree will false-fail — run Tier 1 on the checkout instead, or run integrity from `$HERMES_HOME/scripts/../` after bootstrap.
+`governance_integrity.sh` expects the **plugin checkout** (`plugin/data/*`, `plugin/skills/*`) or a legacy flat materialized bundle. Running it from an unmaterized monorepo without `plugin/data/registry` will fail — run Tier 1 `sanity_check.sh` on the checkout, or run integrity from `hermes-kanban-advanced-workflow/scripts/` after clone.
 
 Resolve `$HERMES_HOME`: see [[bootstrap#hermes_home-resolution]] and `plugin/data/references/hermes-state-directory.md`.
 
@@ -63,7 +63,7 @@ bash scripts/sanity_check.sh
 | Script | Exit 0 means | Common failures |
 | --- | --- | --- |
 | `smoke_test_plugin.py` | All 12 skills, 7 tools, 2 hooks, CLI register; handlers callable | Missing `kanban-git` in roster, broken `register()` import |
-| `sanity_check.sh` | Dirs present, all `*.sh` pass `bash -n`, LF endings, skill frontmatter, error registry, unit tests pass | Bash heredoc/syntax in a script, CRLF on shell scripts, unittest failures |
+| `sanity_check.sh` | Dirs present, all `*.sh` pass `bash -n`, LF endings, skill frontmatter, error registry (incl. E028/E029), presentation acceptance scripts, unit tests pass | Bash heredoc/syntax in a script, CRLF on shell scripts, unittest failures |
 
 **Full Python unit suite** (same as sanity_check’s unittest block; use `-v` for detail):
 
@@ -84,15 +84,15 @@ Confirms skills and scripts on disk match the plugin bundle after init or **Upda
 # From host app repo root (where .hermes/kanban-overrides/ lives)
 bash hermes-kanban-advanced-workflow/scripts/provision.sh --check
 
-# From materialized bundle root (parent of scripts/)
-bash "$HERMES_HOME/scripts/governance_integrity.sh"
-# optional JSON: bash "$HERMES_HOME/scripts/governance_integrity.sh" --json
+# From plugin checkout (structural governance + optional provision when overlay exists)
+bash hermes-kanban-advanced-workflow/scripts/governance_integrity.sh
+# optional JSON: bash hermes-kanban-advanced-workflow/scripts/governance_integrity.sh --json
 ```
 
 | Script | Exit 0 means | Common failures |
 | --- | --- | --- |
-| `provision.sh --check` | Materialized skills under `$HERMES_HOME/skills/kanban-advanced/` match plugin source hashes | Hand-edited skill files, init not re-run after pull |
-| `governance_integrity.sh` | Required scripts executable, registry/policies/prompts/skills present, provision check clean | Run from wrong directory (pre-provision monorepo layout) |
+| `provision.sh --check` | Materialized skills under configured `skills_output_path` match plugin source hashes; `$HERMES_HOME/scripts/lib/` includes `card_body.py`, `presentation_acceptance.py`, `verify_optimization_presentation.py` | Hand-edited skill files, init not re-run after pull, stale lib sync |
+| `governance_integrity.sh` | Required scripts + lib modules, registry/policies/prompts/skills/references present (plugin layout), E028/E029 in registry, provision check when host overlay exists | Run from wrong directory; missing `frontend-neutrality.md` or presentation lib modules |
 
 After **Update Plugin** on the dashboard: run Tier 1 on the install dir, then Tier 2 from the host project, then **Bootstrap** if reconciliation still fails — see [[bootstrap#troubleshooting]].
 

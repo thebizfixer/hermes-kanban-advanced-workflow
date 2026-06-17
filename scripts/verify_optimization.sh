@@ -4,9 +4,9 @@
 # Verifies structural checklist items from the planning skill before the
 # orchestrator can declare "plan optimized." Runs as a blocking structural gate.
 #
-# Current scope: 15 checks covering Harden items 1,5,7,9,11,12 and
-# Optimize items 1,2,3,6,7,8,11,15,18 plus goal-card annotations and
-# sequential Card N labeling in ## Kanban optimization.
+# Current scope: 18 checks + presentation/ui_stack gates (19–21).
+# Covers Harden items 1,5,7,9,11,12 and Optimize items 1,2,3,6,7,8,11,15,18,
+# goal-card annotations, sequential Card N labeling, Spec/Contracts/precision verbs.
 #
 # Usage:
 #   bash verify_optimization.sh --plan <plan.md>
@@ -328,6 +328,48 @@ if [[ "${VAGUE_IN_AGENT:-0}" -gt 0 ]]; then
     check_warn "$VAGUE_IN_AGENT vague verb(s) in agent blocks — replace with concrete operations (plan-file-format.md)"
 else
     check_pass "No vague integration verbs in agent blocks"
+fi
+
+# ── 19. Layout/presentation acceptance coverage ───────────────────────
+echo "19. Layout/presentation acceptance in agent blocks"
+PRES_FAIL=$(python3 "$SCRIPT_DIR/lib/verify_optimization_presentation.py" pres "$PLAN" 2>/dev/null || echo 1)
+PRES_FAIL=${PRES_FAIL:-0}
+if [[ "${PRES_FAIL:-0}" -gt 0 ]]; then
+    if governance_failures_block; then
+        check_fail "$PRES_FAIL agent block(s) with layout verbs lack Acceptance (layout|presentation)"
+    else
+        check_warn "$PRES_FAIL agent block(s) with layout verbs lack Acceptance (layout|presentation)"
+    fi
+else
+    check_pass "Presentation acceptance present when layout verbs used"
+fi
+
+# ── 20. Frontend plan ui_stack / Surface-slots ─────────────────────────
+echo "20. ui_stack or Surface-slots on frontend plans"
+UI_FAIL=$(python3 "$SCRIPT_DIR/lib/verify_optimization_presentation.py" ui "$PLAN" 2>/dev/null || echo 0)
+UI_FAIL=${UI_FAIL:-0}
+if [[ "${UI_FAIL:-0}" -gt 0 ]]; then
+    if governance_failures_block; then
+        check_fail "Frontend plan missing ui_stack: or Surface-slots: — see frontend-neutrality.md"
+    else
+        check_warn "Frontend plan missing ui_stack: or Surface-slots:"
+    fi
+else
+    check_pass "ui_stack / Surface-slots discipline OK"
+fi
+
+# ── 21. Motion without a11y acceptance ─────────────────────────────────
+echo "21. Motion verbs require Acceptance (a11y)"
+A11Y_FAIL=$(python3 "$SCRIPT_DIR/lib/verify_optimization_presentation.py" a11y "$PLAN" 2>/dev/null || echo 0)
+A11Y_FAIL=${A11Y_FAIL:-0}
+if [[ "${A11Y_FAIL:-0}" -gt 0 ]]; then
+    if governance_failures_block; then
+        check_fail "$A11Y_FAIL agent block(s) with motion lack Acceptance (a11y):"
+    else
+        check_warn "$A11Y_FAIL agent block(s) with motion lack Acceptance (a11y):"
+    fi
+else
+    check_pass "Motion blocks include a11y acceptance when needed"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────

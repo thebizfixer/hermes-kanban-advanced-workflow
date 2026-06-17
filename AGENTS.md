@@ -40,6 +40,9 @@ Load the relevant wiki page for detailed instructions:
 | Install / bootstrap / Update Plugin looks wrong | `wiki/plugin-verification.md` — smoke, sanity, provision, unit tests |
 | Windows / WSL / platform paths (HERMES_HOME, Git Bash, E011) | `PLATFORM_NOTES.md` + `wiki/troubleshooting.md` § Cross-mount |
 | Lifecycle cron silent / wrong deliver | `wiki/troubleshooting.md` § Wave crons + `docs/reference/scripts.md` § `provision_kanban_crons.sh` |
+| E028 / E029 layout or a11y acceptance failed | `plugin/data/references/frontend-neutrality.md` → `wiki/troubleshooting.md` § Layout / presentation acceptance |
+| Frontend overlay `ui_stack` / surface slots | `wiki/configuration.md` § `ui_stack` + `plugin/data/references/frontend-neutrality.md` |
+| verification-deploy attestation | `wiki/governance.md` § Card attestation + `wiki/troubleshooting.md` |
 | Where are upstream docs? | `wiki/external-references.md` |
 
 ## Requirements

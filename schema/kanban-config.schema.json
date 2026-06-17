@@ -211,6 +211,33 @@
           }
         }
       }
+    },
+    "ui_stack": {
+      "type": "object",
+      "description": "Framework-neutral presentation acceptance anchors. See plugin/data/references/frontend-neutrality.md.",
+      "additionalProperties": false,
+      "properties": {
+        "framework": {
+          "type": "string",
+          "enum": ["react-next", "vue-nuxt", "sveltekit", "angular", "static"]
+        },
+        "page_glob": {
+          "type": "string",
+          "description": "Glob for route shell files (presentation layout acceptance)."
+        },
+        "test_command": {
+          "type": "string",
+          "description": "Host frontend unit test command."
+        },
+        "motion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reduced_query": { "type": "string" },
+            "entry_transition_pattern": { "type": "string" }
+          }
+        }
+      }
     }
   }
 }

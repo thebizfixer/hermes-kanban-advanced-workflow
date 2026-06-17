@@ -24,6 +24,10 @@ class TestScriptMaterialize(unittest.TestCase):
             (lib_src / "hermes_notify_deliver.py").write_text(
                 "def resolve_notify_deliver():\n    return 'all'\n", encoding="utf-8"
             )
+            (lib_src / "presentation_acceptance.py").write_text(
+                "def run_presentation_checks(*_a, **_k):\n    return True, None\n",
+                encoding="utf-8",
+            )
 
             scripts_dst = root / "dst" / "scripts"
             lines = materialize_hermes_scripts(scripts_src, scripts_dst)
@@ -32,7 +36,9 @@ class TestScriptMaterialize(unittest.TestCase):
             self.assertTrue((scripts_dst / "lib" / "coding_agent_env.sh").exists())
             self.assertTrue((scripts_dst / "lib" / "resolve_notify_deliver.sh").exists())
             self.assertTrue((scripts_dst / "lib" / "hermes_notify_deliver.py").exists())
+            self.assertTrue((scripts_dst / "lib" / "presentation_acceptance.py").exists())
             self.assertTrue(any("lib/coding_agent_env.sh" in line for line in lines))
+            self.assertTrue(any("lib/presentation_acceptance.py" in line for line in lines))
 
 
 if __name__ == "__main__":

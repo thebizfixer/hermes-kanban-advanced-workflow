@@ -534,6 +534,23 @@ def resolve_coding_agent(
     return env.get("KANBAN_CODING_AGENT", DEFAULT_CODING_AGENT)
 
 
+def resolve_ui_stack(project_root: Path) -> dict:
+    """Framework-neutral presentation anchors from overlay `ui_stack` block."""
+    import sys
+
+    lib = PLUGIN_ROOT / "scripts" / "lib"
+    if not lib.is_dir():
+        lib = project_root / "hermes-kanban-advanced-workflow" / "scripts" / "lib"
+    if lib.is_dir() and str(lib) not in sys.path:
+        sys.path.insert(0, str(lib))
+    try:
+        from presentation_acceptance import load_ui_stack
+
+        return load_ui_stack(project_root.resolve())
+    except ImportError:
+        return {}
+
+
 def resolve_coding_agent_model(
     project_root: Path,
     *,

@@ -408,6 +408,49 @@ def _cmd_card_ordinals(args: argparse.Namespace) -> int:
     return 1 if err else 0
 
 
+def extract_acceptance_matrix(plan_text: str) -> dict:
+    """Surface slots + per-card presentation acceptance for plan memory."""
+    from presentation_acceptance import parse_presentation_acceptance, parse_surface_slots
+
+    matrix: dict = {
+        "surface_slots": parse_surface_slots(plan_text),
+        "presentation_cards": [],
+    }
+    opt = extract_optimization_section(plan_text)
+    if not opt:
+        return matrix
+    for block in split_card_blocks(opt):
+        pa = parse_presentation_acceptance(block)
+        if pa.get("layout") or pa.get("a11y"):
+            matrix["presentation_cards"].append(pa)
+    return matrix
+
+
+def integration_verify_warnings(cards: list[dict], plan_text: str) -> list[str]:
+    """Advisory when frontend route micro-cards lack a closing integration-verify gate."""
+    warnings: list[str] = []
+    route_cards = [
+        c for c in cards if re.search(r"route-", c.get("key", ""), re.IGNORECASE)
+    ]
+    has_integration = any(c.get("key") == "integration-verify" for c in cards)
+    has_frontend = bool(
+        re.search(r"Files:.*\.(tsx|vue|svelte)", plan_text, re.IGNORECASE)
+        or re.search(r"^Surface-slots:", plan_text, re.MULTILINE | re.IGNORECASE)
+    )
+    if route_cards and not has_integration:
+        warnings.append(
+            "Plan has route-* cards but no integration-verify card — add "
+            "Type: verification-local after route-layout group (kanban-planning § Frontend decomposition)."
+        )
+    elif has_frontend and not has_integration and not route_cards:
+        if re.search(r"Acceptance \(layout\)|Acceptance \(presentation\)", plan_text, re.I):
+            warnings.append(
+                "Frontend plan declares presentation acceptance but no integration-verify card — "
+                "add orchestrator/worker verification-local gate before verification-deploy."
+            )
+    return warnings
+
+
 def _cmd_workstream_conflict(args: argparse.Namespace) -> int:
     text = load_plan_text(args.plan)
     flag = workstream_file_conflict_flag(text)

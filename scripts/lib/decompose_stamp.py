@@ -78,24 +78,32 @@ def extract_agent_field(agent_body: str, field_name: str) -> str:
 
 
 def load_acceptance_matrix(plan_path: str | Path | None) -> dict[str, Any]:
+    """Frontmatter ``acceptance_matrix`` wins; else derive from optimization section."""
     if not plan_path:
         return {}
     path = Path(plan_path)
     if not path.is_file():
         return {}
     try:
-        fm, _ = parse_frontmatter(load_plan_text(path))
+        text = load_plan_text(path)
+        fm, _ = parse_frontmatter(text)
     except Exception:
         return {}
     raw = fm.get("acceptance_matrix")
-    if not raw:
-        return {}
-    if isinstance(raw, dict):
-        return raw
+    if raw:
+        if isinstance(raw, dict):
+            return raw
+        try:
+            parsed = json.loads(str(raw))
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
     try:
-        parsed = json.loads(str(raw))
-        return parsed if isinstance(parsed, dict) else {}
-    except json.JSONDecodeError:
+        from plan_parse import extract_acceptance_matrix
+
+        return extract_acceptance_matrix(text)
+    except Exception:
         return {}
 
 

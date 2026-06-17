@@ -122,8 +122,8 @@ codes:
   E014:
     code: E014_ORCHESTRATOR_CARD_ON_WORKER
     severity: error
-    description: "Card has no agent -p block and no Files: line (orchestrator-only); or Type: verification with Files:/agent block contradiction"
-    recovery: "Orchestrator-only: kanban_complete without agent dispatch. Type: verification: run Tests: via terminal only, then eval chain — no coding_agent_invoke dispatch."
+    description: "Orchestrator-only card on worker profile; Type: verification with Files:/agent contradiction; or Type: verification-deploy / Deploy: line on worker"
+    recovery: "Orchestrator-only: kanban_complete without agent dispatch. verification-local: run Tests: via terminal only. verification-deploy: orchestrator writes card-attestation JSON before complete."
     source: worker_step_3
     retry: false
 
@@ -190,6 +190,22 @@ codes:
     recovery: "Fall back to bash <BUNDLE>/scripts/pre_dispatch_gate.sh <plan_id>. Increase subagent_gate.timeouts in overlay or set subagent_gate.enabled: false for serial-only. See plugin/data/references/parallel-subagent-gate.md."
     source: orchestrator_pre_dispatch
     retry: true
+
+  E028:
+    code: E028_LAYOUT_ACCEPTANCE_FAILED
+    severity: error
+    description: "Presentation layout acceptance failed — DOM order or entry transition pattern check"
+    recovery: "Fix route shell per Acceptance (layout): bullets; re-run kanban_layout_acceptance.sh or evaluation chain."
+    source: evaluation_chain_presentation
+    retry: false
+
+  E029:
+    code: E029_PRESENTATION_A11Y_FAILED
+    severity: error
+    description: "Presentation a11y acceptance failed — reduced-motion guard missing"
+    recovery: "Add prefers-reduced-motion or motion-reduce path per Acceptance (a11y): and ui_stack.motion.reduced_query."
+    source: evaluation_chain_presentation
+    retry: false
 
   # ── Card body policy errors (Workstream 3) ──
   P001:

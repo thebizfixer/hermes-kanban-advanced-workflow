@@ -42,6 +42,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `final_audit_overrides` | Tier 2 doc-coverage allowlist (array of `signal`, `path`, `rationale`) | `[]` |
 | `subagent_gate.enabled` | Parallel pre-dispatch gate via Hermes `delegate_task` (orchestrator session); serial fallback when `false` or no `delegation` toolset | `true` |
 | `subagent_gate.timeouts` | Per-domain seconds before E022 (`plan_gate`, `env_gate`, `infra_gate`, `plan_parse`, `cron_setup`) | see example YAML |
+| `ui_stack` | Framework-neutral presentation acceptance anchors (route shell glob, motion patterns, frontend test command) | unset — optional; required when running layout acceptance on a host UI |
 
 `final_audit_overrides` is **operator-owned**: read at audit time from overlay YAML but **not** in init `_MANAGED_KEYS` — re-run `hermes kanban-advanced init` does not overwrite your allowlist. Edit `.hermes/kanban-overrides/kanban-config.yaml` directly; schema in `schema/kanban-config.schema.json`. See `plugin/data/references/final-audit-doc-coverage.md`.
 
@@ -61,6 +62,34 @@ subagent_gate:
 ```
 
 Blocking/warning severities match serial gate (preflight `fail` = WARN, not block). Full design: `plugin/data/references/parallel-subagent-gate.md`. Sad-path: E022 in `kanban-orchestrator-governance`.
+
+### UI stack (`ui_stack`)
+
+Optional block for **frontend / presentation acceptance** on the operator host. Plugin scripts read it for `kanban_layout_acceptance.sh` and evaluation-chain checks **E028** / **E029** — they never hardcode framework paths or CSS class strings in the bundle.
+
+```yaml
+ui_stack:
+  framework: react-next   # react-next | vue-nuxt | sveltekit | angular | static
+  page_glob: "frontend/app/**/page.tsx"
+  motion:
+    reduced_query: "prefers-reduced-motion: reduce"
+    entry_transition_pattern: "animate-in fade-in|transition-opacity"
+  test_command: "cd frontend && npm test --"
+```
+
+| Field | Purpose |
+| --- | --- |
+| `framework` | Host UI stack label (documentation + future tooling) |
+| `page_glob` | Route shell files for DOM line-order grep |
+| `motion.reduced_query` | Reduced-motion guard pattern |
+| `motion.entry_transition_pattern` | Entry transition class grep when Spec mentions fade/slide |
+| `test_command` | Optional override for frontend unit tests |
+
+Validate overlay: `python hermes-kanban-advanced-workflow/scripts/validate_config.py .hermes/kanban-overrides/kanban-config.yaml`. Commented examples in `kanban-config.example.yaml` do **not** trigger `ui_stack` validation.
+
+Plans declare **surface slots** and `Acceptance (layout|a11y):` bullets; see `plugin/data/references/frontend-neutrality.md` and `plan-file-format.md` § Acceptance surfaces.
+
+**Plan memory `acceptance_matrix`:** After decompose, `.hermes/kanban/memory/{plan_id}.json` stores `acceptance_matrix` from plan frontmatter when present, otherwise parsed from the optimization section (`extract_acceptance_matrix`). Card stamping uses the same loader (`decompose_stamp.load_acceptance_matrix`).
 
 Set `notify_lifecycle: false` or dashboard **Cron → Lifecycle notify** off to skip lifecycle cron provisioning. Set `walk_away_mode: true` or dashboard **Cron → Walk-away mode** on for unattended reconciliation → cleanup → postmortem → completion notify after final audit. Full contract: `plugin/data/references/walk-away-mode.md`. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged.
 

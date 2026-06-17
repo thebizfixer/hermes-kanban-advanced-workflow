@@ -93,6 +93,42 @@ Before Optimize completes:
 4. **Verification taxonomy** — `verification-local` (pytest) vs `verification-deploy` (operator + deploy); never mark deploy todos `completed` on merge alone.
 5. **Same-file graph** — Cards touching the same production file: serialize via `wave_parent`, not parallel gate-only siblings.
 6. **Multi-parent cap** — Test/doc cards: max **2** production parents unless `Mode: read-only`.
+7. **Surface-slots** — Presentation plans declare `Surface-slots:` under `## Kanban optimization` (see `frontend-neutrality.md`).
+8. **Presentation acceptance** — Layout/motion work includes grep-verifiable `Acceptance (layout):` and `Acceptance (a11y):` in agent blocks when Spec mentions DOM order, fade, or choreography.
+
+### Acceptance (presentation) — layout + motion
+
+When Spec or plan prose mentions DOM order, surface slots, fade/slide/choreograph, or single-loader placement, agent blocks MUST include:
+
+```markdown
+Acceptance (layout):
+- Done when: line number of `{primary_loader_slot_anchor}` < line number of `{status_panel_anchor}` in `{route_shell}` (rg -n)
+- Done when: `{detail_region_wrapper}` matches `{ui_stack.motion.entry_transition_pattern}` when `{tier_gate}`
+
+Acceptance (a11y):
+- Done when: `{live_region_selector}` present with aria-live=polite|assertive during load (rg)
+- Done when: reduced-motion path disables slide/transform (grep per ui_stack.motion.reduced_query)
+```
+
+`Acceptance (layout):` remains the evaluation-chain trigger label; it is a subset of **Acceptance (presentation)**.
+
+### Attestation layers (do not conflate)
+
+| Layer | Path | When |
+| --- | --- | --- |
+| Session attestation | `$HERMES_HOME/kanban/attestation.yaml` | After preflight, before decompose |
+| Card attestation | `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` | Before archiving `Type: verification-deploy` |
+
+See `wiki/governance.md` § Card attestation.
+
+### Plan memory `acceptance_matrix` (two sources, one loader)
+
+| Source | Precedence | Shape |
+| --- | --- | --- |
+| Plan YAML frontmatter `acceptance_matrix:` | **Wins** when present | Card-keyed checklist for `Acceptance-checklist:` stamping |
+| Optimization section parsing | Fallback via `extract_acceptance_matrix()` | `surface_slots` + `presentation_cards` |
+
+`decompose_stamp.load_acceptance_matrix()` and `kanban_decompose` plan memory both use this loader. Prefer frontmatter for per-card checklists; rely on parsing when only `Surface-slots:` / `Acceptance (layout):` appear in `## Kanban optimization`.
 
 ## Plan memory paths
 

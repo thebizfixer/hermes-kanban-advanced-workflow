@@ -212,7 +212,9 @@ Remaining checks stay bash **grep -E / awk / python3 verify_goal_cards** (alread
 
 ### Phase B (optional consolidation)
 
-Port heuristic checks (agent blocks, `--model`, contingencies table, …) into `verify_optimization.py` as named functions `check_agent_blocks()`, etc. Single `python3 verify_optimization.py --plan` runs all 15. `verify_optimization.sh` becomes `exec` wrapper.
+Port heuristic checks (agent blocks, `--model`, contingencies table, …) into `verify_optimization.py` as named functions `check_agent_blocks()`, etc. Single `python3 verify_optimization.py --plan` runs all checks. `verify_optimization.sh` becomes `exec` wrapper.
+
+**Shipped (2026-06):** Checks **19–21** (presentation acceptance, `ui_stack` / Surface-slots, motion+a11y) live in `verify_optimization.sh` and `scripts/lib/verify_optimization_presentation.py` — not yet folded into a single Python module. Total bash gate count is **21** checks; Phase B consolidation remains optional.
 
 **Recommendation:** Ship **Phase A** in first PR; Phase B as follow-up when parity tests pass.
 

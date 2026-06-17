@@ -160,6 +160,42 @@ def recover_e009_push_to_development(task_id: str, workspace: str, registry: dic
                     f"E009: Agent pushed to {trigger_branch}. Remote branch deleted. Agent restart required."])
 
 
+def recover_e028_layout_acceptance(task_id: str, workspace: str, registry: dict):
+    """E028: Layout/presentation acceptance failed."""
+    print(f"[recover] E028: Layout acceptance failed for {task_id}")
+    print(
+        "[recover] Action: Run kanban_layout_acceptance.sh from worktree; "
+        "fix DOM line order or entry transition per Acceptance (layout): and ui_stack."
+    )
+    subprocess.run(
+        [
+            "hermes",
+            "kanban",
+            "block",
+            task_id,
+            "E028: Layout acceptance failed — fix route shell per card Acceptance (layout):",
+        ]
+    )
+
+
+def recover_e029_presentation_a11y(task_id: str, workspace: str, registry: dict):
+    """E029: Presentation a11y acceptance failed."""
+    print(f"[recover] E029: Presentation a11y failed for {task_id}")
+    print(
+        "[recover] Action: Add prefers-reduced-motion / motion-reduce guard per "
+        "Acceptance (a11y): and ui_stack.motion.reduced_query."
+    )
+    subprocess.run(
+        [
+            "hermes",
+            "kanban",
+            "block",
+            task_id,
+            "E029: Presentation a11y failed — add reduced-motion guard in route shell.",
+        ]
+    )
+
+
 def recover_e011_cross_mount(task_id: str, workspace: str, registry: dict):
     """E011: Cross-mount filesystem."""
     print("[recover] E011: Cross-mount filesystem detected.")
@@ -243,6 +279,8 @@ RECOVERY_MAP = {
     "E009_PUSH_TO_DEVELOPMENT": recover_e009_push_to_development,
     "E011_CROSS_MOUNT_FILESYSTEM": recover_e011_cross_mount,
     "E012_STALE_PREFlight_CACHE": recover_e012_stale_cache,
+    "E028_LAYOUT_ACCEPTANCE_FAILED": recover_e028_layout_acceptance,
+    "E029_PRESENTATION_A11Y_FAILED": recover_e029_presentation_a11y,
     "PR001_PROFILE_NO_CONFIG": recover_profile_no_config,
 }
 

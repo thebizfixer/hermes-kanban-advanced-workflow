@@ -10,7 +10,8 @@ default_action: deny
 
 # Carve-outs (see validate_card() in scripts/kanban_card_policy.py):
 # - `Type: orchestrator-handoff` — SOP-only control cards from kanban_handoff.py
-# - `Type: verification` — test-only gates (Tests: + Commit: N/A; no Files:/agent block)
+# - `Type: verification` / `verification-local` — test-only gates (Tests: + Commit: N/A; no Files:/agent block)
+# - `Type: verification-deploy` — operator card-attestation gate (no Files:/agent block; orchestrator assignee)
 # - `Type: remediation` without `Remediation-phase: final` — in-flight remediation (full exempt)
 # - `Type: remediation` + `Remediation-phase: final` — post-flight audit remediation (doc-only skips P002/P012/P013)
 

@@ -16,11 +16,12 @@ Runs between **sanity check** and **optimize for kanban**. Tier detail: `plan-ha
 7. Deferred decisions < 30% of sections.
 8. No duplicate `Files:` overlap across parallel cards (draft decomposition).
 9. Iteration estimate per card ≤ 35 turns (`iteration-budget-estimation.md`).
+10. Frontend plans: `Surface-slots:` or overlay `ui_stack` documented; layout/motion verbs paired with `Acceptance (layout|presentation|a11y):` bullets (`frontend-neutrality.md`).
 
 ## Nice-to-have
 
-10. Consolidate same-file micro-cards.
-11. **Redundant change detection** — grep plan for duplicate edits to the same function from multiple workstreams; merge.
+11. Consolidate same-file micro-cards.
+12. **Redundant change detection** — grep plan for duplicate edits to the same function from multiple workstreams; merge.
 
 ## Report template
 

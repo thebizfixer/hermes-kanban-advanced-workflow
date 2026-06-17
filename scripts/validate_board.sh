@@ -74,8 +74,17 @@ body_has_tests() {
     echo "$1" | grep -qE '^(Tests:|tests:)'
 }
 
+body_is_verification_local() {
+    echo "$1" | grep -qiE '^(Type:|type:)[[:space:]]*verification(-local)?[[:space:]]*$'
+}
+
+body_is_verification_deploy() {
+    echo "$1" | grep -qiE '^(Type:|type:)[[:space:]]*verification-deploy[[:space:]]*$' \
+        || echo "$1" | grep -qiE '^Deploy:'
+}
+
 body_is_verification() {
-    echo "$1" | grep -qiE '^(Type:|type:)[[:space:]]*verification'
+    body_is_verification_local "$1" || body_is_verification_deploy "$1"
 }
 
 echo "=== Pre-Dispatch Board Validation ==="
@@ -296,7 +305,10 @@ for tid in $PARENTLESS_CARDS; do
     body_is_verification "$BODY" && IS_VERIFICATION=1
     HAS_FILES=0
     body_has_files "$BODY" && HAS_FILES=1
-    if [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$IS_VERIFICATION" -gt 0 ] && [ "$HAS_FILES" -gt 0 ]; then
+    if [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && body_is_verification_deploy "$BODY"; then
+        fail "Card $tid (assignee=$ASSIGNEE) Type: verification-deploy must use orchestrator profile"
+        ORCH_ONLY_ISSUES=$((ORCH_ONLY_ISSUES + 1))
+    elif [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$IS_VERIFICATION" -gt 0 ] && [ "$HAS_FILES" -gt 0 ]; then
         fail "Card $tid (assignee=$ASSIGNEE) Type: verification must not have Files: line"
         ORCH_ONLY_ISSUES=$((ORCH_ONLY_ISSUES + 1))
     elif [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$IS_VERIFICATION" -gt 0 ] && [ "$HAS_AGENT" -gt 0 ]; then

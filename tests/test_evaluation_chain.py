@@ -149,6 +149,31 @@ Mode: read-only
         self.assertFalse(passed)
         self.assertIn("verification_only", reason)
 
+    def test_verification_deploy_blocks_without_attestation(self) -> None:
+        body = """plan_id: plan-x
+card_key: deploy-smoke
+Type: verification-deploy
+Tests: echo ok
+Deploy: operator browser smoke
+Mode: read-only
+"""
+        passed, reason = chain.run_chain(
+            "t_deploy01",
+            self.repo,
+            body,
+            baseline="HEAD~1",
+            token_log="",
+            lattice_memory_path="",
+            registry_path="",
+        )
+        self.assertFalse(passed)
+        self.assertIn("attestation", reason.lower())
+
+    def test_presentation_acceptance_skips_without_markers(self) -> None:
+        ok, err = chain.step_presentation_acceptance("Files: a.py\nMode: modify-only\n", self.repo)
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+
     def test_pre_existing_allows_merge_base_diff(self) -> None:
         path = os.path.join(self.repo, "src", "foo.py")
         with open(path, "w", encoding="utf-8") as f:

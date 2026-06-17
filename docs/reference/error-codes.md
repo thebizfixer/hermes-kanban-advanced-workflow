@@ -19,7 +19,7 @@ Canonical registry: `plugin/data/registry/error-codes.yaml` (bundled with the pl
 | E011      | error         | Cross-mount filesystem                        | No    |
 | E012      | warning       | Stale preflight cache                         | No    |
 | E013      | error         | Evaluation chain missing                      | No    |
-| E014      | error         | Orchestrator-only on worker; or `Type: verification` with Files:/agent contradiction | No    |
+| E014      | error         | Orchestrator-only on worker; verification Files:/agent contradiction; verification-deploy on worker | No    |
 | E015      | error         | Test environment invalid                      | Yes   |
 | E016      | error         | Commit not reachable from staging             | No    |
 | E017      | error         | Excessive churn (>3× line budget)             | No    |
@@ -28,6 +28,8 @@ Canonical registry: `plugin/data/registry/error-codes.yaml` (bundled with the pl
 | E020      | error         | Agent output unparseable / missing usage      | Yes   |
 | E021      | error         | Worktree incomplete (missing kanban scripts)  | No    |
 | E022      | error         | Parallel subagent gate domain timeout           | Yes   |
+| E028      | error         | Layout/presentation acceptance failed           | Yes   |
+| E029      | error         | Presentation a11y acceptance failed             | Yes   |
 | P001-P009 | error/warning | Card body policy violations                   | No    |
 | A001-A003 | error         | Attestation missing/stale/tampered            | No    |
 | PR001     | error         | Profile no config                             | No    |

@@ -64,6 +64,8 @@ def parse_card_body(body: str) -> dict:
     if agent_match:
         agent_block = agent_match.group(1).strip()
 
+    presentation = _parse_presentation_from_text(body)
+
     return {
         "files": files_line,
         "mode": mode_line,
@@ -75,14 +77,43 @@ def parse_card_body(body: str) -> dict:
         "plan_file": plan_file,
         "type": card_type,
         "body": body,
+        "presentation_acceptance": presentation,
     }
+
+
+def _parse_presentation_from_text(body: str) -> dict:
+    try:
+        from presentation_acceptance import parse_presentation_acceptance
+
+        return parse_presentation_acceptance(body)
+    except ImportError:
+        return {"layout": [], "a11y": [], "surface_slots": []}
+
+
+def is_verification_local(parsed: dict, body: str | None = None) -> bool:
+    """True for pytest/grep verification gates (worker may run tests)."""
+    card_type = (parsed.get("type") or "").strip().lower()
+    if card_type in ("verification", "verification-local"):
+        return True
+    return is_verification_only(parsed, body) and card_type != "verification-deploy"
+
+
+def is_verification_deploy(parsed: dict, body: str | None = None) -> bool:
+    """True when card requires operator card-attestation before archive."""
+    text = body if body is not None else parsed.get("body", "")
+    card_type = (parsed.get("type") or "").strip().lower()
+    return card_type == "verification-deploy" or bool(
+        re.search(r"^Deploy:", text, re.MULTILINE | re.IGNORECASE)
+    )
 
 
 def is_verification_only(parsed: dict, body: str | None = None) -> bool:
     """True when card is a test-only verification gate (no coding-agent dispatch)."""
+    if is_verification_deploy(parsed, body):
+        return False
     text = body if body is not None else parsed.get("body", "")
     card_type = (parsed.get("type") or "").strip().lower()
-    if card_type == "verification":
+    if card_type in ("verification", "verification-local"):
         return True
     commit = parsed.get("commit") or ""
     if commit and _VERIFICATION_COMMIT_RE.search(commit):
@@ -112,7 +143,8 @@ def has_tests_declaration(body: str) -> bool:
 
 
 def is_verification_card(body: str) -> bool:
-    return is_verification_only(parse_card_body(body), body)
+    parsed = parse_card_body(body)
+    return is_verification_local(parsed, body) or is_verification_deploy(parsed, body)
 
 
 def is_orchestrator_only(parsed: dict, body: str | None = None) -> bool:

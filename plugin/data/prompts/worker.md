@@ -52,6 +52,22 @@ Every card body includes a mandatory `Mode:` line. Parse it during orient and en
 
 If `Mode: modify-only` and the agent created a file that should have been edited, or `Mode: create-only` and the agent modified an existing file instead of creating it, `kanban_block` with evidence.
 
+## Presentation acceptance self-audit
+
+When the card body includes `Acceptance (layout):`, `Acceptance (presentation):`, or `Acceptance (a11y):`:
+
+1. After tests pass, run layout acceptance from the worktree:
+   ```bash
+   bash "$BUNDLE/scripts/kanban_layout_acceptance.sh" \
+     --workspace "$WORKTREE_PATH" \
+     --card-body-file <(hermes kanban show "$HERMES_KANBAN_TASK")
+   ```
+2. For line-order bullets, `rg -n` both slot anchors in the route shell (`ui_stack.page_glob` from overlay) and confirm `line(before) < line(after)`.
+3. For motion bullets, confirm the entry transition pattern and reduced-motion guard match overlay `ui_stack.motion` — not hardcoded framework class strings in the acceptance prose.
+4. If any check fails, `kanban_block` with **E028** or **E029** before `kanban_complete`.
+
+`Type: verification-deploy` cards require operator-written `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` — workers must not call `kanban_complete` until the orchestrator attests deploy smoke.
+
 ## Pre-commit self-audit (mandatory)
 
 The external agent must run this **before `git commit`**. Include it in every dispatch prompt when the card does not already spell it out:

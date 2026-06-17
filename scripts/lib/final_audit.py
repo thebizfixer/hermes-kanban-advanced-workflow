@@ -352,6 +352,90 @@ def run_tier1(ctx: AuditContext) -> list[Violation]:
 
     todo_drift = _check_plan_todo_drift(ctx.plan_text, ctx.cards)
     violations.extend(todo_drift)
+    violations.extend(_check_verification_deploy_attestations(ctx))
+    violations.extend(_check_presentation_acceptance_memory(ctx))
+    return violations
+
+
+def _card_key_from_audit_body(body: str, task_id: str) -> str:
+    m = re.search(r"card_key:\s*(\S+)", body, re.I)
+    if m:
+        return m.group(1).strip()
+    m = re.search(r"Task\s+\S+:\s*(.+)", body)
+    if m:
+        slug = re.sub(r"[^a-z0-9]+", "-", m.group(1).lower()).strip("-")
+        if slug:
+            return slug[:64]
+    return task_id
+
+
+def _check_verification_deploy_attestations(ctx: AuditContext) -> list[Violation]:
+    """Fail when verification-deploy cards reached terminal state without card-attestation."""
+    violations: list[Violation] = []
+    try:
+        from card_body import is_verification_deploy, parse_card_body
+        from presentation_acceptance import verification_deploy_attested
+    except ImportError:
+        return violations
+
+    for card in ctx.cards:
+        body = card.get("body", "")
+        status = (card.get("status") or "").lower()
+        if status not in {"done", "completed", "archived"}:
+            continue
+        parsed = parse_card_body(body)
+        if not is_verification_deploy(parsed, body):
+            continue
+        plan_id = parsed.get("plan_id") or ctx.plan_id
+        card_key = _card_key_from_audit_body(body, card.get("task_id", card.get("id", "")))
+        if plan_id and verification_deploy_attested(ctx.repo_root, plan_id, card_key):
+            continue
+        violations.append(
+            Violation(
+                tier="tier1",
+                class_name="verification_deploy_unattested",
+                path=str(
+                    ctx.repo_root
+                    / ".hermes"
+                    / "kanban"
+                    / "card-attestations"
+                    / f"{plan_id}-{card_key}.json"
+                ),
+                detail="verification-deploy card archived without card-attestation JSON",
+                source_card_key=card_key,
+                remediates_task_id=card.get("task_id", card.get("id", "")),
+            )
+        )
+    return violations
+
+
+def _check_presentation_acceptance_memory(ctx: AuditContext) -> list[Violation]:
+    """Warn when plan memory acceptance_matrix is empty but plan declares presentation acceptance."""
+    violations: list[Violation] = []
+    mem_path = ctx.repo_root / ".hermes" / "kanban" / "memory" / f"{ctx.plan_id}.json"
+    if not re.search(
+        r"Acceptance \(layout\)|Acceptance \(presentation\)|Acceptance \(a11y\)",
+        ctx.plan_text,
+        re.I,
+    ):
+        return violations
+    matrix: dict[str, Any] = {}
+    if mem_path.is_file():
+        try:
+            matrix = json.loads(mem_path.read_text(encoding="utf-8")).get("acceptance_matrix") or {}
+        except (json.JSONDecodeError, OSError):
+            matrix = {}
+    if matrix.get("presentation_cards") or matrix.get("surface_slots"):
+        return violations
+    violations.append(
+        Violation(
+            tier="tier1",
+            class_name="acceptance_matrix_missing",
+            path=str(mem_path),
+            detail="Plan declares presentation acceptance but plan memory lacks acceptance_matrix — re-run decompose",
+            severity="warn",
+        )
+    )
     return violations
 
 

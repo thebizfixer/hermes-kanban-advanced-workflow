@@ -77,6 +77,8 @@ done
 | stale `devops/kanban-worker` | L5 | T2 | MBB | Update Plugin; qualified skill names | Plugin skill path | `wiki/troubleshooting.md` |
 | `--output-format json` exit 1 | L5 | T1 | BB | Use invoke script (`--trust`) | Smoke pass | `coding-agent-cli-invocation.md` |
 | `E014` verification | L5 | T1 | BB | Run `Tests:` via `terminal()` only | No agent dispatch | worker skill Step 3 |
+| `verification-local` / legacy `Type: verification` | L5 | T1 | BB | `Tests:` only — no `Files:` / agent block | `validate_board.sh` pass | `plan-file-format.md` § Verification taxonomy |
+| `verification-deploy` unattested | L5 | T2 | MBB | Orchestrator writes `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` | JSON exists before archive | `frontend-neutrality.md` § Attestation |
 
 ## L6 — Evaluation chain (BB)
 
@@ -85,6 +87,8 @@ done
 | `E001` salvaged / HEAD~1 | L6 | T1 | BB | `kanban_evaluation_chain.py --baseline HEAD~20` | ALLOW or re-dispatch | `plugin/data/references/salvage-pattern-iteration-exhausted-cards.md` |
 | `E003`/`E006` retry | L6 | T1 | BB | `kanban_recover.py --list`; fix + retry | Chain ALLOW | worker-governance |
 | `E018`/`E020` tokens | L6 | T1 | BB | Capture agent JSON stdout; `token_tracker` | Exact log entry | worker-governance |
+| `E028` layout acceptance | L6 | T1 | BB | Fix route shell per `Acceptance (layout):`; re-run chain | ALLOW | `frontend-neutrality.md` |
+| `E029` a11y acceptance | L6 | T1 | BB | Add reduced-motion guard per `Acceptance (a11y):` | ALLOW | `frontend-neutrality.md` |
 | iteration limit 90/90 | L6 | T2 | MBB | Salvage commits — do not re-dispatch | Merge to staging | salvage reference |
 
 ## L7 — Final audit / post-flight remediation (MBB)
@@ -99,6 +103,7 @@ done
 | gave_up remediation | L7 | T3 | Op | Escalation tracker output on audit card | Violations marked `escalated` in tier JSON | governance § completeness loop |
 | doc coverage false positive | L7 | T2 | MBB | Add `final_audit_overrides` in overlay | `approved_skip` in tier2 JSON | `final-audit-doc-coverage.md` |
 | check13 fail | L7 | T2 | MBB | Close or archive remediation children | `validate_board.sh` exit 0 | orchestrator skill § Final audit |
+| verification-deploy archived without attestation | L7 | T2 | MBB | Write card-attestation JSON; re-open card | `final_audit_sanity.py` clean | `plan-file-format.md` § Card attestation |
 
 ## Recover + regression
 

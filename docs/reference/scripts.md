@@ -183,7 +183,7 @@ Syncs canonical skill files from `plugin/skills/` to `$HERMES_HOME/skills/kanban
 
 | Top-level | `lib/` |
 |-----------|--------|
-| `auto_unblock.sh`, `board_keeper.sh`, `kanban_lifecycle_notify.sh`, `kanban_completion_notify.sh`, `kanban_walk_away_post_exec.sh`, `kanban_intervention_inc.sh`, `kanban_git_ops.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py`, `gateway_hermes_home.sh`, `auto_unblock_core.sh`, `decompose_stamp.py`, `cross_plan_memory.py`, `plan_parse.py`, `cli_output_parse.py`, … |
+| `auto_unblock.sh`, `board_keeper.sh`, `kanban_lifecycle_notify.sh`, `kanban_completion_notify.sh`, `kanban_walk_away_post_exec.sh`, `kanban_intervention_inc.sh`, `kanban_git_ops.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py`, `gateway_hermes_home.sh`, `auto_unblock_core.sh`, `decompose_stamp.py`, `cross_plan_memory.py`, `plan_parse.py`, `cli_output_parse.py`, `card_body.py`, `presentation_acceptance.py`, `verify_optimization_presentation.py`, … |
 
 Init / dashboard **Update Plugin** use the same list via `plugin/script_materialize.py`. `--check` mode exits non-zero if materialized files have drifted from canonical.
 
@@ -315,7 +315,17 @@ Generates 8-section markdown postmortem plus machine-readable KPI artifact: `{pl
 bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh <plan>.md
 ```
 
-Checks plan optimization readiness before decomposition: agent-prompt block count, Files:/Mode: lines, iteration budget estimates, dependency graph presence, line budget computed, sequential Card N labeling. Resolves governance profile from config/env; `--strict` or `strict` profile treats warnings as blocking.
+Checks plan optimization readiness before decomposition: agent-prompt block count, Files:/Mode: lines, iteration budget estimates, dependency graph presence, line budget computed, sequential Card N labeling, presentation acceptance (checks 19–21), and `ui_stack` / Surface-slots discipline for frontend plans. Resolves governance profile from config/env; `--strict` or `strict` profile treats warnings as blocking.
+
+## Layout acceptance (`kanban_layout_acceptance.sh`)
+
+```bash
+bash hermes-kanban-advanced-workflow/scripts/kanban_layout_acceptance.sh \
+  --workspace <repo_root> \
+  --card-body-file /tmp/card-body.md
+```
+
+Runs `presentation_acceptance.py` checks (DOM line order, entry transition pattern, reduced-motion guard). Invoked from `kanban_evaluation_chain.py` when a card declares `Acceptance (layout):`, `Acceptance (presentation):`, or `Acceptance (a11y):`. Error codes **E028** (layout) and **E029** (a11y). Host paths come from overlay `ui_stack` — see `plugin/data/references/frontend-neutrality.md`.
 
 ## Commit reachability (`verify_commits_reachable.sh`)
 
@@ -331,7 +341,7 @@ Verifies every worktree commit is reachable from `${working_branch}` via merge o
 bash hermes-kanban-advanced-workflow/scripts/governance_integrity.sh
 ```
 
-Pre-decomposition check: verifies all governance files (skills, scripts, registry, policies, prompts) exist and are intact. 30 checks total. Exit 1 if any file missing or non-executable. Run from the **materialized** bundle root (typically `$HERMES_HOME/scripts/..` after bootstrap). Agent install/bootstrap test matrix: `wiki/plugin-verification.md`.
+Pre-decomposition check: verifies governance files (skills, scripts, registry, policies, prompts, references) exist and are intact. Resolves **plugin checkout layout** (`plugin/data/*`, `plugin/skills/*/SKILL.md`) or legacy flat bundle. Asserts **E028** / **E029** in `error-codes.yaml`, `frontend-neutrality.md`, and presentation lib modules. Runs `provision.sh --check` when the host project has `.hermes/kanban-overrides/kanban-config.yaml` (skips with warning when run from plugin checkout only). Exit 1 if any required file missing. Run from plugin checkout `scripts/` or after bootstrap. Agent install/bootstrap test matrix: `wiki/plugin-verification.md`.
 
 ## Plugin smoke test (`smoke_test_plugin.py`)
 

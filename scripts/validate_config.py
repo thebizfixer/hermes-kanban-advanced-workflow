@@ -34,6 +34,50 @@ def _load_yaml_simple(path: Path) -> dict[str, str]:
     return data
 
 
+def _active_ui_stack_lines(text: str) -> list[str]:
+    """Return indented lines under an uncommented top-level ``ui_stack:`` block."""
+    lines = text.splitlines()
+    in_block = False
+    collected: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        if not in_block:
+            if re.fullmatch(r"ui_stack:\s*", stripped):
+                in_block = True
+            continue
+        if line and not line[:1].isspace():
+            break
+        collected.append(line)
+    return collected
+
+
+def _validate_ui_stack_block(text: str, schema: dict) -> list[str]:
+    """Validate nested ui_stack when an active (uncommented) block exists."""
+    errors: list[str] = []
+    block_lines = _active_ui_stack_lines(text)
+    if not block_lines:
+        return errors
+    ui_spec = (schema.get("properties") or {}).get("ui_stack") or {}
+    allowed_fw = (ui_spec.get("properties") or {}).get("framework", {}).get("enum") or []
+    framework = ""
+    page_glob = ""
+    for line in block_lines:
+        stripped = line.strip()
+        if stripped.startswith("framework:"):
+            framework = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+        elif stripped.startswith("page_glob:"):
+            page_glob = stripped.split(":", 1)[1].strip().strip('"').strip("'")
+    if allowed_fw and framework and framework not in allowed_fw:
+        errors.append(f"ui_stack.framework must be one of {allowed_fw}, got {framework!r}")
+    if not framework:
+        errors.append("ui_stack block present but framework: is missing")
+    if not page_glob:
+        errors.append("ui_stack block present but page_glob: is missing")
+    return errors
+
+
 def _validate(data: dict[str, str], schema: dict) -> list[str]:
     errors: list[str] = []
     required = schema.get("required", [])
@@ -84,8 +128,10 @@ def main() -> int:
         return 1
 
     schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    raw_text = config_path.read_text(encoding="utf-8")
     data = _load_yaml_simple(config_path)
     errors = _validate(data, schema)
+    errors.extend(_validate_ui_stack_block(raw_text, schema))
 
     if errors:
         print(f"FAIL: {config_path}", file=sys.stderr)
