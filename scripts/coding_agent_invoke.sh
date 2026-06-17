@@ -32,6 +32,16 @@ model_is_auto() {
   esac
 }
 
+append_grok_headless_args() {
+  local -n _out=$1
+  local prompt="$2"
+  if "$BINARY" --help 2>&1 | grep -qE -- '--single|-p, --single'; then
+    _out=( -p "$prompt" --output-format json --always-approve )
+  else
+    _out=( --prompt "$prompt" --format json )
+  fi
+}
+
 append_model_args() {
   local -n _out=$1
   if model_is_auto; then
@@ -112,18 +122,20 @@ case "$BINARY" in
     args=( exec --json -a never )
     if [ "$MODE" = "dispatch" ]; then
       args+=( --sandbox workspace-write )
+    else
+      args+=( --sandbox read-only )
     fi
     append_model_args args
     args+=( "$PROMPT" )
     exec "$BINARY" "${args[@]}"
     ;;
   grok)
-    args=( --prompt "$PROMPT" --format json )
+    append_grok_headless_args args "$PROMPT"
     append_model_args args
     exec "$BINARY" "${args[@]}"
     ;;
   gemini)
-    args=( --yolo --output-format json "$PROMPT" )
+    args=( -p "$PROMPT" --yolo --output-format json )
     append_model_args args
     exec "$BINARY" "${args[@]}"
     ;;

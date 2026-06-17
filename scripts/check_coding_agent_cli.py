@@ -26,7 +26,9 @@ from plugin.coding_agent import (  # noqa: E402
     SMOKE_TIMEOUT_SECONDS,
     binary_on_path,
     describe_smoke_failure,
+    resolve_adapter,
     smoke_test_coding_agent,
+    verify_binary_matches_adapter,
 )
 from plugin.coding_agent_env import (  # noqa: E402
     audit_coding_agent_prerequisites,
@@ -104,6 +106,12 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
+
+    adapter = resolve_adapter(binary)
+    mismatch = verify_binary_matches_adapter(binary, adapter, env=env)
+    if mismatch:
+        print(mismatch, file=sys.stderr)
+        return 1
 
     prereq_issues = audit_coding_agent_prerequisites(binary, env)
     if prereq_issues:

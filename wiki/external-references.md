@@ -60,10 +60,10 @@ The workflow delegates code generation to external CLIs. **SSOT for headless fla
 |-------|---------|------|----------|
 | Cursor CLI (`cursor-agent` preferred, or `agent`) | `curl https://cursor.com/install -fsS \| bash` | Cursor documentation | `cursor-agent -p "..." --output-format json --trust` (same flags for `agent`) |
 | Claude Code (`claude`) | `npm i -g @anthropic-ai/claude-code` | Anthropic docs | `claude -p "..." --output-format json --dangerously-skip-permissions` |
-| OpenAI Codex (`codex`) | `pip install openai-codex` | https://github.com/openai/codex | `codex exec --json -a never "..."` |
-| Grok CLI (`grok`) | `npm i -g grok-dev` | https://github.com/superagent-ai/grok-cli | `grok --prompt "..." --format json` |
+| OpenAI Codex (`codex`) | `pip install openai-codex` | https://developers.openai.com/codex/noninteractive | `codex exec --json -a never --sandbox read-only "..."` (dispatch: `--sandbox workspace-write`) |
+| Grok CLI (`grok`) | xAI Grok CLI / `npm i -g grok-dev` | https://docs.x.ai/build/cli/headless-scripting ; https://github.com/superagent-ai/grok-cli | xAI: `grok -p "..." --output-format json --always-approve`; superagent: `grok --prompt "..." --format json` |
 | Aider (`aider`) | `pip install aider-install` | https://github.com/Aider-AI/aider | `aider --message "..." --yes-always` |
-| Gemini CLI (`gemini`) | `npm i -g @google/gemini-cli` | https://github.com/google-gemini/gemini-cli | `gemini --yolo --output-format json "..."` |
+| Gemini CLI (`gemini`) | `npm i -g @google/gemini-cli` | https://geminicli.com/docs/cli/headless/ | `gemini -p "..." --yolo --output-format json` |
 
 **When to refer:** Agent installation, authentication, model selection, headless invocation syntax. Init and dashboard list only commands **on PATH**; contested names like `agent` (Cursor + Grok) surface a conflict notice — see [coding agents](../docs/reference/coding-agents.md) § Binary name collisions. Dashboard **Coding Agent** reachability is a project-root smoke; workers re-smoke from each card worktree (Cursor needs `--trust` there even when the dashboard dot is green).
 

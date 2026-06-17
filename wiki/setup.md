@@ -73,7 +73,7 @@ Set during init (step 1c) or dashboard **Bootstrap** / **Save**. Init and the da
 | `cursor-agent` (preferred) or `agent` | Cursor CLI | `curl https://cursor.com/install -fsS \| bash` |
 | `claude` | Claude Code | `npm i -g @anthropic-ai/claude-code` |
 | `codex` | OpenAI Codex | `pip install openai-codex` |
-| `grok` | grok-cli | `npm i -g grok-dev` |
+| `grok` | Grok CLI (xAI or superagent) | xAI Grok CLI / `npm i -g grok-dev` |
 | `aider` | Aider | `pip install aider-install` |
 | `gemini` | Gemini CLI | `npm i -g @google/gemini-cli` |
 

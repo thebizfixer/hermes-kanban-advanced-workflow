@@ -31,10 +31,10 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$F
 | `agent` | Cursor CLI | `curl https://cursor.com/install -fsS \| bash` | `agent -p "..."` | `--output-format json` (with `-p`) | `--trust` (with `-p`, required in worktrees) |
 | `cursor-agent` | Cursor CLI (preferred) | same as `agent` | `cursor-agent -p "..."` | `--output-format json` (with `-p`) | `--trust` (with `-p`, required in worktrees) |
 | `claude` | Claude Code | `npm i -g @anthropic-ai/claude-code` | `claude -p "..."` | `--output-format json` (with `-p`) | `--dangerously-skip-permissions` |
-| `codex` | OpenAI Codex | `pip install openai-codex` | `codex exec "..."` | `--json` (JSONL) | `-a never`; `--sandbox workspace-write` for edits |
-| `grok` | superagent-ai/grok-cli | `npm i -g grok-dev` | `grok --prompt "..."` | `--format json` (NDJSON) | `GROK_API_KEY` |
+| `codex` | OpenAI Codex | `pip install openai-codex` | `codex exec "..."` | `--json` (JSONL) | smoke: `--sandbox read-only`; dispatch: `--sandbox workspace-write`; `-a never` |
+| `grok` | xAI Grok Build or superagent grok-cli | xAI Grok CLI / `npm i -g grok-dev` | xAI: `grok -p "..."`; superagent: `grok --prompt "..."` | xAI: `--output-format json`; superagent: `--format json` | xAI: `--always-approve`; `GROK_API_KEY` |
 | `aider` | Aider-AI/aider | `pip install aider-install` | `aider --message "..."` | text only | `--yes-always` |
-| `gemini` | google-gemini/gemini-cli | `npm i -g @google/gemini-cli` | `gemini --yolo "..."` | `--output-format json` | `--yolo` / `--approval-mode=yolo` |
+| `gemini` | google-gemini/gemini-cli | `npm i -g @google/gemini-cli` | `gemini -p "..."` | `--output-format json` | `--yolo` / `--approval-mode=yolo` |
 
 Model flag when not `auto`: `--model <id>` (all supported binaries).
 
@@ -126,7 +126,7 @@ claude -p "say ok" --output-format json --dangerously-skip-permissions
 ## OpenAI Codex (`codex`)
 
 ```bash
-codex exec --json -a never "say ok"
+codex exec --json -a never --sandbox read-only "say ok"
 codex exec --json --sandbox workspace-write -a never "$FULL_PROMPT"
 ```
 
@@ -134,16 +134,26 @@ Stdout is JSONL (`turn.completed` carries usage). Progress logs on stderr.
 
 ## Grok CLI (`grok`)
 
+Two packages can register `grok` on PATH. The plugin picks headless flags from `grok --help` (xAI Grok Build vs superagent grok-cli).
+
+**xAI Grok Build** ([headless docs](https://docs.x.ai/build/cli/headless-scripting)):
+
+```bash
+grok -p "say ok" --output-format json --always-approve
+```
+
+**superagent grok-cli** ([GitHub](https://github.com/superagent-ai/grok-cli)):
+
 ```bash
 grok --prompt "say ok" --format json
 ```
 
-Requires `GROK_API_KEY`. Output is newline-delimited JSON events.
+Requires `GROK_API_KEY`. Output is JSON or newline-delimited JSON events depending on flavor.
 
 ## Gemini CLI (`gemini`)
 
 ```bash
-gemini --yolo --output-format json "say ok"
+gemini -p "say ok" --yolo --output-format json
 ```
 
 Use `--sandbox` when you want tool isolation. Folder trust is configured in Gemini settings (`security.folderTrust`).
@@ -170,6 +180,8 @@ Several coding CLIs can register the same command name on PATH (today: **`agent`
 
 plus direction to install an unambiguous command and update **Binary on PATH**. This is a notice only — the plugin does not change your config automatically.
 
+**At smoke time:** `check_coding_agent_cli.py` runs `binary --version` and compares output to the configured product. If `coding_agent_binary: agent` resolves to Grok on PATH, smoke fails with a clear mismatch (e.g. *binary 'agent' appears to be Grok CLI, not Cursor CLI*) instead of opaque flag errors.
+
 ## CLI init prompts
 
 `hermes kanban-advanced init` step **1c** — pick from binaries **currently on PATH** (numbered list) or type a custom command name. Step **1c-ii** — pick model from a numbered list (Cursor: live list from `agent --list-models` or `cursor-agent --list-models`; other binaries: curated defaults). Init runs a smoke test when the binary is on PATH and logs reachable / auth failed / inconclusive. Contested names print the symlink conflict notice.
@@ -181,7 +193,7 @@ Re-init **preserves** `coding_agent_model` unless you use `--force` or answer th
 **Kanban-Advanced** tab → **Coding Agent**:
 
 1. **Binary on PATH** — dropdown populated from commands currently on PATH (or custom name).
-2. **Model** — click the row to open the picker (`GET /api/plugins/kanban-advanced/coding-agent/models?binary=<name>`).
+2. **Model** — click the row to open the picker (`GET /api/plugins/kanban-advanced/coding-agent/models?binary=<name>`). Changing **Binary on PATH** resets the model to `auto` and reloads models for the new binary.
 3. **Save** or **Bootstrap** — writes YAML + `.env`, reconciles profiles, runs smoke.
 
 Status field `coding_agent_cli.model_reachable` is filled on the slow status path (`probe=1`). **Save** and **Bootstrap** also smoke the coding CLI when the binary is on PATH. This is separate from `profiles.*.model_reachable`, which pings the **Hermes** LLM backend for dispatch profiles.

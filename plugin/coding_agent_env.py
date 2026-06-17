@@ -43,7 +43,7 @@ AUTH_PROFILES: dict[str, CodingAgentAuthProfile] = {
         notes="codex exec: CODEX_API_KEY for CI; ChatGPT OAuth uses ~/.codex/auth.json.",
     ),
     "grok": CodingAgentAuthProfile(
-        display_name="grok-cli",
+        display_name="Grok CLI",
         env_any=("GROK_API_KEY",),
         login_hint="export GROK_API_KEY",
         notes="API key only for headless use.",

@@ -244,6 +244,32 @@
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
     }
 
+    function resetCodingAgentModelForBinary(binary) {
+      if (!binary) return;
+      setCodingAgentModel("auto");
+      setPendingCodingAgentModel("auto");
+      setCodingAgentModelQuery("");
+      setCodingAgentModelOptions(null);
+      apiCodingAgentModels(binary).then(function (opts) {
+        setCodingAgentModelOptions(opts);
+      }).catch(function () {
+        setCodingAgentModelOptions({
+          error: true,
+          models: [{ id: "auto", label: "Auto (CLI default)" }]
+        });
+      });
+    }
+
+    function onCodingAgentBinaryChange(next) {
+      setCodingAgent(next);
+      if (next === "__custom__") {
+        setCodingAgentModel("auto");
+        setCodingAgentModelOptions(null);
+        return;
+      }
+      resetCodingAgentModelForBinary(next);
+    }
+
     function applyStatusToForm(s) {
       if (!s || s.error) return;
       if (s.config_exists) setInitialized(true);
@@ -729,7 +755,7 @@
                 React.createElement(Label, { className: "text-xs" }, "Binary on PATH"),
                 React.createElement("select", {
                   value: codingAgent,
-                  onChange: function (e) { setCodingAgent(e.target.value); },
+                  onChange: function (e) { onCodingAgentBinaryChange(e.target.value); },
                   className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 },
                   codingAgentOptions.map(function (a) {
@@ -748,7 +774,17 @@
               ),
               codingAgent === "__custom__" ? React.createElement("div", { className: "space-y-1.5" },
                 React.createElement(Label, { className: "text-xs" }, "Custom binary name"),
-                React.createElement(Input, { value: customAgent, onChange: function (e) { setCustomAgent(e.target.value); }, placeholder: "e.g. my-agent", className: "h-9" })
+                React.createElement(Input, {
+                  value: customAgent,
+                  onChange: function (e) { setCustomAgent(e.target.value); },
+                  onBlur: function () {
+                    if (codingAgent === "__custom__" && customAgent.trim()) {
+                      resetCodingAgentModelForBinary(customAgent.trim());
+                    }
+                  },
+                  placeholder: "e.g. my-agent",
+                  className: "h-9"
+                })
               ) : null,
               React.createElement("div", { className: "space-y-1.5" },
                 React.createElement(Label, { className: "text-xs" }, "Model"),

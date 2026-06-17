@@ -4,7 +4,7 @@
 
 Workers run coding agents **headlessly** from the card worktree. Each CLI uses different flags for print mode, structured output, permissions, and workspace trust. Use `scripts/coding_agent_invoke.sh` so smoke tests and dispatch share one contract.
 
-Verify installed flags with `<binary> --help` after upgrades.
+Verify installed flags with `<binary> --help` after upgrades. `plugin/coding_agent.py` and `coding_agent_invoke.sh` pick Grok headless flags from `--help` when both xAI Grok Build and superagent `grok-cli` may register as `grok`.
 
 ## Summary table
 
@@ -12,9 +12,9 @@ Verify installed flags with `<binary> --help` after upgrades.
 | --- | --- | --- | --- | --- |
 | `cursor-agent` or `agent` (Cursor) | `-p` (`--print`) | `--output-format json` (requires `-p`) | `--trust` in worktrees (requires `-p`) | `--model <id>` |
 | `claude` | `-p` (`--print`) | `--output-format json` (requires `-p`) | `--dangerously-skip-permissions` or `--permission-mode bypassPermissions` | `--model <alias>` |
-| `codex` | `codex exec "<prompt>"` | `--json` (JSONL on stdout) | `-a never`; use `--sandbox workspace-write` for edits | `--model <id>` |
-| `grok` | `--prompt "<prompt>"` or `-p` | `--format json` (NDJSON events) | non-interactive by default; set `GROK_API_KEY` | `--model <id>` when supported |
-| `gemini` | prompt as arg (headless) | `--output-format json` | `--yolo` or `--approval-mode=yolo` for walk-away runs | `--model <id>` |
+| `codex` | `codex exec "<prompt>"` | `--json` (JSONL on stdout) | smoke: `--sandbox read-only`; dispatch: `--sandbox workspace-write`; `-a never` | `--model <id>` |
+| `grok` | xAI: `-p` / `--single`; superagent: `--prompt` | xAI: `--output-format json`; superagent: `--format json` | xAI: `--always-approve` | `--model <id>` when supported |
+| `gemini` | `-p` / `--prompt` | `--output-format json` | `--yolo` or `--approval-mode=yolo` for walk-away runs | `--model <id>` |
 | `aider` | `--message "<prompt>"` | text only (no JSON envelope) | `--yes-always` (or `--yes`) | `--model <id>` |
 
 ## Cursor CLI (`cursor-agent` or `agent`)
@@ -45,7 +45,7 @@ cursor-agent -p "$FULL_PROMPT" --output-format json --trust --model composer-2.5
 
 ## Claude Code (`claude`)
 
-**Docs:** `claude --help` — `-p` skips the workspace trust dialog in directories you trust; use `--output-format json` with `-p`.
+**Docs:** [Headless / Agent SDK CLI](https://code.claude.com/docs/en/headless) — `-p` skips the workspace trust dialog in directories you trust; use `--output-format json` with `-p`.
 
 **Smoke:**
 
@@ -63,12 +63,12 @@ Parse JSON for `is_error` / result when present; otherwise treat exit 0 + stdout
 
 ## OpenAI Codex (`codex`)
 
-**Docs:** [Non-interactive mode](https://developers.openai.com/codex/noninteractive) — use `codex exec`, not the interactive TUI.
+**Docs:** [Non-interactive mode](https://developers.openai.com/codex/noninteractive) — use `codex exec`, not the interactive TUI. Default sandbox is read-only; pass `--sandbox workspace-write` when the worker must edit files.
 
 **Smoke (read-only):**
 
 ```bash
-codex exec --json -a never "say ok"
+codex exec --json -a never --sandbox read-only "say ok"
 ```
 
 **Dispatch (edits allowed in worktree):**
@@ -81,36 +81,43 @@ codex exec --json --sandbox workspace-write -a never "$FULL_PROMPT"
 
 ## Grok CLI (`grok`)
 
-**Docs:** [superagent-ai/grok-cli](https://github.com/superagent-ai/grok-cli) README — headless via `--prompt` / `-p`.
+Two different packages can install a `grok` command. The plugin detects flavor from `grok --help`:
 
-**Smoke:**
+| Flavor | Install | Headless flags |
+| --- | --- | --- |
+| **xAI Grok Build** | xAI Grok CLI / `grok-dev` | `-p` or `--single`, `--output-format json`, `--always-approve` |
+| **superagent grok-cli** | `npm i -g grok-dev` (community) | `--prompt`, `--format json` |
+
+**Docs:** [xAI headless & scripting](https://docs.x.ai/build/cli/headless-scripting); [superagent-ai/grok-cli](https://github.com/superagent-ai/grok-cli).
+
+**Smoke (xAI Grok Build):**
+
+```bash
+grok -p "say ok" --output-format json --always-approve
+```
+
+**Smoke (superagent grok-cli):**
 
 ```bash
 grok --prompt "say ok" --format json
 ```
 
-**Dispatch:**
-
-```bash
-grok --prompt "$FULL_PROMPT" --format json
-```
-
-**Output:** newline-delimited JSON events (`step_start`, `text`, `tool_use`, `step_finish`, `error`). Requires `GROK_API_KEY`.
+**Output:** xAI supports `json` or `streaming-json`; superagent emits newline-delimited JSON events. Requires `GROK_API_KEY`.
 
 ## Gemini CLI (`gemini`)
 
-**Docs:** [settings reference](https://geminicli.com/docs/cli/settings/) — `output.format` can be `json`; YOLO/auto-approve via `--yolo` on the CLI.
+**Docs:** [Headless mode](https://geminicli.com/docs/cli/headless/) — non-TTY or `-p` / `--prompt` triggers headless; `--output-format json` for structured output.
 
 **Smoke:**
 
 ```bash
-gemini --yolo --output-format json "say ok"
+gemini -p "say ok" --yolo --output-format json
 ```
 
 **Dispatch:**
 
 ```bash
-gemini --yolo --output-format json "$FULL_PROMPT"
+gemini -p "$FULL_PROMPT" --yolo --output-format json
 ```
 
 Use `--sandbox` when you want tool isolation. Folder trust is configured under `security.folderTrust` in settings.
@@ -154,7 +161,7 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$F
 | --- | --- | --- |
 | Dashboard **Coding Agent** dot | External CLI smoke (`say ok`) | Project root / API process |
 | Dashboard **profile** dots | Hermes LLM backend (`hermes chat -q "say ok"`) | Hermes profile config — **not** the coding CLI |
-| Preflight / pre-dispatch gate | `check_coding_agent_cli.py` (configured binary; **15s** default fast smoke, single plain `--trust` probe for Cursor; use `--full` for 180s dashboard parity) | Project root before decomposition |
+| Preflight / pre-dispatch gate | `check_coding_agent_cli.py` — product identity (`binary --version`) then smoke (**15s** default fast smoke, single plain `--trust` probe for Cursor; use `--full` for 180s dashboard parity) | Project root before decomposition |
 | Worker Step 3 | `coding_agent_invoke.sh smoke` | Card **worktree** after `worktree_setup.sh` |
 | Worker Step 4 | `coding_agent_invoke.sh dispatch` | Same worktree; full prompt + stdout capture |
 

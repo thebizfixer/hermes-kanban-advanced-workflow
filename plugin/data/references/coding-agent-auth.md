@@ -85,10 +85,11 @@ If smoke works at project root but fails in the worktree with exit 127 on `codin
 | `gemini` | Google login cache or API key | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Headless: API key or pre-cached login on gateway ([Gemini CLI auth](https://google-gemini.github.io/gemini-cli/docs/get-started/authentication.html)) |
 | `aider` | Provider API keys | `.aider.conf` / `.env` per provider | Configure model provider keys before dispatch |
 
-## Plugin checks (two layers)
+## Plugin checks (three layers)
 
 1. **Prerequisites** (`audit_coding_agent_prerequisites`) — fast fail: `HOME`, missing key/file for configured binary
-2. **Execution smoke** (`smoke_test_coding_agent` / `coding_agent_invoke.sh smoke`) — proves headless one-line prompt works
+2. **Product identity** (`verify_binary_matches_adapter` in `check_coding_agent_cli.py`) — runs `binary --version` and compares output to the configured product before smoke. Catches PATH collisions (e.g. `coding_agent_binary: agent` resolving to Grok instead of Cursor) with a clear mismatch instead of opaque flag errors. Prefer unambiguous commands (`cursor-agent`, `grok`). See [coding agents](../../../docs/reference/coding-agents.md) § Binary name collisions.
+3. **Execution smoke** (`smoke_test_coding_agent` / `coding_agent_invoke.sh smoke`) — proves headless one-line prompt works
 
 Hermes profile `model_reachability` (`hermes -p <profile> chat`) is a **third**, separate check for dispatch LLM backends — not the coding CLI. Dashboard profile badges label failures **model unreachable** (with optional `model_reachability_detail`: `provider auth failed`, `model not found`, etc.) — do not confuse with `coding_agent_cli.model_reachable` (**auth/model failed** on the external coding binary).
 

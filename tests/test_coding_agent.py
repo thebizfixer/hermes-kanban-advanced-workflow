@@ -23,6 +23,7 @@ from plugin.coding_agent import (
     parse_cursor_list_models,
     resolve_adapter,
     smoke_test_coding_agent,
+    verify_binary_matches_adapter,
 )
 
 
@@ -92,6 +93,8 @@ Tip: use --model <id>
         argv = build_smoke_argv("codex", "o4-mini")
         self.assertEqual(argv[:2], ["codex", "exec"])
         self.assertIn("--json", argv)
+        self.assertIn("--sandbox", argv)
+        self.assertIn("read-only", argv)
         self.assertIn("--model", argv)
 
     def test_build_smoke_argv_claude_json(self) -> None:
@@ -99,13 +102,24 @@ Tip: use --model <id>
         self.assertIn("--output-format", argv)
         self.assertIn("--dangerously-skip-permissions", argv)
 
-    def test_build_smoke_argv_grok(self) -> None:
+    @patch("plugin.coding_agent.detect_grok_cli_flavor", return_value="xai")
+    def test_build_smoke_argv_grok_xai(self, _mock_flavor) -> None:
+        argv = build_smoke_argv("grok", CODING_AGENT_MODEL_AUTO)
+        self.assertIn("-p", argv)
+        self.assertIn("--output-format", argv)
+        self.assertIn("--always-approve", argv)
+        self.assertNotIn("--prompt", argv)
+
+    @patch("plugin.coding_agent.detect_grok_cli_flavor", return_value="superagent")
+    def test_build_smoke_argv_grok_superagent(self, _mock_flavor) -> None:
         argv = build_smoke_argv("grok", CODING_AGENT_MODEL_AUTO)
         self.assertIn("--prompt", argv)
         self.assertIn("--format", argv)
+        self.assertNotIn("--always-approve", argv)
 
     def test_build_smoke_argv_gemini(self) -> None:
         argv = build_smoke_argv("gemini", CODING_AGENT_MODEL_AUTO)
+        self.assertIn("-p", argv)
         self.assertIn("--yolo", argv)
         self.assertIn("--output-format", argv)
 
@@ -247,6 +261,38 @@ class TestCodingAgentDiscovery(unittest.TestCase):
         self.assertTrue(rows[0]["contested"])
         self.assertEqual(rows[0]["label"], CONTESTED_AGENT_LABEL)
         self.assertNotIn("Cursor CLI", str(rows[0]["label"]))
+
+
+class TestBinaryProductVerification(unittest.TestCase):
+    def test_verify_cursor_binary_is_grok(self) -> None:
+        adapter = resolve_adapter("agent")
+
+        def fake_run(cmd, timeout=10):
+            return SimpleNamespace(
+                returncode=0,
+                stdout="grok 0.2.54 (fee15ff8e) [stable]\n",
+                stderr="",
+            )
+
+        msg = verify_binary_matches_adapter("agent", adapter, run=fake_run)
+        self.assertIsNotNone(msg)
+        self.assertIn("Grok CLI", msg)
+        self.assertIn("Cursor CLI", msg)
+        self.assertIn("cursor-agent", msg)
+
+    def test_verify_cursor_binary_matches(self) -> None:
+        adapter = resolve_adapter("cursor-agent")
+
+        def fake_run(cmd, timeout=10):
+            return SimpleNamespace(
+                returncode=0,
+                stdout="2026.06.15-18-00-12-6f5a2cf\n",
+                stderr="",
+            )
+
+        self.assertIsNone(
+            verify_binary_matches_adapter("cursor-agent", adapter, run=fake_run)
+        )
 
 
 class TestCodingAgentSmokeLive(unittest.TestCase):

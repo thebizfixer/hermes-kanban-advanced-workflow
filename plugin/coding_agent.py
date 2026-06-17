@@ -54,7 +54,7 @@ PRODUCT_REGISTRY: dict[str, tuple[str, tuple[str, ...], tuple[str, ...]]] = {
     "cursor": ("Cursor CLI", ("cursor-agent",), ("agent",)),
     "claude": ("Claude Code", ("claude",), ()),
     "codex": ("OpenAI Codex", ("codex",), ()),
-    "grok": ("grok-cli", ("grok",), ("agent",)),
+    "grok": ("Grok CLI", ("grok",), ("agent",)),
     "aider": ("Aider", ("aider",), ()),
     "gemini": ("Gemini CLI", ("gemini",), ()),
 }
@@ -71,6 +71,7 @@ class CodingAgentAdapter:
     extra_smoke_argv: tuple[str, ...] = ()
     exec_argv: tuple[str, ...] = ()  # e.g. ("exec",) for codex
     dispatch_argv: tuple[str, ...] = ()  # extra flags for dispatch (e.g. codex sandbox)
+    version_signature: str = ""  # regex for `binary --version` product identity
 
 
 ADAPTERS: dict[str, CodingAgentAdapter] = {
@@ -82,6 +83,7 @@ ADAPTERS: dict[str, CodingAgentAdapter] = {
         list_models_argv=("--list-models",),
         default_models=((CODING_AGENT_MODEL_AUTO, "Auto (CLI default)"),),
         extra_smoke_argv=("--output-format", "json", "--trust"),
+        version_signature=r"\d{4}\.\d{2}\.\d{2}",
     ),
     "claude": CodingAgentAdapter(
         binary="claude",
@@ -100,6 +102,7 @@ ADAPTERS: dict[str, CodingAgentAdapter] = {
             "json",
             "--dangerously-skip-permissions",
         ),
+        version_signature=r"(?i)claude code",
     ),
     "codex": CodingAgentAdapter(
         binary="codex",
@@ -115,17 +118,19 @@ ADAPTERS: dict[str, CodingAgentAdapter] = {
         exec_argv=("exec",),
         extra_smoke_argv=("--json", "-a", "never"),
         dispatch_argv=("--sandbox", "workspace-write"),
+        version_signature=r"(?i)codex",
     ),
     "grok": CodingAgentAdapter(
         binary="grok",
-        display_name="grok-cli",
+        display_name="Grok CLI",
         invocation="grok",
         model_flag="--model",
         list_models_argv=None,
         default_models=(
             (CODING_AGENT_MODEL_AUTO, "Default (CLI auto)"),
         ),
-        extra_smoke_argv=("--format", "json"),
+        extra_smoke_argv=("--output-format", "json", "--always-approve"),
+        version_signature=r"(?i)grok\s",
     ),
     "aider": CodingAgentAdapter(
         binary="aider",
@@ -185,6 +190,98 @@ def resolve_adapter(binary: str) -> CodingAgentAdapter:
 def is_cursor_binary(binary: str) -> bool:
     """True for cursor-agent and agent (Cursor CLI)."""
     return resolve_adapter(binary).binary == "agent"
+
+
+def detect_grok_cli_flavor(binary: str) -> str:
+    """Return ``xai`` (Grok Build) or ``superagent`` (grok-cli npm package).
+
+    xAI Grok Build (docs.x.ai): ``-p`` / ``--single``, ``--output-format json``,
+    ``--always-approve``. superagent-ai/grok-cli: ``--prompt``, ``--format json``.
+    """
+    try:
+        completed = subprocess.run(
+            [binary, "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        help_text = f"{completed.stdout}\n{completed.stderr}"
+    except Exception:
+        return "xai"
+    has_single = "--single" in help_text or re.search(
+        r"-p,\s*--single", help_text
+    )
+    has_output_format = "--output-format" in help_text
+    if has_single and has_output_format:
+        return "xai"
+    if "--prompt" in help_text and re.search(r"--format\b", help_text):
+        return "superagent"
+    return "xai"
+
+
+def _preferred_commands_for_display(display_name: str) -> tuple[str, ...]:
+    for _pk, (name, preferred, _contested) in PRODUCT_REGISTRY.items():
+        if name == display_name:
+            return preferred
+    return ()
+
+
+def verify_binary_matches_adapter(
+    binary: str,
+    adapter: CodingAgentAdapter,
+    *,
+    run: Callable[..., object] | None = None,
+    env: dict[str, str] | None = None,
+) -> str | None:
+    """Run ``binary --version`` and confirm output matches the configured product."""
+    if not adapter.version_signature:
+        return None
+    try:
+        if run is not None:
+            result = run([binary, "--version"], timeout=10)
+            stdout = getattr(result, "stdout", "") or ""
+            stderr = getattr(result, "stderr", "") or ""
+            returncode = getattr(result, "returncode", 1)
+        else:
+            completed = subprocess.run(
+                [binary, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env=env,
+            )
+            stdout = completed.stdout or ""
+            stderr = completed.stderr or ""
+            returncode = completed.returncode
+        version_output = f"{stdout}\n{stderr}".strip()
+        if returncode != 0 and not version_output:
+            return None
+        if re.search(adapter.version_signature, version_output):
+            return None
+        for other in ADAPTERS.values():
+            if (
+                other.display_name == adapter.display_name
+                or not other.version_signature
+            ):
+                continue
+            if re.search(other.version_signature, version_output):
+                preferred = _preferred_commands_for_display(adapter.display_name)
+                alt_hint = ""
+                if preferred:
+                    alt_hint = (
+                        f" {adapter.display_name} may be installed at "
+                        f"'{preferred[0]}'."
+                    )
+                return (
+                    f"binary '{binary}' appears to be {other.display_name}, "
+                    f"not {adapter.display_name}.{alt_hint}"
+                )
+        return (
+            f"binary '{binary}' --version output does not match expected "
+            f"{adapter.display_name}"
+        )
+    except Exception:
+        return None
 
 
 def is_contested_binary_name(name: str) -> bool:
@@ -382,6 +479,8 @@ def _build_headless_argv(
         cmd.extend(adapter.extra_smoke_argv)
         if mode == "dispatch":
             cmd.extend(adapter.dispatch_argv)
+        else:
+            cmd.extend(("--sandbox", "read-only"))
         cmd.append(prompt)
     elif adapter.invocation == "message":
         cmd.extend(["--message", prompt])
@@ -390,11 +489,13 @@ def _build_headless_argv(
             extra = [flag for flag in extra if flag != "--no-git"]
         cmd.extend(extra)
     elif adapter.invocation == "grok":
-        cmd.extend(["--prompt", prompt])
-        if json_output:
+        if detect_grok_cli_flavor(binary) == "superagent":
+            cmd.extend(["--prompt", prompt, "--format", "json"])
+        else:
+            cmd.extend(["-p", prompt])
             cmd.extend(adapter.extra_smoke_argv)
     elif adapter.invocation == "gemini":
-        cmd.extend([*adapter.extra_smoke_argv, prompt])
+        cmd.extend(["-p", prompt, *adapter.extra_smoke_argv])
     else:
         cmd.extend(["-p", prompt])
         if json_output:
