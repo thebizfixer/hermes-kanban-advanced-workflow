@@ -40,6 +40,7 @@ PROFILE_SKILL_SETS_BY_ROLE: dict[str, frozenset[str]] = {
 }
 
 OVERLAY_REL = Path(".hermes") / "kanban-overrides" / "kanban-config.yaml"
+CANONICAL_PLAN_DIR = ".hermes/kanban/plans"
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PLUGIN_NAME = "kanban-advanced"
 
@@ -59,6 +60,7 @@ _MANAGED_KEYS = frozenset({
     "bundle_path",
     "skills_output_path",
     "plan_memory_path",
+    "plan_search_dirs",
     "escalation_max_attempts",
     "final_audit_max_remediation_rounds",
 })
@@ -78,6 +80,38 @@ def read_overlay_config(config_path: Path) -> dict[str, str]:
             key, _, val = line.partition(":")
             config[key.strip()] = val.strip().strip('"').strip("'")
     return config
+
+
+def read_plan_search_dirs_from_overlay(config_path: Path | None) -> list[str]:
+    """Read plan_search_dirs YAML list from overlay (full parser, not flat key scan)."""
+    if config_path is None or not config_path.is_file():
+        return []
+    try:
+        import yaml  # type: ignore
+
+        data = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return []
+    raw = data.get("plan_search_dirs")
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for entry in raw:
+        if not isinstance(entry, str):
+            continue
+        rel = entry.strip().replace("\\", "/").strip("/")
+        if rel and rel not in out:
+            out.append(rel)
+    return out
+
+
+def merge_plan_search_dirs_for_emit(config_path: Path | None) -> list[str]:
+    """Canonical SSOT first, then any extra dirs already in overlay."""
+    merged: list[str] = [CANONICAL_PLAN_DIR]
+    for entry in read_plan_search_dirs_from_overlay(config_path):
+        if entry != CANONICAL_PLAN_DIR and entry not in merged:
+            merged.append(entry)
+    return merged
 
 
 def normalize_optional_branch(value: str | None) -> str | None:
@@ -654,26 +688,13 @@ def build_overlay_yaml(
         if val:
             lines.append(f"{key}: {val}")
 
-    # Auto-add binary-specific plan search directory if not already configured
-    from plugin.coding_agent import resolve_plan_search_dir
-    
-    plan_search_dirs: list[str] = []
-    if "plan_search_dirs" in existing:
-        # Preserve existing plan_search_dirs (already in skip list via MANAGED_KEYS)
-        pass
-    else:
-        # Auto-populate with binary-specific dir if available
-        binary_dir = resolve_plan_search_dir(coding_agent)
-        if binary_dir:
-            plan_search_dirs.append(binary_dir)
-    
-    # Add plan_search_dirs to output if we have any
-    if plan_search_dirs:
-        lines.append("")
-        lines.append("# Auto-configured for the selected coding agent binary:")
-        lines.append(f"plan_search_dirs:")
-        for dir_path in plan_search_dirs:
-            lines.append(f"  - {dir_path}")
+    overlay_file = overlay_path(project_root) if project_root is not None else None
+    plan_search_dirs = merge_plan_search_dirs_for_emit(overlay_file)
+    lines.append("")
+    lines.append("# Canonical kanban plan directory (SSOT for decomposition)")
+    lines.append("plan_search_dirs:")
+    for plan_dir in plan_search_dirs:
+        lines.append(f"  - {plan_dir}")
 
     lines.extend([
         "escalation_max_attempts:",

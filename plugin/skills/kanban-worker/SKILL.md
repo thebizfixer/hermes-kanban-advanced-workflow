@@ -34,7 +34,7 @@ metadata:
 | E001 zero-diff but work is done | Same + stamp `Commit:` | Post-flight Tier 1 uses same `find_prior_commit` rule |
 | Auth / smoke fail | `plugin/data/references/coding-agent-auth.md` | `[escalation:coding_agent:auth]` → T3 |
 | Worktree / E021 | `worktree_setup.sh` | Index § L5-pre |
-| Plan section missing in worktree | Index § L5 | `git checkout origin/${working_branch} -- .agent/plans/…` |
+| Plan section missing in worktree | Index § L5 | `git checkout origin/${working_branch} -- .hermes/kanban/plans/…` |
 | Don't know which layer | `in-flight-governance-index.md` | Symptom → command → verify |
 | Parent integration / merge | `kanban-advanced:kanban-git` | When card lists `Parent-branches:` |
 
@@ -644,7 +644,7 @@ Workers waste 5–8 minutes per task running identical pre-flight checks. Use th
 **Key procedural pitfalls (see governance ref for full context):**
 - Always heartbeat during agent execution (15-minute reclaim cycle).
 - Never push to `${working_branch}` — commit to worktree branch only.
-- `git reset --hard` destroys plan files — restore with `git checkout ${working_branch} -- .agent/plans/`.
+- `git reset --hard` destroys plan files — restore with `git checkout ${working_branch} -- .hermes/kanban/plans/`.
 - Agent `-p` is for code generation only — pipeline execution uses terminal commands.
 - Never call `kanban_complete` directly — always run the evaluation chain (E001–E021).
 - Cursor `[unauthenticated]` in logs is cosmetic — use Step 3 `coding_agent_invoke.sh smoke` for auth.

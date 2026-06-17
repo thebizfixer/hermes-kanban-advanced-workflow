@@ -64,7 +64,7 @@ done
 | Keywords | Layer | Tier | Belt | First command | Verify | Deep dive |
 |----------|-------|------|------|---------------|--------|-----------|
 | `E021`, exit 127 | L5-pre | T1 | BB | `worktree_setup.sh --task-id <id> --repo-root <repo>` | `.hermes/scripts/coding_agent_invoke.sh` in WT | `operator-provisioning.md` |
-| plan file missing | L5-pre | T1 | BB | `git checkout origin/${working_branch} -- .agent/plans/*{plan_id}*` | Plan readable | worker skill orient |
+| plan file missing | L5-pre | T1 | BB | `git checkout origin/${working_branch} -- .hermes/kanban/plans/*{plan_id}*` | Plan readable | worker skill orient |
 | `.env` / venv missing | L5-pre | T3 | Op | Add paths to `.worktreeinclude`; operator provisions | Tests run in WT | `operator-provisioning.md` |
 | stale materialized skill | L5-pre | T2 | MBB | Update Plugin + gateway restart | SKILL mtime fresh | `handoff-regression-checklist.md` |
 

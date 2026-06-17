@@ -1,6 +1,6 @@
 # Plan file format (markdown + YAML)
 
-SSOT for how agents write plans (to `.agent/plans/` by default, or configurable via `plan_search_dirs` in overlay). Applies during **Draft**, **Harden**, **Optimize**, and any edit that touches plan markdown.
+SSOT for how agents write plans. **Canonical kanban location:** `.hermes/kanban/plans/{plan_id}.plan.md` — plans may be drafted in an IDE-native directory first; **Harden** copies them into `.hermes/kanban/plans/` before decomposition. Applies during **Draft**, **Harden**, **Optimize**, and any edit that touches plan markdown.
 
 Cross-refs: `kanban-advanced:kanban-planning` (structure + checklists), `worker-actionability-audit.md` (per-section gates).
 
@@ -143,9 +143,9 @@ Not `<plan_id>.json`.
 
 ```bash
 # No angle-bracket placeholders in plan body (outside allowed <= >=)
-grep -nE '<[A-Za-z_/]' .agent/plans/your-plan.plan.md && echo "FIX: use {placeholder} not <placeholder>"
+grep -nE '<[A-Za-z_/]' .hermes/kanban/plans/your-plan.plan.md && echo "FIX: use {placeholder} not <placeholder>"
 
-bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh --plan .agent/plans/your-plan.plan.md
+bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh --plan .hermes/kanban/plans/your-plan.plan.md
 ```
 
 ## External grounding

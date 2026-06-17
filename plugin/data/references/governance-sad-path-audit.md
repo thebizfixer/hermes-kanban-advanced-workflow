@@ -197,7 +197,7 @@ This is where most of our Phase 2 failures occurred. Each sad path now has a str
 | WSL DrvFS corruption on /mnt/ | Low | CATASTROPHIC | Preflight §0 blocks cross-mount | ✅ Structural |
 | /tmp fills with stale worktrees | High | DISK | kanban-advanced:kanban-cleanup doesn't address this | ❌ No governance |
 | Concurrent plans on same board | Low | COLLISION | dispatcher_owner field (#32228) not yet available | ❌ Upstream bug |
-| Plan file lost/deleted | Low | BLOCKING | Plan sits in .agent/plans/ — gitignored? | ⚠️ No backup mechanism |
+| Plan file lost/deleted | Low | BLOCKING | Plan sits in `.hermes/kanban/plans/` — restore from `${working_branch}` | Covered by preflight backup + git checkout |
 | Gateway restart during execution → DB corruption | Medium | CATASTROPHIC | Known issues #30908 workaround | ❌ Only mitigation, no prevention |
 | Provider extended outage | Low | CATASTROPHIC | Provider fallback chain | ⚠️ Only works if fallback_providers configured |
 | Cursor CLI version mismatch | Low | BLOCKING | Agent binary verified in preflight | ⚠️ Version check, not compatibility check |

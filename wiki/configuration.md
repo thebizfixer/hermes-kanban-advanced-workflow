@@ -43,6 +43,8 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `subagent_gate.enabled` | Parallel pre-dispatch gate via Hermes `delegate_task` (orchestrator session); serial fallback when `false` or no `delegation` toolset | `true` |
 | `subagent_gate.timeouts` | Per-domain seconds before E022 (`plan_gate`, `env_gate`, `infra_gate`, `plan_parse`, `cron_setup`) | see example YAML |
 | `ui_stack` | Framework-neutral presentation acceptance anchors (route shell glob, motion patterns, frontend test command) | unset — optional; required when running layout acceptance on a host UI |
+| `plan_search_dirs` | Repo-relative directories to search for plan markdown; init always writes `.hermes/kanban/plans` first (canonical SSOT). Built-in resolver also checks common agent tool dirs | `[.hermes/kanban/plans]` |
+| `plan_memory_path` | Repo-relative plan memory JSON directory | `.hermes/kanban/memory` |
 
 `final_audit_overrides` is **operator-owned**: read at audit time from overlay YAML but **not** in init `_MANAGED_KEYS` — re-run `hermes kanban-advanced init` does not overwrite your allowlist. Edit `.hermes/kanban-overrides/kanban-config.yaml` directly; schema in `schema/kanban-config.schema.json`. See `plugin/data/references/final-audit-doc-coverage.md`.
 
@@ -89,6 +91,20 @@ Validate overlay: `python hermes-kanban-advanced-workflow/scripts/validate_confi
 
 Plans declare **surface slots** and `Acceptance (layout|a11y):` bullets; see `plugin/data/references/frontend-neutrality.md` and `plan-file-format.md` § Acceptance surfaces.
 
+### Plan paths (`plan_search_dirs`)
+
+| Location | Role |
+| --- | --- |
+| `.hermes/kanban/plans/` | **Canonical SSOT** in the host git repo — hardened plans for decomposition (not `$HERMES_HOME`) |
+| IDE-native draft dirs | e.g. host-tool plan folders — draft OK; **Harden** copies into `.hermes/kanban/plans/` |
+| `plan_search_dirs` in overlay | Optional extra resolver paths; init re-emits canonical first and preserves extras on re-init |
+
+```yaml
+plan_search_dirs:
+  - .hermes/kanban/plans
+  - custom/plans   # optional
+```
+
 **Plan memory `acceptance_matrix`:** After decompose, `.hermes/kanban/memory/{plan_id}.json` stores `acceptance_matrix` from plan frontmatter when present, otherwise parsed from the optimization section (`extract_acceptance_matrix`). Card stamping uses the same loader (`decompose_stamp.load_acceptance_matrix`).
 
 Set `notify_lifecycle: false` or dashboard **Cron → Lifecycle notify** off to skip lifecycle cron provisioning. Set `walk_away_mode: true` or dashboard **Cron → Walk-away mode** on for unattended reconciliation → cleanup → postmortem → completion notify after final audit. Full contract: `plugin/data/references/walk-away-mode.md`. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged.
@@ -107,7 +123,7 @@ To change binary or model: use dashboard **Coding Agent** (binary + model row) a
 
 ## Re-init and branch preservation
 
-`hermes kanban-advanced init` and dashboard **Bootstrap** refresh dispatch profiles (SOUL.md, role-only skills, verification), materialized shared skills, and cron **script files** (not cron jobs — see [[bootstrap]]). Optional `plan_search_dirs` in overlay config extends agent-neutral plan file resolution (defaults include `.hermes/kanban/plans`, `.agent/plans`, and other agent tool dirs). They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
+`hermes kanban-advanced init` and dashboard **Bootstrap** refresh dispatch profiles (SOUL.md, role-only skills, verification), materialized shared skills, and cron **script files** (not cron jobs — see [[bootstrap]]). Init sets `plan_search_dirs` to `.hermes/kanban/plans` (canonical SSOT). The built-in resolver also searches `.agent/plans`, `.cursor/plans`, and other agent tool dirs for drafts. Optional extra entries in overlay extend resolution. They **do not** reset `working_branch` or `trigger_branch` when `kanban-config.yaml` already exists — values are read from the overlay unless you pass explicit overrides:
 
 ```bash
 hermes kanban-advanced init --project-root .                    # keeps existing branches

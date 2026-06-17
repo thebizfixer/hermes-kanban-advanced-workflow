@@ -26,7 +26,7 @@ class TestDecomposeStamp(unittest.TestCase):
             ),
             "body": "plan_id: p1\nfiles:\n  - a.py\n---\n```agent\n...\n```",
         }
-        ds.stamp_impl_card(card, plan_id="p1", plan_file_rel=".agent/plans/p1.plan.md")
+        ds.stamp_impl_card(card, plan_id="p1", plan_file_rel=".hermes/kanban/plans/p1.plan.md")
         self.assertIn("Parent-branches: kanban/p1/card1", card["body"])
         self.assertIn("Call-sites: app/foo.py:bar", card["body"])
         self.assertIn("Acceptance:", card["body"])

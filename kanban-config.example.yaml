@@ -47,9 +47,11 @@ bundle_path: "hermes-kanban-advanced-workflow"
 skills_output_path: ".hermes/skills/kanban-advanced"
 plan_memory_path: ".hermes/kanban/memory"
 
-# Optional extra directories to search for plan files (agent-neutral resolver).
-# Built-in defaults: .hermes/kanban/plans, .agent/plans, .claude/plans, etc. Extend via plan_search_dirs.
-# plan_search_dirs: []
+# Optional extra directories to search for plan markdown drafts (resolver also
+# searches built-in agent tool dirs). Init always writes canonical SSOT first:
+plan_search_dirs:
+  - .hermes/kanban/plans
+#  - custom/plans
 
 # ---------------------------------------------------------------------------
 # UI stack (optional — framework-neutral presentation acceptance)

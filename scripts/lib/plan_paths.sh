@@ -22,3 +22,21 @@ if path:
         print(path)
 " "$repo_root" "$plan_id" "$hint"
 }
+
+ensure_canonical_plan() {
+  local repo_root="${1:?repo_root}"
+  local plan_id="${2:?plan_id}"
+  local hint="${3:-}"
+  PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" python3 -c "
+import sys
+from plan_paths import ensure_canonical_plan
+from pathlib import Path
+repo, plan_id, hint = sys.argv[1], sys.argv[2], sys.argv[3]
+path = ensure_canonical_plan(repo, plan_id, hint or None)
+if path:
+    try:
+        print(path.relative_to(Path(repo).resolve()).as_posix())
+    except ValueError:
+        print(path)
+" "$repo_root" "$plan_id" "$hint"
+}

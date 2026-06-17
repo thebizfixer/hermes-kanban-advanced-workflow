@@ -66,6 +66,15 @@
       "description": "Repo-relative path for plan memory JSON. Substituted as ${plan_memory_path}.",
       "default": ".hermes/kanban/memory"
     },
+    "plan_search_dirs": {
+      "type": "array",
+      "description": "Extra repo-relative directories to search for plan markdown before decomposition. Init always includes .hermes/kanban/plans (canonical SSOT) as the first entry; add IDE-native draft paths here if needed. Built-in resolver also searches common agent tool dirs.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [".hermes/kanban/plans"]
+    },
     "required_secrets": {
       "type": "string",
       "description": "Comma-separated env var names for preflight secret check."

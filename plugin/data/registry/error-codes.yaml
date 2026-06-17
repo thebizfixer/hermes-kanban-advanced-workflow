@@ -163,7 +163,7 @@ codes:
     code: E019_DESTRUCTIVE_GIT_OP
     severity: error
     description: "Destructive git operation detected in reflog — checkout --theirs, checkout --ours, or reset --hard. These overwrite ENTIRE files on multi-author code, silently dropping unrelated changes."
-    recovery: "Resolve conflicts per-hunk with git mergetool or manual edit. Never use --theirs/--ours on source files. Legitimate reset --hard for project artifact restoration (.agent/plans/, docs/) is auto-exempted."
+    recovery: "Resolve conflicts per-hunk with git mergetool or manual edit. Never use --theirs/--ours on source files. Legitimate reset --hard for project artifact restoration (.hermes/kanban/plans/, docs/) is auto-exempted."
     source: evaluation_chain_step_8
     retry: true
 

@@ -63,7 +63,7 @@ if [[ -n "$PLAN_REL" ]]; then
     "git log --oneline -1 -- ${PLAN_REL} | grep -q ."
 else
   check "plan on ${WORKING_BRANCH}" \
-    "git log --oneline -1 -- .agent/plans/*${PLAN_ID}*.md .hermes/kanban/plans/*${PLAN_ID}*.md 2>/dev/null | grep -q ."
+    "git log --oneline -1 -- .hermes/kanban/plans/*${PLAN_ID}*.md .agent/plans/*${PLAN_ID}*.md 2>/dev/null | grep -q ."
 fi
 
 warn "plan pushed" \

@@ -33,6 +33,7 @@ Load the relevant wiki page for detailed instructions:
 | How do I handle rate limits? | `wiki/provider-strategy.md` |
 | What's the DMAIC mapping? | `wiki/six-sigma-mapping.md` |
 | How do I write / format a plan file? | `skill_view("kanban-advanced:kanban-planning")` + `plugin/data/references/plan-file-format.md` |
+| Where should plans live? (canonical path) | `.hermes/kanban/plans/{plan_id}.plan.md` in the host repo — init sets `plan_search_dirs`; Harden copies drafts there. See `plan-file-format.md` + `wiki/configuration.md` |
 | Final audit exit-2 / stuck remediation loop | `plugin/data/references/final-audit-sanity-check.md` |
 | Tier 2 false positive / doc-coverage gap | `plugin/data/references/final-audit-doc-coverage.md` |
 | E001 ALLOW but Tier 1 `plan_file_zero_diff` | `plugin/data/references/final-audit-sanity-check.md` § Tier 1 ↔ E001 |

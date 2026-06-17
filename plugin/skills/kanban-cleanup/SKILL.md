@@ -137,7 +137,7 @@ After building these scripts, **use them** — don't fall back to manual `git wo
 
 - `.hermes/skills/` — updated skills should be committed
 - `.hermes/SOUL.md` — identity updates should be committed
-- Plan files (`.agent/plans/`) — preserved for audit trail
+- Plan files (`.hermes/kanban/plans/`) — preserved for audit trail
 - Postmortem reports (`.hermes/kanban/reports/`) — preserved for the next plan's learning pass
 - Git branches — the orchestrator handles merge
 

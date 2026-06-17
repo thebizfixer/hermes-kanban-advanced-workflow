@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import subprocess
+import shutil
 from pathlib import Path
 from typing import Iterable, List, Optional
 
+CANONICAL_PLAN_DIR = ".hermes/kanban/plans"
+
 DEFAULT_PLAN_SEARCH_DIRS: tuple[str, ...] = (
-    ".hermes/kanban/plans",
+    CANONICAL_PLAN_DIR,
     ".agent/plans",
     ".claude/plans",
     ".codex/plans",
@@ -92,6 +95,33 @@ def resolve_plan_file(
     except Exception:
         pass
     return None
+
+
+def ensure_canonical_plan(
+    repo_root: str | Path,
+    plan_id: str,
+    hint_path: str | None = None,
+) -> Optional[Path]:
+    """Ensure plan exists under CANONICAL_PLAN_DIR; copy from resolver if needed."""
+    root = _repo_root(repo_root)
+    canonical_dir = root / CANONICAL_PLAN_DIR
+    canonical_dir.mkdir(parents=True, exist_ok=True)
+
+    for pattern in (f"{plan_id}.plan.md", f"{plan_id}.md", f"*{plan_id}*.md"):
+        matches = sorted(canonical_dir.glob(pattern))
+        if matches:
+            return matches[0].resolve()
+
+    source = resolve_plan_file(root, plan_id, hint_path)
+    if not source:
+        return None
+
+    dest = canonical_dir / source.name
+    if source.resolve() == dest.resolve():
+        return dest.resolve()
+
+    shutil.copy2(source, dest)
+    return dest.resolve()
 
 
 def is_governance_artifact_path(rel_path: str, repo_root: str | Path) -> bool:

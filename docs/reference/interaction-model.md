@@ -6,14 +6,15 @@ The workflow moves through distinct stages. Each stage has a trigger phrase — 
 
 | You say                                  | Agent does                                                                                                                                                                                  | Next                                                                      |
 | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `"Plan this out"` or link to a plan file | Drafts a plan from your goal, writes it to `.agent/plans/`                                                                                                                                  | Waits for your review                                                     |
-| `"Harden the plan"`                      | Sanity check first, then tier-gated hardening pass (Critical → Important → Nice-to-have). Closes gaps in WHAT the plan is for: anchor points, edge cases, redundant changes, auto-research. | Prompts for review                                                        |
+| `"Plan this out"` or link to a plan file | Drafts a plan from your goal (IDE-native path OK; canonical location is `.hermes/kanban/plans/` after Harden)                                                                                                                                  | Waits for your review                                                     |
+| `"Do a sanity check"` / `"sanity check the plan"` | Read-only audit of anchor points, code claims, and gaps. Flags when the plan is not yet in `.hermes/kanban/plans/` (copy happens in Harden, not during sanity). | Findings list — proceed to Harden |
+| `"Harden the plan"`                      | Sanity check first, then tier-gated hardening pass (Critical → Important → Nice-to-have). Copies the plan to `.hermes/kanban/plans/` if needed, then closes gaps in WHAT the plan is for: anchor points, edge cases, redundant changes, auto-research. | Prompts for review                                                        |
 | At any point: `"Revise section X"`       | Edits the plan in-place                                                                                                                                                                     | Returns to review                                                         |
 | `"Optimize for Kanban"`                  | Closes gaps in HOW the plan executes on Kanban: adds `agent -p` blocks, draws dependency graph, estimates iteration budgets, plans same-provider staggering, adds Files:/Mode: lines.       | Prompts: *"Plan optimized. Ready when you are — say proceed or execute."* |
 
 Iterate on harden → revise as many times as needed. Optimize is the final gate — once you say it, the plan is locked for decomposition. You can still revise after optimizing, but you'll need to re-optimize to regenerate agent-prompt blocks and line budget.
 
-**Walk-away point:** After the plan is written but before you say "execute." The plan sits in `.agent/plans/` (or your configured plan directory) — come back hours or days later and say "execute this plan."
+**Walk-away point:** After the plan is written but before you say "execute." After Harden, the canonical copy sits in `.hermes/kanban/plans/` — come back hours or days later and say "execute this plan."
 
 ## Execution stage
 

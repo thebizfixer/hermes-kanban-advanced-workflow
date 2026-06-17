@@ -25,7 +25,7 @@ Return EXACTLY this JSON structure:
 {
   "domain": "plan_parse",
   "status": "pass",
-  "plan_path": ".agent/plans/example.plan.md",
+  "plan_path": ".hermes/kanban/plans/example.plan.md",
   "cards_yaml_path": ".hermes/kanban/memory/example.yaml",
   "card_count": 12,
   "policy_violations": [],

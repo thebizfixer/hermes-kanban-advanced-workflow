@@ -28,7 +28,7 @@ metadata:
 |---------|------|---------------|--------|
 | E021 / missing invoke script | T1 | `worktree_setup.sh --task-id <id> --repo-root <repo>` | `.hermes/scripts/coding_agent_invoke.sh` in worktree |
 | exit 127 on scripts | T1 | Resolve `BUNDLE` (index footer); Update Plugin | Script exists under `$HERMES_HOME/scripts/` |
-| plan missing in WT | T1 | `git checkout origin/${working_branch} -- .agent/plans/*{plan_id}*` | `read_file` / cat plan section |
+| plan missing in WT | T1 | `git checkout origin/${working_branch} -- .hermes/kanban/plans/*{plan_id}*` | `read_file` / cat plan section |
 | `.env` / venv missing | T3 | Operator adds to `.worktreeinclude` | `E003`/`E015` clear after provision |
 
 ## Error codes E001–E021

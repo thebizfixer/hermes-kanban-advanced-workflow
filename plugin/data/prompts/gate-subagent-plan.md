@@ -17,7 +17,7 @@ Run these checks:
    - source {BUNDLE_PATH}/scripts/lib/plan_paths.sh
    - PLAN_REL=$(resolve_plan_file "{REPO_ROOT}" "{PLAN_ID}" "" 2>/dev/null || true)
    - If PLAN_REL is non-empty: git -C "{REPO_ROOT}" log --oneline -1 -- "$PLAN_REL" | grep -q .
-   - Else: git -C "{REPO_ROOT}" log --oneline -1 -- .agent/plans/*{PLAN_ID}*.md .hermes/kanban/plans/*{PLAN_ID}*.md 2>/dev/null | grep -q .
+   - Else: git -C "{REPO_ROOT}" log --oneline -1 -- .hermes/kanban/plans/*{PLAN_ID}*.md .agent/plans/*{PLAN_ID}*.md 2>/dev/null | grep -q .
 
 2. Plan pushed (WARNING):
    - git -C "{REPO_ROOT}" fetch origin {WORKING_BRANCH} --dry-run 2>&1 | grep -q 'up to date'
@@ -36,7 +36,7 @@ Return EXACTLY this JSON structure (no prose, no markdown wrapping):
   "domain": "plan",
   "status": "pass",
   "checks": [
-    {"id": "plan_on_branch", "status": "pass", "severity": "blocking", "detail": "found at .agent/plans/foo.plan.md"},
+    {"id": "plan_on_branch", "status": "pass", "severity": "blocking", "detail": "found at .hermes/kanban/plans/foo.plan.md"},
     {"id": "plan_pushed", "status": "pass", "severity": "warning", "detail": "up to date with origin/main"},
     {"id": "plan_memory", "status": "pass", "severity": "blocking", "detail": "memory file exists"},
     {"id": "plan_memory_fresh", "status": "pass", "severity": "warning", "detail": "card count matches plan"}

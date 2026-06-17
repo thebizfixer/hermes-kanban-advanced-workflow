@@ -5,6 +5,7 @@ Tier-gated hardening pass after a sanity check. Work through each tier in order,
 ## Tiers
 
 ### Critical (must fix before decomposition)
+- Plan not in canonical location `.hermes/kanban/plans/` (copy during Harden — see `plan-hardening-checklist.md` item 0)
 - Stale anchor points (line numbers, function names against HEAD)
 - Missing edge cases that would block card execution
 - Unverified auto-research claims

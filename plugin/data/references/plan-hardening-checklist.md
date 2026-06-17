@@ -4,6 +4,7 @@ Runs between **sanity check** and **optimize for kanban**. Tier detail: `plan-ha
 
 ## Critical
 
+0. **Canonical plan location** — Kanban SSOT is `.hermes/kanban/plans/{plan_id}.plan.md`. If the plan was drafted elsewhere (IDE-native path, user-provided path, or another `plan_search_dirs` entry), copy it into `.hermes/kanban/plans/` during Harden before other edits. Verify: `test -f .hermes/kanban/plans/{plan_id}.plan.md` or `PYTHONPATH=scripts/lib python3 -c "from plan_paths import ensure_canonical_plan; print(ensure_canonical_plan('.', '{plan_id}'))"`. Continue hardening from the canonical copy only.
 1. Every cited file path exists on `${working_branch}`.
 2. Every cited symbol (function/class) exists or is marked **new**.
 3. Edge cases listed for each workstream (failure, rollback).

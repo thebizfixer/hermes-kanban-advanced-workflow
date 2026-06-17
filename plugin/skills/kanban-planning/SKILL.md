@@ -51,8 +51,8 @@ The planning phase proceeds through five stages in this exact order. Do not skip
 
 | Stage | Trigger phrase | What happens | Output |
 |-------|---------------|-------------|--------|
-| **Draft** | `"Plan this out"` or link to a plan file | Draft from goal, write to `.agent/plans/` (by default – configurable via `plan_search_dirs` in overlay) | Plan file (first draft) |
-| **Sanity check** | `"Do a sanity check"` or `"sanity check the plan"` | Read-only audit: verify anchor points against HEAD, cross-reference code claims, identify gaps, flag stale references, note deferred bloat. No edits â output is a findings list. | Gap report (what needs hardening) |
+| **Draft** | `"Plan this out"` or link to a plan file | Draft from goal (IDE-native path OK). Canonical kanban SSOT is `.hermes/kanban/plans/` after Harden | Plan file (first draft) |
+| **Sanity check** | `"Do a sanity check"` or `"sanity check the plan"` | Read-only audit: verify anchor points against HEAD, cross-reference code claims, identify gaps, flag stale references, note deferred bloat, and note when the plan is not yet in canonical `.hermes/kanban/plans/` (copy is a Harden step, not sanity). No edits ? output is a findings list. | Gap report (what needs hardening) |
 | **Harden** | `"Harden the plan"` | Apply the hardening checklist to close gaps discovered during sanity check (or self-discovered). Tier-gated pass: Critical â Important â Nice-to-have. | Hardened plan (content-complete) |
 | **Revise** | `"Revise section X"` | Edit in-place, return to review â conversational updates to plan content | Revised plan |
 | **Optimize** | `"Optimize for Kanban"` | Close execution-formatting gaps: add agent-prompt blocks, draw dependency graph, estimate iteration budgets, add Files:/Mode: lines, plan same-provider staggering, pre-write commit messages. See Â§Optimize checklist below. | Decomposition-ready plan |
@@ -60,12 +60,13 @@ The planning phase proceeds through five stages in this exact order. Do not skip
 
 **Critical ordering rule:** Sanity check, Harden, and Revise iterate BEFORE Optimize. Sanity check is read-only â it finds gaps. Harden closes them. Optimize formats for execution. The interaction model is: **Draft â Sanity check â Harden â Revise â repeat â Optimize â execute**. Never Optimize before Harden â formatting a plan with content gaps wastes tokens on cards that will be blocked or produce wrong code.
 
-**Walk-away point:** After drafting but before execute. The plan sits in `.agent/plans/` (or your configured plan directory) â the user can return hours or days later and say "execute this plan."
+**Walk-away point:** After drafting but before execute. After Harden, the canonical copy sits in `.hermes/kanban/plans/` ? the user can return hours or days later and say "execute this plan."
 
 ### Harden checklist (WHAT â content completeness)
 
 Run this during the Harden stage, after the initial sanity check. These items verify the plan's content is complete, correct, and well-researched. See `plugin/data/references/plan-hardening-methodology.md` for the tier-gated approach (Critical â Important â Nice-to-have) and verification grep suite.
 
+0. **Canonical plan location** ? If the plan is not already at `.hermes/kanban/plans/{plan_id}.plan.md`, copy it there before other Harden edits (from the draft path, `plan_search_dirs`, or the path the user linked). Use `PYTHONPATH=scripts/lib python3 -c "from plan_paths import ensure_canonical_plan; print(ensure_canonical_plan('.', '{plan_id}', '{hint}'))"` when helpful. Sanity check should flag a missing canonical copy; Harden performs the copy and continues from the canonical file only.
 1. **Anchor points verified** â All line numbers, function names, and file paths were checked against the current `HEAD`. If the plan references stale line numbers, re-verify before patching. This is the first thing you do in Harden â never harden a plan with stale references.
 2. **No-deletions policy confirmed** â If the plan requires preserving existing code, every quarantined block has a marker tag. If the plan deletes code, the deletion is intentional and documented.
 3. **Marker tag strategy** â Every commented-out or quarantined block has a consistent marker so a single search can discover all sites. If no code is being commented out (additive/restorative plan), note that marker tags are not needed.
@@ -96,7 +97,7 @@ Run this during the Optimize stage, after the plan content is hardened. These it
 11. **Same-file merge verification** â When a card touches a file that a prior card also modified, the card body MUST include instructions to rebase on the prior card's branch before working. Card 10 removed `_merge_fetch_scope_exhausted` that Card 2 added because Card 10 was created from staging (which didn't have Card 2's commits yet). The dependency graph specified Card 2 â Card 10 parent-child ordering, but the child must still merge the parent's changes. Add to card body: `**Before modifying {file}, rebase on {parent-card-branch}: git fetch origin {parent-branch} && git merge {parent-branch}.**`
 12. **Cross-section contradictions checked** â No two sections modify the same file in conflicting ways. If section A creates function X and section B deletes function X, flag as contradiction. If section A modifies lines 100â200 and section B modifies lines 150â250, flag as overlapping.
 13. **Optimization attestation** â All checklist items recorded in the plan frontmatter under `optimization_checklist` with `status: pass`. The orchestrator's Step 0c reads this for attestation.
-14. **Plan committed and pushed to `${working_branch}`** â The hardened, optimized plan is committed to `${working_branch}` and pushed to `origin/${working_branch}`. Workers branch their worktrees from `${working_branch}` and need the full plan file for autonomous troubleshooting. Verify: `git log --oneline -1 -- .agent/plans/<plan>.md` (or your configured plan directory) shows a recent commit on `${working_branch}` AND `git fetch origin ${working_branch} --dry-run` confirms the push.
+14. **Plan committed and pushed to `${working_branch}`** ? The hardened, optimized plan is committed to `${working_branch}` and pushed to `origin/${working_branch}`. Workers branch their worktrees from `${working_branch}` and need the full plan file for autonomous troubleshooting. Verify: `git log --oneline -1 -- .hermes/kanban/plans/<plan>.md` shows a recent commit on `${working_branch}` AND `git fetch origin ${working_branch} --dry-run` confirms the push.
 15. **Card body self-containment verified** â Every agent-prompt block includes inline code for function bodies, types, and constants the worker can't derive from file paths alone. Section references (`Â§3b`) are acceptable for narrative context but NOT for implementation details. If a card says "implement curiousPresentationComplete per plan Â§3b", the function body MUST be included in the agent-prompt block. Workers without plan file access will block on "plan detail missing."
 16. **Diff cap present** â Every agent-prompt block over 50 lines includes an explicit scope guard: `"If your diff exceeds 150 lines net, STOP and report what's remaining."` This prevents scope explosion (observed: 1654-line diff on a 91-line card). Smaller cards don't need this.
 17. **Goal-card acceptance encoded** â For each `goal_card: true` workstream: add an **`Acceptance:`** subsection (judge-facing; use template in `plugin/data/references/goal-card-selection.md`); optional `goal_max_turns` in frontmatter (default **20**, must not exceed `goals.max_turns`). Run `python3 hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan>.md` before attestation.
@@ -129,7 +130,7 @@ All documentation, skill files, and wiki pages MUST use system-agnostic paths. N
 
 | Avoid | Use | Rationale |
 |-------|-----|-----------|
-| IDE-specific plan dirs in plugin docs | `.agent/plans/` (configurable) | Agent-neutral canonical path; extend via `plan_search_dirs` in overlay to use `.hermes/kanban/plans/`, `.cursor/plans/`, or other agent-specific directories |
+| IDE-native draft paths in host tools | `.cursor/plans/`, `.agent/plans/`, etc. | Draft anywhere; **Harden** copies to `.hermes/kanban/plans/` (kanban SSOT). Extend resolver via `plan_search_dirs` in overlay |
 | `~/.hermes/` | `$HERMES_HOME/` | Hermes state directory is an environment variable â supports custom installs |
 | `/mnt/c/`, `/mnt/e/` | Native filesystem paths | WSL DrvFs paths are platform-specific and blocked by preflight |
 

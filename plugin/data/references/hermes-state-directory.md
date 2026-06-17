@@ -10,6 +10,8 @@ Set explicitly when you use a dedicated state directory:
 export HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 ```
 
+**Do not confuse** `$HERMES_HOME/kanban/` (Hermes board runtime: `kanban.db`, workspaces, logs) with `{repo}/.hermes/kanban/plans/` (versioned plan markdown in the **host git repo**). The plugin canonical plan path is always repo-relative.
+
 Some installs also honor `HERMES_STATE_DIR`; kanban scripts in this bundle resolve via `scripts/lib/hermes_home.sh`.
 
 ## Two buckets
@@ -20,6 +22,8 @@ Some installs also honor `HERMES_STATE_DIR`; kanban scripts in this bundle resol
 | --- | --- |
 | `hermes-kanban-advanced-workflow/` | Canonical public skill bundle |
 | `.hermes/kanban-overrides/` | Project overlay (`kanban-config.yaml`, patches, optional `references/`) |
+| `.hermes/kanban/plans/` | Canonical implementation-plan markdown (SSOT for decomposition; commit to `${working_branch}`) |
+| `.hermes/kanban/memory/` | Plan memory JSON (acceptance matrix seeds; default `plan_memory_path`) |
 | `.hermes/skills/…/kanban-*/` | Materialized skills (output of `provision.sh`) |
 
 ### Runtime state (NOT in git)

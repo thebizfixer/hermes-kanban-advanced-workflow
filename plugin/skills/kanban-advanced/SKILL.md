@@ -39,7 +39,7 @@ Load the skill that matches the user's request and proceed. All kanban-advanced 
 
 | User says | Load | Why |
 |-----------|------|-----|
-| "Plan this out" | `kanban-advanced:kanban-planning` | Draft stage — write under `.agent/plans/` |
+| "Plan this out" | `kanban-advanced:kanban-planning` | Draft stage — IDE-native draft OK; Harden copies to `.hermes/kanban/plans/` |
 | "Do a sanity check" / review a plan | `kanban-advanced:kanban-planning` | Sanity check stage — read-only audit, find gaps |
 | "Harden the plan" | `kanban-advanced:kanban-planning` | Harden stage — close the gaps |
 | "Optimize for Kanban" | `kanban-advanced:kanban-planning` | Optimize stage — prep for decomposition |
