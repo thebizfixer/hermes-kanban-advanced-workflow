@@ -10,29 +10,33 @@ Verify installed flags with `<binary> --help` after upgrades.
 
 | Binary | Headless entry | Structured output | Permissions / trust | Model flag (`auto` = omit) |
 | --- | --- | --- | --- | --- |
-| `agent` (Cursor) | `-p` (`--print`) | `--output-format json` (requires `-p`) | `--trust` in worktrees (requires `-p`) | `--model <id>` |
+| `cursor-agent` or `agent` (Cursor) | `-p` (`--print`) | `--output-format json` (requires `-p`) | `--trust` in worktrees (requires `-p`) | `--model <id>` |
 | `claude` | `-p` (`--print`) | `--output-format json` (requires `-p`) | `--dangerously-skip-permissions` or `--permission-mode bypassPermissions` | `--model <alias>` |
 | `codex` | `codex exec "<prompt>"` | `--json` (JSONL on stdout) | `-a never`; use `--sandbox workspace-write` for edits | `--model <id>` |
 | `grok` | `--prompt "<prompt>"` or `-p` | `--format json` (NDJSON events) | non-interactive by default; set `GROK_API_KEY` | `--model <id>` when supported |
 | `gemini` | prompt as arg (headless) | `--output-format json` | `--yolo` or `--approval-mode=yolo` for walk-away runs | `--model <id>` |
 | `aider` | `--message "<prompt>"` | text only (no JSON envelope) | `--yes-always` (or `--yes`) | `--model <id>` |
 
-## Cursor CLI (`agent`) — default
+## Cursor CLI (`cursor-agent` or `agent`)
 
-**Docs:** `agent --help` — `-p` is `--print`; `--output-format` only works with `--print`; `--trust` only works with `--print`/headless.
+Prefer **`cursor-agent`** on PATH when both Cursor and other tools may register `agent`. `coding_agent_invoke.sh` and `plugin/coding_agent.py` treat `cursor-agent` and `agent` identically for smoke/dispatch when configured.
+
+**Docs:** `cursor-agent --help` or `agent --help` — `-p` is `--print`; `--output-format` only works with `--print`; `--trust` only works with `--print`/headless.
 
 **Smoke (from worktree):**
 
 ```bash
+cursor-agent -p "say ok" --output-format json --trust
+# or when configured as agent:
 agent -p "say ok" --output-format json --trust
 ```
 
 **Dispatch:**
 
 ```bash
-agent -p "$FULL_PROMPT" --output-format json --trust
+cursor-agent -p "$FULL_PROMPT" --output-format json --trust
 # explicit model:
-agent -p "$FULL_PROMPT" --output-format json --trust --model composer-2.5
+cursor-agent -p "$FULL_PROMPT" --output-format json --trust --model composer-2.5
 ```
 
 **JSON result (single object on stdout):** `is_error`, `usage.inputTokens`, `usage.outputTokens`, `usage.cacheReadTokens`, `duration_api_ms`, `result`.

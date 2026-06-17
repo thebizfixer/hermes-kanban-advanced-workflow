@@ -53,8 +53,12 @@ from plugin.coding_agent_env import ensure_coding_agent_runtime_env  # noqa: E40
 from plugin.script_materialize import materialize_hermes_scripts  # noqa: E402
 from plugin.worktree_provision import ensure_worktreeinclude  # noqa: E402
 from plugin.coding_agent import (  # noqa: E402
+    CONFLICT_HINT,
+    CONFLICT_MESSAGE,
     SMOKE_TIMEOUT_SECONDS,
     check_coding_agent_cli,
+    get_available_coding_binaries,
+    is_contested_binary_name,
     list_models_for_binary,
     model_display_label,
     normalize_coding_agent_model,
@@ -574,6 +578,9 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         probe_ttl=_TTL_MODEL_PROBE,
     )
     coding_agent_cli["model_label"] = model_display_label(coding_agent_model)
+    if is_contested_binary_name(coding_agent):
+        coding_agent_cli["conflict"] = CONFLICT_MESSAGE
+        coding_agent_cli["conflict_hint"] = CONFLICT_HINT
 
     configured_branch = config.get("working_branch")
     if configured_branch:
@@ -595,6 +602,7 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         "coding_agent_binary": coding_agent,
         "coding_agent_model": coding_agent_model,
         "coding_agent_cli": coding_agent_cli,
+        "available_coding_binaries": get_available_coding_binaries(),
         "policy_profile": resolve_policy_profile(project_root, env=env),
         "notify_lifecycle": resolve_notify_lifecycle(project_root, config=config),
         "notify_deliver": config.get("notify_deliver", ""),
@@ -749,6 +757,9 @@ def _append_coding_agent_cli_log(
         output.append(f"   !  '{binary}' not found on PATH")
         return
     output.append(f"   OK '{binary}' found on PATH")
+    if is_contested_binary_name(binary):
+        output.append(f"   !  {CONFLICT_MESSAGE}")
+        output.append(f"   !  {CONFLICT_HINT}")
     output.append(f"   coding_agent_binary: {binary}")
     output.append(f"   coding_agent_model: {model} ({label})")
     if not probe:

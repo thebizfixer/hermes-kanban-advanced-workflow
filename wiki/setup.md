@@ -30,7 +30,7 @@
    ```
    Init creates `kanban-advanced-orchestrator` and `kanban-advanced-worker` (or renames legacy `orchestrator`/`worker`), installs plugin **SOUL.md** prompts, seeds **role-only** profile skills (no Hermes bundled skills), and verifies the result. Full detail: [[bootstrap]].
 
-   This also provisions config overlay, cron **script files** (not cron jobs — those are per-plan at decomposition), and environment settings. During init, you'll pick the **coding agent binary** (Cursor `agent`, Claude `claude`, Codex `codex`, etc.) and **model** (`auto` or a CLI-specific ID — Cursor lists via `agent --list-models`). Values are written to `kanban-config.yaml` (`coding_agent_binary`, `coding_agent_model`) and `.env` (`KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `HOME`). Init runs an **advisory** smoke test when the binary is on PATH — it warns but does not block init. You must add vendor API keys to `.env` or run vendor login on the gateway host before execute; **preflight** blocks decomposition if headless auth still fails. See [[bootstrap#coding-agent-auth-during-bootstrap-limitations]], [coding-agent auth](../plugin/data/references/coding-agent-auth.md), and [coding agents](../docs/reference/coding-agents.md). Change binary/model later via dashboard **Coding Agent** → **Save**.
+   This also provisions config overlay, cron **script files** (not cron jobs — those are per-plan at decomposition), and environment settings. During init, you'll pick a **coding agent command currently on PATH** (step 1c — numbered list or custom name) and **model** (step 1c-ii; `auto` or a CLI-specific ID — Cursor: `cursor-agent --list-models` or `agent --list-models`). Install your CLI first and prefer unambiguous commands (`cursor-agent`, `grok`, …) over shared names like `agent` — see [coding agents](../docs/reference/coding-agents.md) § Binary name collisions. Values are written to `kanban-config.yaml` (`coding_agent_binary`, `coding_agent_model`) and `.env` (`KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `HOME`). Init runs an **advisory** smoke test when the binary is on PATH — it warns but does not block init. You must add vendor API keys to `.env` or run vendor login on the gateway host before execute; **preflight** blocks decomposition if headless auth still fails. See [[bootstrap#coding-agent-auth-during-bootstrap-limitations]], [coding-agent auth](../plugin/data/references/coding-agent-auth.md), and [coding agents](../docs/reference/coding-agents.md). Change binary/model later via dashboard **Coding Agent** → **Save**.
 
    **Operator provisioning (beyond init):** Init does not add application `.env`, API keys, `.venv/`, or `node_modules/` to card worktrees. Add what your cards need to `.worktreeinclude` yourself — see [operator-provisioning.md](../plugin/data/references/operator-provisioning.md). Agents: load that file and interview the user about tests and coding-agent auth before execute.
 
@@ -64,16 +64,20 @@ The old `plugin:kanban-planning` form does NOT work. Skills are also materialize
 
 ### Coding agent binary
 
-Set during init (step 1c). Supported agents:
+Set during init (step 1c) or dashboard **Bootstrap** / **Save**. Init and the dashboard **Binary on PATH** dropdown list only supported commands **currently on PATH** (plus custom) — not a static full menu.
 
-| Binary | Source | Install |
-|--------|--------|---------|
-| `agent` | Cursor CLI | `curl https://cursor.com/install -fsS \| bash` |
+**Supported products** (install first; ensure the exact command resolves on PATH before init):
+
+| Command | Product | Install |
+|--------|---------|---------|
+| `cursor-agent` (preferred) or `agent` | Cursor CLI | `curl https://cursor.com/install -fsS \| bash` |
 | `claude` | Claude Code | `npm i -g @anthropic-ai/claude-code` |
 | `codex` | OpenAI Codex | `pip install openai-codex` |
 | `grok` | grok-cli | `npm i -g grok-dev` |
 | `aider` | Aider | `pip install aider-install` |
 | `gemini` | Gemini CLI | `npm i -g @google/gemini-cli` |
+
+The name `agent` is used by **multiple** CLIs (Cursor and Grok). If that is the only command on PATH, init/dashboard show it once with an ambiguous label and a **symlink conflict** notice — the plugin does not repair PATH for you. Prefer `cursor-agent` or `grok`. Full contract: [coding agents](../docs/reference/coding-agents.md) § Binary name collisions.
 
 The worker reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from `.env`, extracts the prompt from the card body's fenced `agent` block, and dispatches via `scripts/coding_agent_invoke.sh` (per-binary headless flags — see [coding agents](../docs/reference/coding-agents.md) and `plugin/data/references/coding-agent-cli-invocation.md`). To change binary or model: dashboard **Save**, edit `.env` / `kanban-config.yaml`, or re-run init (preserves existing model unless you override interactively).
 

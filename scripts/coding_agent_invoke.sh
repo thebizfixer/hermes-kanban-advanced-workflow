@@ -77,7 +77,7 @@ _run_handshake() {
   echo "[coding_agent_invoke] preflight cache fresh — handshake only" >&2
   CODING_AGENT_AUTH_LOCK_WAIT_SECONDS="${CODING_AGENT_AUTH_LOCK_WAIT_SECONDS:-5}"
   case "$BINARY" in
-    agent)
+    agent|cursor-agent)
       args=( -p "hello" --trust )
       append_model_args args
       _run_agent
@@ -96,7 +96,7 @@ if [[ "$MODE" == "smoke" ]] && preflight_cache_fresh "$BINARY" "$REPO_ROOT"; the
 fi
 
 case "$BINARY" in
-  agent)
+  agent|cursor-agent)
     # Cursor: -p = --print; --output-format requires -p; --trust required in worktrees
     args=( -p "$PROMPT" --output-format json --trust )
     append_model_args args

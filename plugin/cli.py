@@ -42,7 +42,15 @@ from .config_overlay import (
     resolve_coding_agent,
     resolve_coding_agent_model,
 )
-from .coding_agent import interactive_pick_model
+from .coding_agent import (
+    CONFLICT_HINT,
+    CONFLICT_MESSAGE,
+    INIT_PREAMBLE,
+    binary_on_path,
+    get_available_coding_binaries,
+    interactive_pick_model,
+    is_contested_binary_name,
+)
 from .hermes_model_config import (
     copy_active_model_to_profile,
     profile_has_model_config,
@@ -374,44 +382,44 @@ def _handle_init(args) -> int:
     # ── 1c. Coding agent binary ──────────────────────────────────────
     print()
     print("1c. Configuring coding agent binary...")
-    print("    Supported headless CLI coding agents:")
+    avail = get_available_coding_binaries()
+    print(f"    {INIT_PREAMBLE}")
     print()
-    print("    | # | Binary   | Source                   |")
-    print("    |---|----------|--------------------------|")
-    print("    | 1 | agent    | Cursor CLI               |")
-    print("    | 2 | claude   | Claude Code              |")
-    print("    | 3 | codex    | OpenAI Codex             |")
-    print("    | 4 | grok     | superagent-ai/grok-cli   |")
-    print("    | 5 | aider    | Aider-AI/aider           |")
-    print("    | 6 | gemini   | google-gemini/gemini-cli |")
+    if avail:
+        for i, item in enumerate(avail, 1):
+            print(f"    | {i} | {item['command']:<14} | {item['label']} |")
+    else:
+        print("    (none detected — you can still type a custom command)")
+    print("    | 0 | (custom)     | Other / type exact command name |")
     print()
 
     coding_binary = resolve_coding_agent(project_root)
     choice = ""
     try:
         if force:
-            choice = "1"
+            choice = "1" if avail else ""
         else:
-            choice = input("    Which coding agent is on PATH? [1-6, or type binary name, default=1/agent] ").strip()
+            choice = input(
+                "    Which (number), 0 for custom, or type exact command name? "
+            ).strip()
     except (EOFError, KeyboardInterrupt):
         choice = ""
 
-    agent_map = {"1": "agent", "2": "claude", "3": "codex", "4": "grok", "5": "aider", "6": "gemini"}
-    if choice in agent_map:
-        coding_binary = agent_map[choice]
-    elif choice:
-        coding_binary = choice  # custom binary name
+    if choice.isdigit() and 1 <= int(choice) <= len(avail):
+        coding_binary = str(avail[int(choice) - 1]["command"])
+    elif choice and choice != "0":
+        coding_binary = choice
 
-    # Verify it's actually on PATH
-    found = False
-    for path_dir in os.environ.get("PATH", "").split(os.pathsep):
-        if (Path(path_dir) / coding_binary).exists():
-            found = True
-            break
-    if found:
+    if binary_on_path(coding_binary):
         print(f"   OK '{coding_binary}' found on PATH")
     else:
-        print(f"   !  '{coding_binary}' not found on PATH — install it before dispatching workers")
+        print(
+            f"   !  '{coding_binary}' not found on PATH — "
+            "install it before dispatching workers"
+        )
+    if is_contested_binary_name(coding_binary):
+        print(f"   !  {CONFLICT_MESSAGE}")
+        print(f"   !  {CONFLICT_HINT}")
     print(f"   coding_agent_binary: {coding_binary}")
     print("    Workers will use this binary when executing agent-prompt blocks.")
 

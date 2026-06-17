@@ -24,6 +24,11 @@ distribution that ships `bash.exe` and the full POSIX toolchain. Hermes sets
 `HERMES_GIT_BASH_PATH` to locate bash deterministically.
 
 All `.sh` scripts in `scripts/` run under that Git Bash without modification.
+
+## Coding CLI command names on PATH
+
+Multiple AI coding CLIs may register the same command (e.g. `agent` for Cursor and Grok). Prefer **unambiguous** install commands (`cursor-agent`, `grok`) on PATH before `hermes kanban-advanced init` or dashboard **Bootstrap**. The kanban-advanced plugin lists only commands currently on PATH and warns on contested shared names — it does not repair symlinks or PATH order for you.
+
 PortableGit provides:
 
 - `/usr/bin/env bash` — shebang support

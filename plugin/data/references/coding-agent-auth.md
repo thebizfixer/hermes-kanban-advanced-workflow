@@ -27,6 +27,8 @@ You choose **one** headless CLI (`coding_agent_binary`) and authenticate it **ei
 
 Bootstrap smoke only **warns** if that assumption is not met yet. **Preflight + gate** enforce it before cards are created.
 
+**Shared command names:** Init and dashboard list only commands on PATH. The name `agent` is contested (Cursor and Grok). Prefer `cursor-agent` or `grok` in `coding_agent_binary`. The plugin surfaces a symlink conflict notice but does not repair PATH — see [coding agents](../../../docs/reference/coding-agents.md) § Binary name collisions.
+
 ### Agent: user reports coding-binary auth trouble
 
 Load this file and [wiki/troubleshooting.md](../../../wiki/troubleshooting.md). Run in order:
@@ -76,7 +78,7 @@ If smoke works at project root but fails in the worktree with exit 127 on `codin
 
 | Binary | Headless auth | Credential location / env | CI / automation best practice |
 | --- | --- | --- | --- |
-| `agent` (Cursor) | OAuth | `$HOME/.config/cursor/auth.json` | `agent login` on gateway host; use `-p --trust` for worktrees; **not** `CURSOR_API_KEY` |
+| `cursor-agent` or `agent` (Cursor) | OAuth | `$HOME/.config/cursor/auth.json` | `cursor-agent login` or `agent login` on gateway host; use `-p --trust` for worktrees; **not** `CURSOR_API_KEY` |
 | `claude` | API key, bearer token, or OAuth | `~/.claude/.credentials.json` or `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN` | Non-interactive `-p`: set `ANTHROPIC_API_KEY` or `claude setup-token` → `CLAUDE_CODE_OAUTH_TOKEN` ([Claude Code auth](https://code.claude.com/docs/en/authentication)) |
 | `codex` | API key or saved login | `~/.codex/auth.json` or `CODEX_API_KEY` / `OPENAI_API_KEY` | `codex exec` in CI: `CODEX_API_KEY` secret ([Codex non-interactive](https://developers.openai.com/codex/noninteractive)) |
 | `grok` | API key | `GROK_API_KEY` | Export key in `.env` / gateway env |

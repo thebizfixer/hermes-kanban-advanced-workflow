@@ -68,6 +68,13 @@ AUTH_PROFILES: dict[str, CodingAgentAuthProfile] = {
 }
 
 
+def normalize_auth_profile_key(binary: str) -> str:
+    """Map CLI command names to AUTH_PROFILES keys."""
+    if binary == "cursor-agent":
+        return "agent"
+    return binary
+
+
 def resolve_runtime_home(env: dict[str, str] | None = None) -> str:
     """Resolve HOME for credential paths (gateway/systemd may omit it)."""
     env = env or {}
@@ -127,7 +134,7 @@ def audit_coding_agent_prerequisites(
             "must set Environment=HOME=... or persist HOME in project .env)"
         )
 
-    profile = AUTH_PROFILES.get(binary)
+    profile = AUTH_PROFILES.get(normalize_auth_profile_key(binary))
     if not profile:
         return issues
 
@@ -165,7 +172,7 @@ def describe_prerequisite_issues(binary: str, issues: list[str]) -> str:
     if not issues:
         return ""
     joined = "; ".join(issues)
-    profile = AUTH_PROFILES.get(binary)
+    profile = AUTH_PROFILES.get(normalize_auth_profile_key(binary))
     if profile and profile.notes:
         return f"{joined}. {profile.notes}"
     return joined

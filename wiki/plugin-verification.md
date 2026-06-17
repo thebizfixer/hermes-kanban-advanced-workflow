@@ -27,7 +27,7 @@ Supported environments match [PLATFORM_NOTES.md](../PLATFORM_NOTES.md) and [codi
 
 **Bundle path:** Examples use `hermes-kanban-advanced-workflow/` as a neutral submodule/install dir name. Your overlay `bundle_path` in `kanban-config.yaml` may differ — substitute `${bundle_path}` or the path init materialized under `$HERMES_HOME/scripts/`.
 
-**Coding agent binary:** Tier 3 probes the **configured** CLI (`KANBAN_CODING_AGENT` / dashboard **Coding Agent** picker) — `agent`, `claude`, `codex`, `grok`, `aider`, `gemini`, or a custom binary. Auth is per vendor; see `plugin/data/references/coding-agent-auth.md`. Bootstrap smoke is **advisory** for all binaries; preflight/gate **block** when smoke fails.
+**Coding agent binary:** Tier 3 probes the **configured** CLI (`KANBAN_CODING_AGENT` / dashboard **Coding Agent** picker). Init and dashboard populate the picker from commands **on PATH** (`cursor-agent`, `claude`, `codex`, `grok`, `aider`, `gemini`, custom). Auth is per vendor; see `plugin/data/references/coding-agent-auth.md`. Bootstrap smoke is **advisory** for all binaries; preflight/gate **block** when smoke fails. Contested shared names: [coding agents](../docs/reference/coding-agents.md) § Binary name collisions.
 
 **Windows note:** `sanity_check.sh` requires bash and checks **LF** line endings on shell scripts (repo shipping standard). Run Tier 1 shell checks from Git Bash or WSL, not plain CMD.
 

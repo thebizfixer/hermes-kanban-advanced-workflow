@@ -29,6 +29,7 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$F
 | Binary | Source | Install | Headless invocation | Structured output | Permissions / trust |
 | --- | --- | --- | --- | --- | --- |
 | `agent` | Cursor CLI | `curl https://cursor.com/install -fsS \| bash` | `agent -p "..."` | `--output-format json` (with `-p`) | `--trust` (with `-p`, required in worktrees) |
+| `cursor-agent` | Cursor CLI (preferred) | same as `agent` | `cursor-agent -p "..."` | `--output-format json` (with `-p`) | `--trust` (with `-p`, required in worktrees) |
 | `claude` | Claude Code | `npm i -g @anthropic-ai/claude-code` | `claude -p "..."` | `--output-format json` (with `-p`) | `--dangerously-skip-permissions` |
 | `codex` | OpenAI Codex | `pip install openai-codex` | `codex exec "..."` | `--json` (JSONL) | `-a never`; `--sandbox workspace-write` for edits |
 | `grok` | superagent-ai/grok-cli | `npm i -g grok-dev` | `grok --prompt "..."` | `--format json` (NDJSON) | `GROK_API_KEY` |
@@ -155,9 +156,23 @@ aider --message "say ok" --yes-always --no-git
 
 Text output only — token attribution uses estimates unless you add a separate metering hook.
 
+## Binary name collisions
+
+Several coding CLIs can register the same command name on PATH (today: **`agent`** is used by both Cursor and Grok Build). The plugin **does not repair symlinks or PATH order** for you.
+
+**Install first:** install the CLI you want and ensure its command resolves on PATH **before** init or dashboard **Bootstrap** / **Save**. Prefer unambiguous names (`cursor-agent` for Cursor, `grok` for Grok).
+
+**At config time:** init step **1c** and the dashboard **Binary on PATH** dropdown list only supported commands **currently on PATH** (plus custom). If only the shared name `agent` is present, it appears once with an ambiguous label — not attributed to a single vendor.
+
+**After config:** if your configured command is a contested shared name, status and init/save logs show:
+
+`symlink conflict: two or more binaries are configured with the same command`
+
+plus direction to install an unambiguous command and update **Binary on PATH**. This is a notice only — the plugin does not change your config automatically.
+
 ## CLI init prompts
 
-`hermes kanban-advanced init` step **1c** — pick binary (1–6 or custom name). Step **1c-ii** — pick model from a numbered list (Cursor: live list from `agent --list-models`; other binaries: curated defaults). Init runs a smoke test when the binary is on PATH and logs reachable / auth failed / inconclusive.
+`hermes kanban-advanced init` step **1c** — pick from binaries **currently on PATH** (numbered list) or type a custom command name. Step **1c-ii** — pick model from a numbered list (Cursor: live list from `agent --list-models` or `cursor-agent --list-models`; other binaries: curated defaults). Init runs a smoke test when the binary is on PATH and logs reachable / auth failed / inconclusive. Contested names print the symlink conflict notice.
 
 Re-init **preserves** `coding_agent_model` unless you use `--force` or answer the model prompt again on first-time setup.
 
@@ -165,7 +180,7 @@ Re-init **preserves** `coding_agent_model` unless you use `--force` or answer th
 
 **Kanban-Advanced** tab → **Coding Agent**:
 
-1. **Binary on PATH** — dropdown (or custom name).
+1. **Binary on PATH** — dropdown populated from commands currently on PATH (or custom name).
 2. **Model** — click the row to open the picker (`GET /api/plugins/kanban-advanced/coding-agent/models?binary=<name>`).
 3. **Save** or **Bootstrap** — writes YAML + `.env`, reconciles profiles, runs smoke.
 

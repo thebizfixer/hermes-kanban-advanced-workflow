@@ -12,7 +12,7 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | Variable | Purpose | Example |
 |----------|---------|---------|
 | `working_branch` | Integration branch; orchestrator merges completed sections here | Detected from git upstream / `origin/HEAD` at init, or set explicitly |
-| `coding_agent_binary` | Headless CLI coding agent binary on PATH (set during init) | `agent` (Cursor CLI), `claude`, `codex`, etc. |
+| `coding_agent_binary` | Headless CLI command on PATH (set during init step 1c from on-PATH list) | `cursor-agent`, `claude`, `codex`, `grok`, … — prefer unambiguous names over shared `agent`; see [coding agents](../docs/reference/coding-agents.md) § Binary name collisions |
 | `coding_agent_model` | Model ID for the coding CLI (`auto` = CLI default) | `auto` |
 | `feature_branch_prefix` | Prefix for per-section worktree branches | `wt/` |
 | `required_secrets` | Comma-separated env vars checked by preflight | `MONGODB_URI,SECRET_KEY` |
@@ -97,8 +97,8 @@ Set `notify_lifecycle: false` or dashboard **Cron → Lifecycle notify** off to 
 
 The `coding_agent_binary` flows through three layers to the worker:
 
-1. **Init (step 1c)** — user picks binary from supported agents table → written to `kanban-config.yaml` and `.env` as `KANBAN_CODING_AGENT`
-2. **Init (step 1c-ii)** — user picks model (`auto` or a CLI-specific ID; Cursor: `agent --list-models`) → `coding_agent_model` in YAML and `KANBAN_CODING_AGENT_MODEL` in `.env`
+1. **Init (step 1c)** — user picks from commands **currently on PATH** (numbered list) or types a custom command → written to `kanban-config.yaml` and `.env` as `KANBAN_CODING_AGENT`. Contested shared names (e.g. `agent`) print a symlink conflict notice — see [coding agents](../docs/reference/coding-agents.md) § Binary name collisions.
+2. **Init (step 1c-ii)** — user picks model (`auto` or a CLI-specific ID; Cursor: `cursor-agent --list-models` or `agent --list-models`) → `coding_agent_model` in YAML and `KANBAN_CODING_AGENT_MODEL` in `.env`
 3. **Worker environment** — gateway loads main-repo `.env` for `KANBAN_CODING_AGENT*`; card worktrees need their own `.env` only if you add it to `.worktreeinclude` ([operator-provisioning.md](../plugin/data/references/operator-provisioning.md))
 4. **Worker dispatch** — `scripts/coding_agent_invoke.sh` (or `build_dispatch_argv` in `plugin/coding_agent.py`) applies per-binary headless flags; see [coding agents](../docs/reference/coding-agents.md) and `plugin/data/references/coding-agent-cli-invocation.md`
 5. **Dashboard reachability** — `coding_agent_cli.model_reachable` (probe or Save) smokes from project root. Workers re-smoke from each card worktree at Step 3. These are complementary — see dashboard [API.md](../dashboard/API.md).

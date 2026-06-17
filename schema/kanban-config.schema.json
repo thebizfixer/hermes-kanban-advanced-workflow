@@ -48,7 +48,7 @@
     },
     "coding_agent_binary": {
       "type": "string",
-      "description": "Headless CLI coding agent binary dispatched by the worker profile. Substituted as ${coding_agent_binary}. Set during init (agent=Cursor, claude=Claude Code, codex=OpenAI Codex, etc.).",
+      "description": "Headless CLI command dispatched by the worker profile. Substituted as ${coding_agent_binary}. Set during init from commands on PATH (cursor-agent, agent, claude, codex, grok, aider, gemini, or custom). Prefer cursor-agent over contested agent.",
       "default": "agent"
     },
     "coding_agent_model": {

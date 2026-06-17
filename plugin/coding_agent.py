@@ -33,6 +33,31 @@ CODING_AGENT_AUTH_LOCK_WAIT_DISPATCH = int(
     os.environ.get("CODING_AGENT_AUTH_LOCK_WAIT_SECONDS", "120")
 )
 
+CONFLICT_MESSAGE = (
+    "symlink conflict: two or more binaries are configured with the same command"
+)
+CONFLICT_HINT = (
+    "Install your preferred CLI's unambiguous command (e.g. cursor-agent or grok), "
+    "update Binary on PATH, and Save. See docs/reference/coding-agents.md."
+)
+INIT_PREAMBLE = (
+    "Binaries currently on PATH (install your chosen CLI first, "
+    "then pick its command here):"
+)
+CONTESTED_AGENT_LABEL = (
+    "agent (shared name — multiple CLIs use this; prefer cursor-agent or grok)"
+)
+
+# product_key -> (display_name, preferred_commands, contested_commands)
+PRODUCT_REGISTRY: dict[str, tuple[str, tuple[str, ...], tuple[str, ...]]] = {
+    "cursor": ("Cursor CLI", ("cursor-agent",), ("agent",)),
+    "claude": ("Claude Code", ("claude",), ()),
+    "codex": ("OpenAI Codex", ("codex",), ()),
+    "grok": ("grok-cli", ("grok",), ("agent",)),
+    "aider": ("Aider", ("aider",), ()),
+    "gemini": ("Gemini CLI", ("gemini",), ()),
+}
+
 
 @dataclass(frozen=True)
 class CodingAgentAdapter:
@@ -144,6 +169,8 @@ def normalize_coding_agent_model(model: str | None) -> str:
 
 
 def resolve_adapter(binary: str) -> CodingAgentAdapter:
+    if binary in ("cursor-agent", "agent"):
+        return ADAPTERS["agent"]
     return ADAPTERS.get(binary) or CodingAgentAdapter(
         binary=binary,
         display_name=binary,
@@ -152,6 +179,46 @@ def resolve_adapter(binary: str) -> CodingAgentAdapter:
         list_models_argv=None,
         default_models=((CODING_AGENT_MODEL_AUTO, "Default (CLI auto)"),),
     )
+
+
+def is_contested_binary_name(name: str) -> bool:
+    """True when multiple supported products claim the same command name."""
+    claimants = 0
+    for _key, (_display, preferred, contested) in PRODUCT_REGISTRY.items():
+        if name in preferred or name in contested:
+            claimants += 1
+    return claimants > 1
+
+
+def get_available_coding_binaries() -> list[dict[str, str | bool]]:
+    """Supported commands currently on PATH for init/dashboard pickers."""
+    results: list[dict[str, str | bool]] = []
+    seen: set[str] = set()
+
+    for product_key, (display_name, preferred, contested_cmds) in PRODUCT_REGISTRY.items():
+        for command in (*preferred, *contested_cmds):
+            if command in seen or not binary_on_path(command):
+                continue
+            seen.add(command)
+            if is_contested_binary_name(command):
+                results.append(
+                    {
+                        "command": command,
+                        "label": CONTESTED_AGENT_LABEL,
+                        "product_key": "",
+                        "contested": True,
+                    }
+                )
+            else:
+                results.append(
+                    {
+                        "command": command,
+                        "label": f"{command} ({display_name})",
+                        "product_key": product_key,
+                        "contested": False,
+                    }
+                )
+    return results
 
 
 def resolve_binary_executable(binary: str) -> str | None:
@@ -326,7 +393,7 @@ def _build_headless_argv(
         cmd.extend(["-p", prompt])
         if json_output:
             cmd.extend(adapter.extra_smoke_argv)
-        elif binary == "agent":
+        elif binary in ("agent", "cursor-agent"):
             cmd.extend(("--trust",))
     if adapter.model_flag and not is_auto_model(model):
         cmd.extend([adapter.model_flag, normalize_coding_agent_model(model)])

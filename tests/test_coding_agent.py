@@ -9,14 +9,18 @@ from unittest.mock import patch
 
 from plugin.coding_agent import (
     CODING_AGENT_MODEL_AUTO,
+    CONTESTED_AGENT_LABEL,
     _agent_smoke_json_unsupported,
     _interpret_smoke_result,
     build_dispatch_argv,
     build_smoke_argv,
     describe_smoke_failure,
+    get_available_coding_binaries,
     is_auto_model,
+    is_contested_binary_name,
     normalize_coding_agent_model,
     parse_cursor_list_models,
+    resolve_adapter,
     smoke_test_coding_agent,
 )
 
@@ -196,6 +200,37 @@ Tip: use --model <id>
         self.assertTrue(result)
         self.assertEqual(len(calls), 1)
         self.assertNotIn("--output-format", calls[0])
+
+
+class TestCodingAgentDiscovery(unittest.TestCase):
+    def test_is_contested_agent(self) -> None:
+        self.assertTrue(is_contested_binary_name("agent"))
+        self.assertFalse(is_contested_binary_name("claude"))
+        self.assertFalse(is_contested_binary_name("cursor-agent"))
+
+    def test_resolve_adapter_cursor_agent(self) -> None:
+        adapter = resolve_adapter("cursor-agent")
+        self.assertEqual(adapter.display_name, "Cursor CLI")
+        self.assertEqual(adapter.binary, "agent")
+
+    @patch("plugin.coding_agent.binary_on_path")
+    def test_get_available_cursor_agent(self, on_path) -> None:
+        on_path.side_effect = lambda name: name == "cursor-agent"
+        rows = get_available_coding_binaries()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["command"], "cursor-agent")
+        self.assertIn("Cursor CLI", str(rows[0]["label"]))
+        self.assertFalse(rows[0]["contested"])
+
+    @patch("plugin.coding_agent.binary_on_path")
+    def test_get_available_contested_agent_only(self, on_path) -> None:
+        on_path.side_effect = lambda name: name == "agent"
+        rows = get_available_coding_binaries()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["command"], "agent")
+        self.assertTrue(rows[0]["contested"])
+        self.assertEqual(rows[0]["label"], CONTESTED_AGENT_LABEL)
+        self.assertNotIn("Cursor CLI", str(rows[0]["label"]))
 
 
 class TestCodingAgentSmokeLive(unittest.TestCase):

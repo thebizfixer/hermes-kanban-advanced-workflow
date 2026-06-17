@@ -35,19 +35,24 @@ Returning to the tab reuses **sessionStorage** for probe results; plugin update 
   "working_branch": "main",
   "default_working_branch": "main",
   "trigger_branch": "",
-  "coding_agent": "agent",
-  "coding_agent_binary": "agent",
+  "coding_agent": "cursor-agent",
+  "coding_agent_binary": "cursor-agent",
   "coding_agent_model": "auto",
   "coding_agent_cli": {
-    "binary": "agent",
+    "binary": "cursor-agent",
     "display_name": "Cursor CLI",
     "on_path": true,
     "model": "auto",
     "model_label": "Auto (CLI default)",
     "model_configured": true,
     "model_reachable": true,
-    "supports_model_pick": true
+    "supports_model_pick": true,
+    "conflict": "",
+    "conflict_hint": ""
   },
+  "available_coding_binaries": [
+    { "command": "cursor-agent", "label": "cursor-agent (Cursor CLI)", "product_key": "cursor", "contested": false }
+  ],
   "policy_profile": "balanced",
   "notify_lifecycle": true,
   "notify_deliver": "",
@@ -108,6 +113,8 @@ Returning to the tab reuses **sessionStorage** for probe results; plugin update 
 | `plugin_local_changes` | Porcelain dirty count in `plugin_install_path`; `null` when not checkable |
 
 `profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. When false, `profiles.*.model_reachability_detail` may be `model not found`, `provider auth failed`, or `inconclusive` — the dashboard labels this **model unreachable**, not coding-agent CLI auth. `profiles.*.reasoning_effort` reflects `agent.reasoning_effort` from the profile `config.yaml` (or Hermes default `medium` when unset). `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
+
+`available_coding_binaries` lists supported commands currently on PATH for the **Binary on PATH** dropdown. When the configured binary is a contested shared name (e.g. `agent`), `coding_agent_cli.conflict` and `conflict_hint` are set — the dashboard shows a warning independent of reachability color. The plugin does not repair PATH; it surfaces operator direction only.
 
 **Bootstrap limitation:** Init/Save smoke is **advisory** — HTTP 200 / successful init can return with `! coding CLI auth/model check failed` in `output`. Bootstrap writes `KANBAN_CODING_AGENT*` and `HOME` to `.env` but **does not** add vendor API keys. **Preflight** and **pre-dispatch gate** block decomposition when headless auth fails. See `plugin/data/references/coding-agent-auth.md`.
 
@@ -183,7 +190,7 @@ Lists model IDs for the dashboard coding-agent picker.
 }
 ```
 
-Cursor uses `agent --list-models`. Other supported binaries return curated defaults until a list command is wired in `plugin/coding_agent.py`.
+Cursor uses `cursor-agent --list-models` or `agent --list-models`. Other supported binaries return curated defaults until a list command is wired in `plugin/coding_agent.py`.
 
 ## `POST /api/plugins/kanban-advanced/init`
 
@@ -198,7 +205,7 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 {
   "working_branch": "main",
   "trigger_branch": "",
-  "coding_agent_binary": "agent",
+  "coding_agent_binary": "cursor-agent",
   "coding_agent_model": "auto",
   "policy_profile": "balanced",
   "notify_lifecycle": true,
@@ -232,8 +239,8 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
     "   OK kanban-advanced-worker: SOUL.md <- worker.md (.../profiles/kanban-advanced-worker)",
     "   OK kanban-advanced-worker: 3 skills seeded [...] (.../profiles/kanban-advanced-worker)",
     "   OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)",
-    "   OK 'agent' found on PATH",
-    "   coding_agent_binary: agent",
+    "   OK 'cursor-agent' found on PATH",
+    "   coding_agent_binary: cursor-agent",
     "   coding_agent_model: auto (Auto (CLI default))",
     "   OK coding CLI reachable (Auto (CLI default))",
     "   OK /path/to/kanban-config.yaml",

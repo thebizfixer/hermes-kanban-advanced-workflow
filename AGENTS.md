@@ -65,6 +65,8 @@ Bootstrap smoke is **advisory** — init can succeed with `! coding CLI auth/mod
 
 Do **not** tell the user bootstrap alone proves workers can dispatch the coding agent.
 
+**Shared command names:** If `coding_agent_binary` is a contested name (e.g. `agent` used by multiple CLIs), init/dashboard status shows a symlink conflict notice. The plugin does not repair PATH — direct the operator to install an unambiguous command (`cursor-agent`, `grok`, …) and update config. See `docs/reference/coding-agents.md` § Binary name collisions.
+
 ## When a user needs help provisioning beyond bootstrap
 
 Init covers **kanban infrastructure only** (profiles, overlay, materialized scripts, kanban `.worktreeinclude` paths). It does **not** add application `.env`, API keys, venvs, or `node_modules`.

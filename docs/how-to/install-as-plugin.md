@@ -38,7 +38,7 @@ Replace `<branch-name>` with your integration branch (e.g. `main`).
 
 **Dashboard alternative:** Hermes dashboard → **Kanban-Advanced** tab → set **Coding Agent** (binary + model) → **Bootstrap** (same operation as CLI init).
 
-CLI init step **1c** asks for the binary; step **1c-ii** asks for the model (`auto` or an ID — Cursor: live list from `agent --list-models`). Both are smoke-tested when the binary is on PATH.
+CLI init step **1c** lists supported binaries **currently on PATH** (numbered) or accepts a custom command; step **1c-ii** asks for the model (`auto` or an ID — Cursor: live list from `cursor-agent --list-models` or `agent --list-models`). Both are smoke-tested when the binary is on PATH. If the chosen command is a contested shared name (e.g. `agent`), init prints a symlink conflict notice with operator direction — the plugin does not fix PATH for you.
 
 ### Coding-agent auth (before you execute)
 

@@ -305,6 +305,22 @@ bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 
 **Alternative:** Switch `coding_agent_binary` to another authenticated CLI (Claude, Codex, …) via dashboard **Save** if Cursor auth cannot be refreshed on that host.
 
+### Symlink conflict on configured coding binary
+
+**Symptom:** Init, dashboard **Save** / **Bootstrap**, or status shows `symlink conflict: two or more binaries are configured with the same command` (common when `coding_agent_binary` is `agent` and multiple CLIs register that name).
+
+**Fix (operator — plugin does not repair PATH):**
+
+1. Install your preferred CLI and ensure its **unambiguous** command is on PATH (`cursor-agent` for Cursor, `grok` for Grok).
+2. Dashboard **Kanban-Advanced** → **Binary on PATH** → pick the detected command → **Save** (or re-run `hermes kanban-advanced init`).
+3. See [coding agents](../docs/reference/coding-agents.md) § Binary name collisions.
+
+### Binary not listed in init or dashboard picker
+
+**Symptom:** Expected CLI missing from the numbered init list or dashboard dropdown.
+
+**Fix:** Install the CLI and confirm the exact command resolves (`which cursor-agent`, `which grok`, etc.). The picker only shows supported commands **currently on PATH**. Use custom if you need a non-standard command name.
+
 ### Coding-agent auth failed (non-Cursor binary)
 
 **Symptom:** Preflight `coding_agent_cli_reachability` or `pre_dispatch_gate.sh` `coding_agent_cli` check fails. Same worker tag `[escalation:coding_agent:auth]` applies — not a protocol violation.

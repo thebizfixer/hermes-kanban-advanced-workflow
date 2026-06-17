@@ -178,15 +178,19 @@
     { value: "strict", label: "strict — block + notify, walk-away runs" }
   ];
 
-  var CODING_AGENTS = [
-    { value: "agent", label: "agent (Cursor CLI)" },
-    { value: "claude", label: "claude (Claude Code)" },
-    { value: "codex", label: "codex (OpenAI Codex)" },
-    { value: "grok", label: "grok (grok-cli)" },
-    { value: "aider", label: "aider (Aider)" },
-    { value: "gemini", label: "gemini (Gemini CLI)" },
-    { value: "__custom__", label: "Other (custom binary)…" }
-  ];
+  var CUSTOM_CODING_AGENT_OPTION = {
+    value: "__custom__",
+    label: "Other (custom binary)…"
+  };
+
+  function buildCodingAgentOptions(status) {
+    var rows = (status && status.available_coding_binaries) || [];
+    var options = rows.map(function (b) {
+      return { value: b.command, label: b.label };
+    });
+    options.push(CUSTOM_CODING_AGENT_OPTION);
+    return options;
+  }
 
   // ── Status dot ──
   function StatusDot(props) {
@@ -234,6 +238,7 @@
     var _useState24 = useState(true), notifyLifecycle = _useState24[0], setNotifyLifecycle = _useState24[1];
     var _useState25 = useState(false), walkAwayMode = _useState25[0], setWalkAwayMode = _useState25[1];
     var _useState26 = useState(false), notifySaving = _useState26[0], setNotifySaving = _useState26[1];
+    var _useState27 = useState([CUSTOM_CODING_AGENT_OPTION]), codingAgentOptions = _useState27[0], setCodingAgentOptions = _useState27[1];
 
     function resolvedCodingBinary() {
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
@@ -247,9 +252,13 @@
       if (s.trigger_branch) setTriggerBranch(s.trigger_branch);
       else setTriggerBranch("");
       if (s.coding_agent) {
-        var found = CODING_AGENTS.some(function (a) { return a.value === s.coding_agent; });
+        var options = buildCodingAgentOptions(s);
+        setCodingAgentOptions(options);
+        var found = options.some(function (a) { return a.value === s.coding_agent; });
         if (found) setCodingAgent(s.coding_agent);
         else { setCodingAgent("__custom__"); setCustomAgent(s.coding_agent); }
+      } else {
+        setCodingAgentOptions(buildCodingAgentOptions(s));
       }
       if (s.coding_agent_model) setCodingAgentModel(s.coding_agent_model);
       else setCodingAgentModel("auto");
@@ -553,7 +562,11 @@
       var info = cli || {};
       var model = modelId || codingAgentModel || "auto";
       var dotColor, labelText, labelColor;
-      if (!info.on_path) {
+      if (info.conflict) {
+        dotColor = "#eab308";
+        labelText = "symlink conflict";
+        labelColor = "#eab308";
+      } else if (!info.on_path) {
         dotColor = "#ef4444";
         labelText = "binary not on PATH";
         labelColor = "#f87171";
@@ -719,10 +732,15 @@
                   onChange: function (e) { setCodingAgent(e.target.value); },
                   className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 },
-                  CODING_AGENTS.map(function (a) {
+                  codingAgentOptions.map(function (a) {
                     return React.createElement("option", { key: a.value, value: a.value }, a.label);
                   })
                 ),
+                (status && status.coding_agent_cli && status.coding_agent_cli.conflict_hint) ? React.createElement("p", { className: "text-[11px] text-amber-600 dark:text-amber-400 leading-snug" },
+                  status.coding_agent_cli.conflict,
+                  " — ",
+                  status.coding_agent_cli.conflict_hint
+                ) : null,
                 React.createElement("p", { className: "text-[11px] text-muted-foreground" },
                   "Workers dispatch this binary. ",
                   React.createElement("a", { href: "https://github.com/thebizfixer/hermes-kanban-advanced-workflow/blob/main/docs/reference/coding-agents.md", target: "_blank", className: "underline" }, "Supported agents")

@@ -28,13 +28,16 @@ preflight_profiles: "kanban-advanced-worker,kanban-advanced-orchestrator"
 
 # ---------------------------------------------------------------------------
 # Coding agent
-# The headless CLI binary the worker dispatches for code changes.
-# Options: agent (Cursor), claude (Claude Code), codex (OpenAI Codex),
-#          grok (superagent-ai/grok-cli), aider, gemini, or any binary on PATH.
+# The headless CLI command the worker dispatches for code changes.
+# Set during init from commands currently on PATH (step 1c) or dashboard Save.
+# Prefer unambiguous names: cursor-agent (Cursor), grok (Grok) — not shared
+# "agent" unless you accept the symlink conflict notice (see coding-agents.md).
+# Supported: cursor-agent, agent, claude, codex, grok, aider, gemini, or custom.
 # Substituted as ${coding_agent_binary} in skill files.
 # ---------------------------------------------------------------------------
-coding_agent_binary: agent
-# Model ID for the coding CLI (Cursor: agent --list-models). Use "auto" for CLI default.
+coding_agent_binary: cursor-agent
+# Model ID for the coding CLI. Use "auto" for CLI default.
+# Cursor: cursor-agent --list-models or agent --list-models
 coding_agent_model: "auto"
 
 # ---------------------------------------------------------------------------

@@ -57,7 +57,7 @@ OK kanban-advanced-orchestrator: 9 skills seeded [...]
 OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)
 ```
 
-Init copies **Hermes profile** model config from your default profile when missing. Init also asks for the **coding agent binary and model** (step 1c / 1c-ii) — stored as `coding_agent_binary` / `coding_agent_model` and synced to `.env`. Use `auto` for the CLI default model.
+Init copies **Hermes profile** model config from your default profile when missing. Init also asks for the **coding agent command on PATH** and model (step 1c / 1c-ii) — only detected supported commands appear in the numbered list; stored as `coding_agent_binary` / `coding_agent_model` and synced to `.env`. Use `auto` for the CLI default model. See [coding agents](../docs/reference/coding-agents.md) § Binary name collisions if you use a shared name like `agent`.
 
 To set Hermes dispatch profile models explicitly:
 
