@@ -142,6 +142,9 @@
     if (extra.coding_agent_model == null && base.coding_agent_model != null) {
       merged.coding_agent_model = base.coding_agent_model;
     }
+    if (extra.coding_agent == null && base.coding_agent != null) {
+      merged.coding_agent = base.coding_agent;
+    }
     if (base.coding_agent_cli && extra.coding_agent_cli) {
       merged.coding_agent_cli = Object.assign({}, base.coding_agent_cli, extra.coding_agent_cli);
       if (extra.coding_agent_cli.model_reachable == null && base.coding_agent_cli.model_reachable != null) {
@@ -213,7 +216,7 @@
     var _useState3 = useState(""), workingBranch = _useState3[0], setWorkingBranch = _useState3[1];
     var _useState3b = useState(""), triggerBranch = _useState3b[0], setTriggerBranch = _useState3b[1];
     var _useState4 = useState("agent"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
-    var _useState4b = useState("auto"), codingAgentModel = _useState4b[0], setCodingAgentModel = _useState4b[1];
+    var _useState4b = useState(""), codingAgentModel = _useState4b[0], setCodingAgentModel = _useState4b[1];
     var _useState5 = useState(""), customAgent = _useState5[0], setCustomAgent = _useState5[1];
     var _useState6 = useState(180), maxTurns = _useState6[0], setMaxTurns = _useState6[1];
     var _useState6b = useState("balanced"), policyProfile = _useState6b[0], setPolicyProfile = _useState6b[1];
@@ -239,32 +242,72 @@
     var _useState25 = useState(false), walkAwayMode = _useState25[0], setWalkAwayMode = _useState25[1];
     var _useState26 = useState(false), notifySaving = _useState26[0], setNotifySaving = _useState26[1];
     var _useState27 = useState([CUSTOM_CODING_AGENT_OPTION]), codingAgentOptions = _useState27[0], setCodingAgentOptions = _useState27[1];
+    var _useState28 = useState(false), codingAgentTouched = _useState28[0], setCodingAgentTouched = _useState28[1];
 
     function resolvedCodingBinary() {
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
     }
 
+    function binaryRowFor(command) {
+      var rows = (status && status.available_coding_binaries) || [];
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].command === command) return rows[i];
+      }
+      return null;
+    }
+
+    function codingAgentBinaryConflict(binary) {
+      var row = binaryRowFor(binary);
+      return !!(row && row.contested);
+    }
+
+    function codingAgentModelSelectionBlocked() {
+      var binary = resolvedCodingBinary();
+      if (!binary) return true;
+      return codingAgentBinaryConflict(binary);
+    }
+
+    function codingAgentModelDisplay() {
+      if (!codingAgentModel) return "(select a model)";
+      if (codingAgentModel === "auto") return "auto (CLI default)";
+      return codingAgentModel;
+    }
+
+    function validateCodingAgentSelection() {
+      if (codingAgentModelSelectionBlocked()) {
+        return "Resolve the binary symlink conflict before selecting a model (choose an unambiguous command such as cursor-agent).";
+      }
+      if (!codingAgentModel) {
+        return "Select a model for " + resolvedCodingBinary() + " before Save or Bootstrap.";
+      }
+      return "";
+    }
+
     function resetCodingAgentModelForBinary(binary) {
       if (!binary) return;
-      setCodingAgentModel("auto");
-      setPendingCodingAgentModel("auto");
+      setCodingAgentModel("");
+      setPendingCodingAgentModel(null);
       setCodingAgentModelQuery("");
       setCodingAgentModelOptions(null);
-      apiCodingAgentModels(binary).then(function (opts) {
-        setCodingAgentModelOptions(opts);
-      }).catch(function () {
-        setCodingAgentModelOptions({
-          error: true,
-          models: [{ id: "auto", label: "Auto (CLI default)" }]
+      if (!codingAgentBinaryConflict(binary)) {
+        apiCodingAgentModels(binary).then(function (opts) {
+          setCodingAgentModelOptions(opts);
+        }).catch(function () {
+          setCodingAgentModelOptions({
+            error: true,
+            models: [{ id: "auto", label: "Auto (CLI default)" }]
+          });
         });
-      });
+      }
     }
 
     function onCodingAgentBinaryChange(next) {
       setCodingAgent(next);
+      setCodingAgentTouched(true);
       if (next === "__custom__") {
-        setCodingAgentModel("auto");
+        setCodingAgentModel("");
         setCodingAgentModelOptions(null);
+        setPendingCodingAgentModel(null);
         return;
       }
       resetCodingAgentModelForBinary(next);
@@ -277,17 +320,19 @@
       else if (s.default_working_branch) setWorkingBranch(s.default_working_branch);
       if (s.trigger_branch) setTriggerBranch(s.trigger_branch);
       else setTriggerBranch("");
-      if (s.coding_agent) {
-        var options = buildCodingAgentOptions(s);
-        setCodingAgentOptions(options);
-        var found = options.some(function (a) { return a.value === s.coding_agent; });
-        if (found) setCodingAgent(s.coding_agent);
-        else { setCodingAgent("__custom__"); setCustomAgent(s.coding_agent); }
-      } else {
-        setCodingAgentOptions(buildCodingAgentOptions(s));
+      if (!codingAgentTouched) {
+        if (s.coding_agent) {
+          var options = buildCodingAgentOptions(s);
+          setCodingAgentOptions(options);
+          var found = options.some(function (a) { return a.value === s.coding_agent; });
+          if (found) setCodingAgent(s.coding_agent);
+          else { setCodingAgent("__custom__"); setCustomAgent(s.coding_agent); }
+        } else {
+          setCodingAgentOptions(buildCodingAgentOptions(s));
+        }
+        if (s.coding_agent_model) setCodingAgentModel(s.coding_agent_model);
+        else setCodingAgentModel("");
       }
-      if (s.coding_agent_model) setCodingAgentModel(s.coding_agent_model);
-      else setCodingAgentModel("auto");
       if (s.max_turns) setMaxTurns(s.max_turns);
       if (s.policy_profile) setPolicyProfile(s.policy_profile);
       if (typeof s.notify_lifecycle === "boolean") {
@@ -450,6 +495,12 @@
     function runBootstrap() {
       setBootstrapping(true);
       setConsoleLines([]);
+      var agentErr = validateCodingAgentSelection();
+      if (agentErr) {
+        addLines(["ERROR: " + agentErr], "line-err");
+        setBootstrapping(false);
+        return;
+      }
       var data = getFormData();
       addLines(["=== Bootstrap starting ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary + " (" + data.coding_agent_model + ")", "Max turns: " + data.max_turns, ""]);
       apiInit(data).then(function (r) {
@@ -458,7 +509,10 @@
           if (r.output) addLines(r.output);
         } else if (r.output) {
           addLines(r.output);
-          if (r.success) setInitialized(true);
+          if (r.success) {
+            setInitialized(true);
+            setCodingAgentTouched(false);
+          }
         }
         setBootstrapping(false);
         reloadStatus();
@@ -471,10 +525,17 @@
     function runSave() {
       setBootstrapping(true);
       setConsoleLines([]);
+      var agentErr = validateCodingAgentSelection();
+      if (agentErr) {
+        addLines(["ERROR: " + agentErr], "line-err");
+        setBootstrapping(false);
+        return;
+      }
       var data = getFormData();
       addLines(["=== Saving settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary + " (" + data.coding_agent_model + ")", "Max turns: " + data.max_turns, ""]);
       apiSave(data).then(saveSucceeded).then(function (r) {
         if (r.output) addLines(r.output);
+        setCodingAgentTouched(false);
         setBootstrapping(false);
         reloadStatus();
       }).catch(function (e) {
@@ -540,8 +601,9 @@
     }
 
     function openCodingAgentModelPicker() {
+      if (codingAgentModelSelectionBlocked()) return;
       var binary = resolvedCodingBinary();
-      setPendingCodingAgentModel(codingAgentModel || "auto");
+      setPendingCodingAgentModel(codingAgentModel || null);
       setCodingAgentModelQuery("");
       setEditingCodingAgentModel(true);
       apiCodingAgentModels(binary).then(function (opts) {
@@ -552,7 +614,9 @@
     }
 
     function applyCodingAgentModelChoice() {
-      setCodingAgentModel(pendingCodingAgentModel || "auto");
+      if (!pendingCodingAgentModel) return;
+      setCodingAgentModel(pendingCodingAgentModel);
+      setCodingAgentTouched(true);
       setEditingCodingAgentModel(false);
       setPendingCodingAgentModel(null);
     }
@@ -794,16 +858,36 @@
                   className: "h-9"
                 })
               ) : null,
-              React.createElement("div", { className: "space-y-1.5" },
-                React.createElement(Label, { className: "text-xs" }, "Model"),
+              React.createElement("div", {
+                className: cn(
+                  "space-y-1.5 border-l-2 pl-3 ml-1",
+                  codingAgentModelSelectionBlocked() ? "border-amber-500/40 opacity-60" : "border-muted"
+                )
+              },
+                React.createElement(Label, { className: "text-xs" }, "Model for " + resolvedCodingBinary()),
                 React.createElement("div", {
-                  className: "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm cursor-pointer hover:bg-accent/5 transition-colors",
-                  onClick: openCodingAgentModelPicker
+                  className: cn(
+                    "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm shadow-sm transition-colors",
+                    codingAgentModelSelectionBlocked()
+                      ? "cursor-not-allowed opacity-70"
+                      : "cursor-pointer hover:bg-accent/5"
+                  ),
+                  onClick: function () { if (!codingAgentModelSelectionBlocked()) openCodingAgentModelPicker(); }
                 },
-                  React.createElement("span", { className: "font-mono truncate" }, codingAgentModel || "auto"),
+                  React.createElement("span", {
+                    className: cn("font-mono truncate", !codingAgentModel ? "text-muted-foreground" : "")
+                  }, codingAgentModelDisplay()),
                   codingAgentBadge(status && status.coding_agent_cli, codingAgentModel)
                 ),
-                React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Click to change model. Use auto for the CLI default. Save or Bootstrap to apply.")
+                codingAgentModelSelectionBlocked()
+                  ? React.createElement("p", { className: "text-[11px] text-amber-600 dark:text-amber-400 leading-snug" },
+                      codingAgentBinaryConflict(resolvedCodingBinary())
+                        ? "Model selection is disabled while this binary name is contested. Choose an unambiguous command first."
+                        : "Select a binary before choosing a model."
+                    )
+                  : React.createElement("p", { className: "text-[11px] text-muted-foreground" },
+                      "Pick a model for this binary. Save or Bootstrap applies both settings together."
+                    )
               )
             )
           ),
@@ -1070,7 +1154,7 @@
                 })
           ),
           React.createElement("footer", { className: "border-t border-border p-3 flex items-center justify-between gap-2" },
-            React.createElement("span", { className: "text-[11px] text-muted-foreground font-mono truncate" }, pendingCodingAgentModel || "auto"),
+            React.createElement("span", { className: "text-[11px] text-muted-foreground font-mono truncate" }, pendingCodingAgentModel || "(none selected)"),
             React.createElement("div", { className: "flex items-center gap-1.5" },
               React.createElement(Button, { variant: "outline", size: "sm", onClick: function () { setEditingCodingAgentModel(false); } }, "Cancel"),
               React.createElement(Button, { size: "sm", disabled: !pendingCodingAgentModel, onClick: applyCodingAgentModelChoice }, "Select")

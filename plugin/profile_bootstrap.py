@@ -25,6 +25,7 @@ from .config_overlay import (
     resolve_dispatch_profiles,
     resolve_hermes_home,
 )
+from .file_text import read_utf8_text
 
 _DATA_REFERENCES = PLUGIN_ROOT / "plugin" / "data" / "references"
 
@@ -320,7 +321,7 @@ def seed_dispatch_profile_souls(
             log(f"   !  {profile}: prompt missing at {prompt_file} — skipping SOUL.md")
             continue
         soul_dst = profile_home / "SOUL.md"
-        soul_dst.write_text(prompt_file.read_text(encoding="utf-8"), encoding="utf-8")
+        soul_dst.write_text(read_utf8_text(prompt_file), encoding="utf-8")
         log(f"   OK {profile}: SOUL.md <- {prompt_name} ({profile_home})")
         seeded += 1
     return seeded

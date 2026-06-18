@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from plugin.file_text import read_utf8_text
+
 HERMES_SCRIPT_NAMES = (
     "auto_unblock.sh",
     "board_keeper.sh",
@@ -57,7 +59,7 @@ def materialize_hermes_scripts(scripts_src: Path, scripts_dst: Path) -> list[str
         src = scripts_src / script_name
         dst = scripts_dst / script_name
         if src.exists():
-            dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+            dst.write_text(read_utf8_text(src), encoding="utf-8")
             dst.chmod(0o755)
             lines.append(f"   OK {script_name} -> {dst}")
     lib_src = scripts_src / "lib"
@@ -68,13 +70,13 @@ def materialize_hermes_scripts(scripts_src: Path, scripts_dst: Path) -> list[str
             src = lib_src / name
             if src.exists():
                 dst = lib_dst / name
-                dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+                dst.write_text(read_utf8_text(src), encoding="utf-8")
                 dst.chmod(0o755)
                 lines.append(f"   OK lib/{name} -> {dst}")
         for name in LIB_PYTHON_NAMES:
             src = lib_src / name
             if src.exists():
                 dst = lib_dst / name
-                dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+                dst.write_text(read_utf8_text(src), encoding="utf-8")
                 lines.append(f"   OK lib/{name} -> {dst}")
     return lines

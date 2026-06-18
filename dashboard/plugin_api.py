@@ -74,6 +74,7 @@ from plugin.hermes_model_config import (  # noqa: E402
     profile_has_model_config,
     seed_default_reasoning_effort_for_profile,
 )
+from plugin.file_text import read_utf8_text  # noqa: E402
 from plugin.hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config  # noqa: E402
 from plugin.profile_bootstrap import (  # noqa: E402
     dispatch_profile_names,
@@ -532,7 +533,7 @@ def _materialize_plugin_assets(plugin_root: Path, hermes_home: Path) -> list[str
                 dst_dir = skills_dst / child.name
                 dst_dir.mkdir(parents=True, exist_ok=True)
                 (dst_dir / "SKILL.md").write_text(
-                    skill_md.read_text(encoding="utf-8"), encoding="utf-8"
+                    read_utf8_text(skill_md), encoding="utf-8"
                 )
                 count += 1
         lines.append(f"   OK {count} skills -> {skills_dst}")
@@ -995,7 +996,7 @@ def _execute_init(body: dict, output: list[str]) -> dict:
             if child.is_dir() and skill_md.exists():
                 dst_dir = skills_dst / child.name
                 dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
+                (dst_dir / "SKILL.md").write_text(read_utf8_text(skill_md), encoding="utf-8")
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
     else:
@@ -1197,7 +1198,7 @@ def _execute_save(body: dict, output: list[str]) -> dict:
             if child.is_dir() and skill_md.exists():
                 dst_dir = skills_dst / child.name
                 dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(skill_md.read_text(encoding="utf-8"), encoding="utf-8")
+                (dst_dir / "SKILL.md").write_text(read_utf8_text(skill_md), encoding="utf-8")
                 count += 1
         output.append(f"   OK {count} skills -> {skills_dst}")
 
