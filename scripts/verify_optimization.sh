@@ -63,17 +63,17 @@ red()    { echo -e "\033[31m$*\033[0m"; }
 yellow() { echo -e "\033[33m$*\033[0m"; }
 green()  { echo -e "\033[32m$*\033[0m"; }
 
-check_pass() { green "  ✓ $*"; ((PASSES++)); ((CHECKS_RUN++)); }
-check_warn() { yellow "  ⚠ WARN: $*"; ((WARNINGS++)); ((CHECKS_RUN++)); }
+check_pass() { green "  ✓ $*"; ((PASSES++)) || true; ((CHECKS_RUN++)) || true; }
+check_warn() { yellow "  ⚠ WARN: $*"; ((WARNINGS++)) || true; ((CHECKS_RUN++)) || true; }
 check_fail() {
     if governance_failures_block; then
         red "  ✗ FAIL: $*"
-        ((FAILURES++))
+        ((FAILURES++)) || true
     else
         yellow "  ⚠ ADVISORY: $*"
-        ((WARNINGS++))
+        ((WARNINGS++)) || true
     fi
-    ((CHECKS_RUN++))
+    ((CHECKS_RUN++)) || true
 }
 
 echo "=== Plan Optimization Gate: $PLAN ==="
