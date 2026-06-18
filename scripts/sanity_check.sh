@@ -110,6 +110,7 @@ echo "=== Presentation acceptance ==="
 check "frontend-neutrality.md" "test -f plugin/data/references/frontend-neutrality.md"
 check "presentation_acceptance.py" "test -f scripts/lib/presentation_acceptance.py"
 check "verify_optimization_presentation.py" "test -f scripts/lib/verify_optimization_presentation.py"
+check "bash_counters.sh" "test -f scripts/lib/bash_counters.sh"
 check "kanban_layout_acceptance.sh" "test -f scripts/kanban_layout_acceptance.sh"
 
 echo ""

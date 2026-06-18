@@ -90,6 +90,7 @@ REQUIRED_SCRIPTS=(
     worktree_audit.sh
     lib/governance_profile.py
     lib/governance_profile.sh
+    lib/bash_counters.sh
     lib/plan_parse.py
     lib/cli_output_parse.py
     lib/kanban_cli_parse.sh

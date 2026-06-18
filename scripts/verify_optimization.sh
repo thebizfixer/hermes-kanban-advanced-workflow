@@ -49,6 +49,8 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
 source "$SCRIPT_DIR/lib/kanban_config.sh"
 # shellcheck source=lib/governance_profile.sh
 source "$SCRIPT_DIR/lib/governance_profile.sh"
+# shellcheck source=lib/bash_counters.sh
+source "$SCRIPT_DIR/lib/bash_counters.sh"
 load_governance_profile "$REPO_ROOT" "$PROFILE_OVERRIDE"
 if [ "$GOVERNANCE_PROFILE" = "strict" ]; then
     STRICT=true
@@ -63,17 +65,17 @@ red()    { echo -e "\033[31m$*\033[0m"; }
 yellow() { echo -e "\033[33m$*\033[0m"; }
 green()  { echo -e "\033[32m$*\033[0m"; }
 
-check_pass() { green "  ✓ $*"; ((PASSES++)) || true; ((CHECKS_RUN++)) || true; }
-check_warn() { yellow "  ⚠ WARN: $*"; ((WARNINGS++)) || true; ((CHECKS_RUN++)) || true; }
+check_pass() { green "  ✓ $*"; bump PASSES; bump CHECKS_RUN; }
+check_warn() { yellow "  ⚠ WARN: $*"; bump WARNINGS; bump CHECKS_RUN; }
 check_fail() {
     if governance_failures_block; then
         red "  ✗ FAIL: $*"
-        ((FAILURES++)) || true
+        bump FAILURES
     else
         yellow "  ⚠ ADVISORY: $*"
-        ((WARNINGS++)) || true
+        bump WARNINGS
     fi
-    ((CHECKS_RUN++)) || true
+    bump CHECKS_RUN
 }
 
 echo "=== Plan Optimization Gate: $PLAN ==="
@@ -261,11 +263,11 @@ PERF_TARGETS=$(echo "$PLAN_CONTENT" | grep -ci 'performance.*target\|key.*perfor
 BLAST_RADIUS=$(echo "$PLAN_CONTENT" | grep -ci 'blast.*radius\|total.*blast\|files.*zero schema' || true)
 
 DOC_SCORE=0
-[[ "${ROOT_CAUSES:-0}" -gt 0 ]] && ((DOC_SCORE++))
-[[ "${ALREADY_SHIPPED:-0}" -gt 0 ]] && ((DOC_SCORE++))
-[[ "${PHASE_TABLE:-0}" -gt 0 ]] && ((DOC_SCORE++))
-[[ "${PERF_TARGETS:-0}" -gt 0 ]] && ((DOC_SCORE++))
-[[ "${BLAST_RADIUS:-0}" -gt 0 ]] && ((DOC_SCORE++))
+[[ "${ROOT_CAUSES:-0}" -gt 0 ]] && bump DOC_SCORE
+[[ "${ALREADY_SHIPPED:-0}" -gt 0 ]] && bump DOC_SCORE
+[[ "${PHASE_TABLE:-0}" -gt 0 ]] && bump DOC_SCORE
+[[ "${PERF_TARGETS:-0}" -gt 0 ]] && bump DOC_SCORE
+[[ "${BLAST_RADIUS:-0}" -gt 0 ]] && bump DOC_SCORE
 
 if [[ "$DOC_SCORE" -ge 4 ]]; then
     check_pass "Executive summary documentation-ready ($DOC_SCORE/5 patterns)"

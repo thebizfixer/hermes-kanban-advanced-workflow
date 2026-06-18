@@ -34,6 +34,8 @@ LIB_SCRIPT_NAMES = (
     "auto_unblock_core.sh",
     "preflight_cache.sh",
     "resolve_notify_deliver.sh",
+    "governance_profile.sh",
+    "bash_counters.sh",
 )
 
 LIB_PYTHON_NAMES = (
