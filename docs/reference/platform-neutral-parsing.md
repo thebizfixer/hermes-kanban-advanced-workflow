@@ -42,6 +42,7 @@ Eight scripts under `scripts/` use `grep -oP`, which is **GNU-only**. macOS ship
 ```
 scripts/lib/plan_parse.py          ← plan markdown SSOT (extract from kanban_decompose)
 scripts/lib/cli_output_parse.py    ← hermes show / worktree / ps / commit / pytest lines
+scripts/lib/console.py             ← ASCII-safe PASS/WARN/FAIL labels for Python gates
 scripts/verify_anchors.py          ← anchor gate (Python; .sh wrapper)
 scripts/verify_optimization.py     ← optimization gate (Python; .sh wrapper) [phased]
 
@@ -102,9 +103,13 @@ from lib.plan_parse import (
 |----------|---------|
 | `find_backtick_file_refs(line: str) -> list[str]` | `` `path/to/file.py` `` with allowed extensions |
 | `find_line_number_refs(line: str) -> list[int]` | `L123`, `L123-456` → first line of range |
-| `find_section_file_above(text: str, line_no: int, lookback: int = 50) -> str \| None` | Nearest file above anchor line: `**File:**` / `**Files:**`, `files:` YAML list, or plain `Files:` (agent block) |
-| `find_anchor_symbol_above(text: str, line_no: int, lookback: int = 10) -> str \| None` | `def foo`, `class Bar`, `` `symbol` `` |
-| `extract_anchors(plan_text: str) -> list[AnchorRef]` | Dataclass: `file`, `line`, `symbol_hint`, `source_line` |
+| `parse_anchor_body(body, default_files?) -> (file, line, symbol)?` | Canonical `path::sym@L42` or relaxed `` `sym` at L42 `` |
+| `extract_anchors_from_cards(plan_text)` | `Anchor:` lines scoped to optimization cards |
+| `extract_anchors_from_contracts(plan_text, opt_section)` | `Contracts:` block entries with `@L` |
+| `extract_colocated_anchors(plan_text)` | Same-line full repo-relative path + `L` ref only |
+| `audit_anchors(plan_text) -> dict` | Missing `Anchor:`, markdown `Files:`, prose `L` refs |
+| `suggest_anchors_for_card(plan_text, card_key, repo_root)` | rg-backed pin suggestions for Harden |
+| `extract_anchors(plan_text: str) -> list[AnchorRef]` | Union of declared + co-located pins (no lookback) |
 
 `AnchorRef` verification (read file at HEAD, ±5 line stale threshold) stays in `verify_anchors.py` — **parsing only** in `plan_parse`.
 
@@ -113,8 +118,9 @@ from lib.plan_parse import (
 - Move decompose parser tests to `tests/test_plan_parse.py` (or keep `test_kanban_decompose.py` importing `plan_parse`).
 - Reuse fixtures: `tests/fixtures/plans/matrix_v5_sample.plan.md`, `markdown_files.plan.md`.
 - Add fixtures:
-  - `tests/fixtures/plans/anchors_sample.plan.md` — backtick paths, `**File:**`, `L42`, stale context
+  - `tests/fixtures/plans/anchors_sample.plan.md` — co-located path+L; declared `Anchor:` in cards
   - `tests/fixtures/plans/optimization_ordinals_gap.plan.md` — Card 1, Card 3 (gap) for ordinal validator
+  - `tests/test_declared_anchors.py` — audit, contracts, prose exclusion
 
 ### Breaking-change guard
 
@@ -183,7 +189,8 @@ python3 scripts/verify_anchors.py --plan <plan.md> [--strict] [--profile advisor
 - Load governance profile (import `lib.governance_profile` or duplicate minimal loader — prefer **shared** `governance_profile.py` already used from shell via source).
 - `extract_anchors()` → verify each against repo root.
 - Exit codes: `0` pass, `1` fail/warn-in-strict, `2` usage.
-- Human output: keep `✓` / `⚠ WARN` / `✗ FAIL` lines so `verify_optimization.sh` check §1 (`grep -c '✗ FAIL'`) still works during transition.
+- Human output: **ASCII-only** labels (`PASS:` / `WARN:` / `FAIL:`) via `lib/console.py` — safe on Windows cp1252 PowerShell and POSIX terminals. Optional ANSI color when TTY supports it.
+- `verify_optimization.sh` check §1 consumes `--json` for failure/warning counts (no Unicode grep on stdout).
 
 ### `verify_anchors.sh` (after)
 
@@ -268,7 +275,9 @@ Keep existing `kanban_cli_parse.sh` / `auto_unblock` checks.
 
 | File | Coverage |
 |------|----------|
-| `tests/test_plan_parse.py` | optimization section, card blocks, ordinals, files extraction, frontmatter, anchor lookback (`**Files:**`, YAML `files:`, agent `Files:`) |
+| `tests/test_plan_parse.py` | optimization section, card blocks, ordinals, files extraction, frontmatter, declared `Anchor:` |
+| `tests/test_declared_anchors.py` | audit, contracts, co-located pins, prose exclusion |
+| `tests/test_console.py` | ASCII gate labels; verify_anchors cp1252 stdout |
 | `tests/test_cli_output_parse.py` | task ids, worktree branch, commit hash, pytest lines, show output fields |
 | `tests/test_verify_anchors.py` | integration with temp repo + fixture plan (git optional mock) |
 | `tests/test_kanban_decompose.py` | **unchanged behavior** after import refactor |

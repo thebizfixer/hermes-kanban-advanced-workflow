@@ -6,7 +6,8 @@ Tier-gated hardening pass after a sanity check. Work through each tier in order,
 
 ### Critical (must fix before decomposition)
 - Plan not in canonical location `.hermes/kanban/plans/` (copy during Harden — see `plan-hardening-checklist.md` item 0)
-- Stale anchor points (line numbers, function names against HEAD)
+- Missing `Anchor:` on non-trivial code-gen cards (`audit_anchors.py --strict`)
+- Stale **declared** anchor pins (`verify_anchors.py` against HEAD)
 - Missing edge cases that would block card execution
 - Unverified auto-research claims
 
@@ -19,9 +20,19 @@ Tier-gated hardening pass after a sanity check. Work through each tier in order,
 - Consolidation opportunities (merge same-file cards)
 - Documentation consistency
 
-## Verification grep suite
+## Verification script suite
 
-After hardening, verify:
-- All line numbers match HEAD: `grep -n "L[0-9]" <plan>.md | while read line; do ...`
-- All function names exist: `grep -oP '`[a-z_]+\(`' <plan>.md | while read fn; do grep -r "def $fn" ...`
-- All file paths exist: `grep -oP '`[a-z_/]+\.py`' <plan>.md | while read f; do test -f "$f" ...`
+After hardening, verify (from repo root):
+
+```bash
+# Shape: non-trivial cards declare Anchor:; Files: are plain paths
+python3 hermes-kanban-advanced-workflow/scripts/audit_anchors.py --plan .hermes/kanban/plans/{plan_id}.plan.md --strict
+
+# Freshness: declared pins vs HEAD (±5 line symbol drift = warn)
+python3 hermes-kanban-advanced-workflow/scripts/verify_anchors.py --plan .hermes/kanban/plans/{plan_id}.plan.md
+
+# Suggestions when pins are missing (paste into plan — do not auto-write)
+python3 hermes-kanban-advanced-workflow/scripts/lib/plan_parse.py suggest-anchors --plan .hermes/kanban/plans/{plan_id}.plan.md --json
+```
+
+**Prose-only line refs** (`tinyfish.py L1864` in signal maps without `Anchor:`) are **sanity-check scope** — review manually; they are not extracted for `verify_anchors`.

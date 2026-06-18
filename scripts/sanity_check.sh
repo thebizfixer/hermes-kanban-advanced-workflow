@@ -34,6 +34,7 @@ echo "=== Platform-neutral parsing ==="
 check "plan_parse.py" "test -f scripts/lib/plan_parse.py"
 check "cli_output_parse.py" "test -f scripts/lib/cli_output_parse.py"
 check "verify_anchors.py" "test -f scripts/verify_anchors.py"
+check "audit_anchors.py" "test -f scripts/audit_anchors.py"
 if command -v rg >/dev/null 2>&1; then
   if rg 'grep -oP|grep -P' scripts/ --glob '!sanity_check.sh' 2>/dev/null \
       | rg -v '(#.*grep -P|no grep -P|"""SSOT)' | rg -q .; then

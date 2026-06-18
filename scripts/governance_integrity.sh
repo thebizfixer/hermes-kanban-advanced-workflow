@@ -83,6 +83,8 @@ REQUIRED_SCRIPTS=(
     validate_config.py
     verify_anchors.sh
     verify_anchors.py
+    audit_anchors.sh
+    audit_anchors.py
     verify_goal_cards.py
     verify_optimization.sh
     worktree_audit.sh

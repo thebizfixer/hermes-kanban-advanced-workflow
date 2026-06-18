@@ -1,6 +1,18 @@
 # Plan Anchor Verification — Common Inaccuracy Patterns
 
-When verifying plan claims against the codebase before decomposition, these four patterns are the most common failures. Each wastes implementation time because the agent receives wrong information about what the codebase currently does.
+When verifying plan claims against the codebase before decomposition, these patterns are the most common failures. Each wastes implementation time because the agent receives wrong information about what the codebase currently does.
+
+## Declared vs prose anchors
+
+**Machine verification** (`verify_anchors.py`) checks **declared pins only**:
+
+- `Anchor: path::symbol@Lline` in non-trivial agent blocks
+- `Contracts:` entries under `## Kanban optimization`
+- Co-located `` `repo/relative/file.py` L123 `` on one line
+
+**Prose line refs** in signal maps (`handler at L1864` without `Anchor:`) are **sanity-check scope** — review manually; they are not extracted and must not be "fixed" by widening the parser.
+
+During Harden: `audit_anchors.py --strict` → `plan_parse.py suggest-anchors` → paste canonical `Anchor:` lines → `verify_anchors.py`.
 
 ## Pattern 1: "Function / flag doesn't exist" — but it does
 

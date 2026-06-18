@@ -20,10 +20,10 @@ DRAFT → HARDEN → REVISE → OPTIMIZE → PREFLIGHT → ATTEST → DECOMPOSE 
 | Plan has no file paths | Medium | BLOCKING | Planning skill § Plan structure requires file paths | ⚠️ Manual — no structural check |
 | Plan scope too large for kanban | Medium | WASTED | Scope-appropriateness gate in planning skill | ⚠️ Manual — orchestrator must self-assess |
 | User writes plan externally, no Draft step | Low | DEGRADED | Orchestrator says "Plan this out" to generate | ✅ Covered |
-| Plan references stale line numbers | High | WASTED | Harden checklist §1 (anchor points) + `verify_anchors.py` / `verify_optimization.sh` §1 | ✅ Script — `plan_parse.extract_anchors()` |
+| Plan references stale line numbers | High | WASTED | Harden checklist §1–2 + `audit_anchors.py` + `verify_anchors.py` / `verify_optimization.sh` §1 | ✅ Script — declared `Anchor:` / `Contracts:` only |
 | Plan contains contradictory sections | Low | WASTED | Redundant change detection (§8) catches some | ❌ No contradiction detector |
 
-**Resolved:** `scripts/verify_anchors.py` (called from `verify_optimization.sh` §1). `plan_parse.find_section_file_above` must resolve Kanban optimization formats (`files:` YAML, agent `Files:`, `**Files:**`).
+**Resolved:** `scripts/audit_anchors.py` (shape) + `scripts/verify_anchors.py` (freshness vs HEAD). `plan_parse.extract_anchors()` reads declared `Anchor:` lines, `Contracts:` entries, and co-located path+L on the same line — no prose lookback.
 
 ---
 

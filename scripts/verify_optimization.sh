@@ -4,7 +4,7 @@
 # Verifies structural checklist items from the planning skill before the
 # orchestrator can declare "plan optimized." Runs as a blocking structural gate.
 #
-# Current scope: 18 checks + presentation/ui_stack gates (19–21).
+# Current scope: 18 checks + presentation/ui_stack gates (19–21) + anchor shape (audit) before anchor freshness (verify).
 # Covers Harden items 1,5,7,9,11,12 and Optimize items 1,2,3,6,7,8,11,15,18,
 # goal-card annotations, sequential Card N labeling, Spec/Contracts/precision verbs.
 #
@@ -84,16 +84,31 @@ PLAN_DIR=$(dirname "$PLAN")
 
 # ── 1. Anchor points verified ───────────────────────────────────────────
 echo "1. Anchor points verified"
-if [[ -x "$ANCHOR_SCRIPT" ]] || [[ -f "$ANCHOR_SCRIPT" ]]; then
-    ANCHOR_OUTPUT=$(python3 "$ANCHOR_SCRIPT" --plan "$PLAN" 2>&1) || ANCHOR_EXIT=$?
-    ANCHOR_FAILS=$(echo "$ANCHOR_OUTPUT" | grep -c '✗ FAIL' || true)
-    ANCHOR_WARNS=$(echo "$ANCHOR_OUTPUT" | grep -c '⚠ WARN' || true)
-    if [[ ${ANCHOR_FAILS:-0} -gt 0 ]]; then
-        check_fail "$ANCHOR_FAILS anchor(s) could not be verified"
-    elif [[ ${ANCHOR_WARNS:-0} -gt 0 ]]; then
-        check_warn "$ANCHOR_WARNS stale anchor(s) — re-verify line numbers"
+AUDIT_SCRIPT="$SCRIPT_DIR/audit_anchors.py"
+if [[ -f "$AUDIT_SCRIPT" ]]; then
+    AUDIT_JSON=$(python3 "$AUDIT_SCRIPT" --plan "$PLAN" --json 2>/dev/null || true)
+    MISSING_ANCHOR=$(echo "$AUDIT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('cards_missing_anchor',[])))" 2>/dev/null || echo 0)
+    BAD_FILES=$(echo "$AUDIT_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(len(d.get('files_not_plain_path',[])))" 2>/dev/null || echo 0)
+    if [[ "${MISSING_ANCHOR:-0}" -gt 0 ]]; then
+        check_fail "$MISSING_ANCHOR non-trivial code-gen card(s) missing Anchor: — run audit_anchors.py or plan_parse.py suggest-anchors"
+    elif [[ "${BAD_FILES:-0}" -gt 0 ]]; then
+        check_warn "$BAD_FILES Files: line(s) use markdown links — use plain repo-relative paths in agent blocks"
     else
-        check_pass "All anchors verified (or none found in plan)"
+        check_pass "Declared Anchor: present on non-trivial code-gen cards"
+    fi
+else
+    check_warn "audit_anchors.py not found — skipping anchor shape check"
+fi
+if [[ -x "$ANCHOR_SCRIPT" ]] || [[ -f "$ANCHOR_SCRIPT" ]]; then
+    ANCHOR_JSON=$(python3 "$ANCHOR_SCRIPT" --plan "$PLAN" --json 2>/dev/null || true)
+    ANCHOR_FAILS=$(echo "$ANCHOR_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('failures',0))" 2>/dev/null || echo 0)
+    ANCHOR_WARNS=$(echo "$ANCHOR_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('warnings',0))" 2>/dev/null || echo 0)
+    if [[ ${ANCHOR_FAILS:-0} -gt 0 ]]; then
+        check_fail "$ANCHOR_FAILS declared anchor(s) could not be verified against HEAD"
+    elif [[ ${ANCHOR_WARNS:-0} -gt 0 ]]; then
+        check_warn "$ANCHOR_WARNS stale declared anchor(s) — re-verify line numbers"
+    else
+        check_pass "All declared anchors verified (or none declared)"
     fi
 else
     check_warn "verify_anchors.sh not found at $ANCHOR_SCRIPT — skipping anchor check"

@@ -139,3 +139,9 @@ No special configuration needed. All scripts run natively under `bash`.
 - **`grep -P` / PCRE:** Not supported by macOS BSD `grep`. Plan and CLI parsing
   use `scripts/lib/plan_parse.py` and `scripts/lib/cli_output_parse.py` (no
   `grep -oP` in governance scripts; enforced by `scripts/sanity_check.sh`).
+- **Python gate stdout (Windows cp1252):** `verify_anchors.py`, `audit_anchors.py`,
+  and other planning gates print **ASCII-only** status labels (`PASS:` / `WARN:` /
+  `FAIL:`) so native PowerShell and legacy consoles do not raise
+  `UnicodeEncodeError`. Prefer `--json` when bash wrappers need counts.
+  `plan_parse.py suggest-anchors` shells out to **`rg`** (ripgrep) — available in
+  Hermes PortableGit / Git Bash on Windows; returns no suggestions when `rg` is absent.

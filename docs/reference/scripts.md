@@ -400,6 +400,15 @@ python hermes-kanban-advanced-workflow/scripts/verify_goal_cards.py --plan <plan
 
 Verifies goal-card acceptance criteria, scenario tags, and budget limits before attestation. Counts structured YAML (`workstreams[].goal_card`) and standalone `goal_card: true` lines under `###` sections only — **not** markdown table prose containing `` `goal_card: true` ``.
 
+## Anchor audit (`audit_anchors.py` / `audit_anchors.sh`)
+
+```bash
+python3 hermes-kanban-advanced-workflow/scripts/audit_anchors.py --plan <plan>.md
+python3 hermes-kanban-advanced-workflow/scripts/audit_anchors.py --plan <plan>.md --strict  # exit 1 if non-trivial cards lack Anchor:
+```
+
+Reports: non-trivial code-gen cards missing `Anchor:`, `Files:` lines with markdown links, and prose-only `L123` refs (informational — not auto-verified). Run during **sanity check** (read-only) and before **optimize** (`verify_optimization.sh` check 1).
+
 ## Anchor verification (`verify_anchors.py` / `verify_anchors.sh`)
 
 ```bash
@@ -407,7 +416,22 @@ python3 hermes-kanban-advanced-workflow/scripts/verify_anchors.py --plan <plan>.
 # or: bash hermes-kanban-advanced-workflow/scripts/verify_anchors.sh --plan <plan>.md
 ```
 
-Parses plan markdown for line-number anchors (`L123`) and resolves file paths from: backtick paths on the same line, `**File:**` / `**Files:**`, `files:` YAML lists in `## Kanban optimization` cards, and plain `Files:` lines in agent blocks. Verifies each anchor against current HEAD. Implementation is Python (`scripts/lib/plan_parse.py`); the `.sh` entrypoint is a thin wrapper for skill/cron compatibility.
+Verifies **declared** pins against current HEAD:
+
+- `Anchor:` lines in `## Kanban optimization` card agent blocks
+- `Contracts:` entries (`path::sym@Lline`)
+- Co-located same-line `` `repo/relative/path.py` L123 ``
+
+Does **not** infer anchors from prose or 50-line lookback. Symbol cross-check uses +/-5 line stale threshold. Human stdout is **ASCII-only** (`PASS:` / `WARN:` / `FAIL:`) for Windows cp1252 consoles; use `--json` for machine parsing. Implementation: `scripts/lib/plan_parse.py` (`extract_anchors`), `scripts/lib/console.py` (labels).
+
+## Anchor suggestions (`plan_parse.py suggest-anchors`)
+
+```bash
+python3 hermes-kanban-advanced-workflow/scripts/lib/plan_parse.py suggest-anchors --plan <plan>.md --json
+python3 hermes-kanban-advanced-workflow/scripts/lib/plan_parse.py suggest-anchors --plan <plan>.md --card card3 --json
+```
+
+rg-backed `Anchor:` line suggestions for Harden — agent pastes into the plan; script does not auto-edit the plan file.
 
 ## Plan parsing SSOT (`scripts/lib/plan_parse.py`)
 

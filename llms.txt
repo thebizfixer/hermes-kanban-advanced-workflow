@@ -85,7 +85,7 @@ Registered as a Hermes dashboard tab at `/kanban-advanced` (appears after the Sk
 - Agent auth playbook: `AGENTS.md` § When a user has coding-binary auth trouble
 - Agent provisioning playbook: `AGENTS.md` § When a user needs help provisioning beyond bootstrap
 - SSOT headless flags: `plugin/data/references/coding-agent-cli-invocation.md`; user reference: `docs/reference/coding-agents.md`
-- Platform-neutral parsing (eliminate `grep -oP` in scripts): spec `docs/reference/platform-neutral-parsing.md` — `scripts/lib/plan_parse.py`, `cli_output_parse.py`, `verify_anchors.py`
+- Platform-neutral parsing (eliminate `grep -oP` in scripts): spec `docs/reference/platform-neutral-parsing.md` — `scripts/lib/plan_parse.py`, `cli_output_parse.py`, `audit_anchors.py`, `verify_anchors.py`
 - Dashboard: Hermes profile dots (`profiles.*.model_reachable`) ≠ coding CLI dot (`coding_agent_cli.model_reachable`); both probed when `probe=1`. **Binary on PATH** dropdown is populated from `available_coding_binaries` (not a static list). Contested shared names set `coding_agent_cli.conflict` / `conflict_hint` — see `docs/reference/coding-agents.md` § Binary name collisions. **Session cache:** all-green probe results skip re-probe on tab refresh until Save/Bootstrap/profile change. Yellow profile badge = **model unreachable** (Hermes provider auth/model), not Cursor CLI — see `coding_agent_cli` row for CLI auth. Profile badges also show reasoning effort when configured (e.g. `model · high`).
 - Dashboard API: `GET /api/plugins/kanban-advanced/coding-agent/models?binary=cursor-agent` (or `agent`) for model picker
 - Source: `dashboard/plugin_api.py` (backend), `dashboard/index.html` / `dashboard/dist/index.js` (UI)

@@ -14,6 +14,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
+from lib.console import fail_line, pass_line, status_line, warn_line  # noqa: E402
 from lib.governance_profile import (  # noqa: E402
     failures_are_blocking,
     resolve_governance_profile,
@@ -54,9 +55,11 @@ def _verify_anchor(
     anchor: AnchorRef,
     *,
     stale_threshold: int = STALE_THRESHOLD,
+    quiet: bool = False,
 ) -> tuple[str, str]:
     """Return (status, message) where status is pass|warn|fail."""
-    print(f"Anchor: {anchor.file} L{anchor.line}")
+    if not quiet:
+        print(f"Anchor: {anchor.file} L{anchor.line}")
 
     resolved = _resolve_file(repo_root, anchor.file)
     if resolved is None:
@@ -83,7 +86,7 @@ def _verify_anchor(
     if found_at is None:
         return (
             "fail",
-            f"'{symbol}' not found ±{stale_threshold} lines of L{anchor.line} in {anchor.file}",
+            f"'{symbol}' not found +/-{stale_threshold} lines of L{anchor.line} in {anchor.file}",
         )
 
     offset = found_at - anchor.line
@@ -91,7 +94,7 @@ def _verify_anchor(
     if offset_abs == 0:
         return "pass", f"'{symbol}' at L{found_at} (exact match)"
     if offset_abs <= stale_threshold:
-        return "warn", f"'{symbol}' at L{found_at} (offset {offset}) — anchor is L{anchor.line}"
+        return "warn", f"'{symbol}' at L{found_at} (offset {offset}) - anchor is L{anchor.line}"
     return "fail", f"'{symbol}' at L{found_at} (offset {offset}) exceeds threshold"
 
 
@@ -116,7 +119,7 @@ def run_verification(
         print(f"Governance profile: {profile}")
 
     for anchor in anchors:
-        status, msg = _verify_anchor(repo_root, anchor)
+        status, msg = _verify_anchor(repo_root, anchor, quiet=json_out)
         checked += 1
         results.append(
             {
@@ -127,15 +130,17 @@ def run_verification(
                 "message": msg,
             }
         )
+        if status == "warn":
+            warnings += 1
+        elif status == "fail":
+            failures += 1
         if not json_out:
             if status == "pass":
-                print(f"  \033[32m✓ {msg}\033[0m")
+                print(pass_line(msg))
             elif status == "warn":
-                print(f"  \033[33m⚠ WARN: {msg}\033[0m")
-                warnings += 1
+                print(warn_line(msg))
             else:
-                print(f"  \033[31m✗ FAIL: {msg}\033[0m")
-                failures += 1
+                print(fail_line(msg))
 
     if json_out:
         print(
@@ -167,24 +172,28 @@ def run_verification(
     exit_code = 0
     if failures > 0:
         if failures_are_blocking(profile):
-            print(f"\033[31mBLOCKED: {failures} anchor(s) could not be verified against HEAD.\033[0m")
+            print(status_line("BLOCKED", f"{failures} anchor(s) could not be verified against HEAD."))
             exit_code = 1
         else:
             print(
-                f"\033[33mPASS (advisory): {failures} anchor failure(s) downgraded "
-                "— review before hardening.\033[0m"
+                status_line(
+                    "PASS (advisory)",
+                    f"{failures} anchor failure(s) downgraded - review before hardening.",
+                )
             )
     if warnings > 0:
         if warnings_are_blocking(profile):
-            print(f"\033[33mBLOCKED (strict profile): {warnings} warning(s) treated as failures.\033[0m")
+            print(status_line("BLOCKED", f"{warnings} warning(s) treated as failures (strict profile)."))
             exit_code = 1
         else:
             print(
-                f"\033[33mPASS with {warnings} stale anchor warning(s). "
-                "Re-verify line numbers before hardening.\033[0m"
+                status_line(
+                    "PASS",
+                    f"{warnings} stale anchor warning(s). Re-verify line numbers before hardening.",
+                )
             )
     if failures == 0 and warnings == 0:
-        print(f"\033[32mPASS: All {len(anchors)} anchors verified against HEAD.\033[0m")
+        print(status_line("PASS", f"All {len(anchors)} anchors verified against HEAD."))
 
     return exit_code
 

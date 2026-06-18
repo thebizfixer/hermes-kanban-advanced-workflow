@@ -51,7 +51,7 @@ agent -p "Implement {one-line task}.
 plan_id: {plan_id}
 Files: {path} ({mode}), …
 Mode: modify-only
-Anchor: {class/function + approx line}
+Anchor: {repo-relative-path}::{symbol}@L{line}
 Spec:
 - Signature: {exact def/types; raised exceptions}
 - Constants: {NAME = value}
@@ -69,6 +69,23 @@ Commit: {message}
 Diff cap: if >150 net lines, STOP and report.
 Do NOT push to ${working_branch} — worktree branch only."
 ```
+
+### Declared anchors (machine-verified)
+
+Automatic `verify_anchors` checks **declared pins only** — not every `L123` in prose.
+
+| Tier | Authoring | Auto-verified |
+|------|-----------|---------------|
+| **Primary** | `Anchor: backend/app/foo.py::handler@L42` in each non-trivial agent block | Yes |
+| **Contracts** | `Contracts:` list under `## Kanban optimization`: `- path::sym@L42` | Yes |
+| **Co-located** | Same line: `` `backend/app/foo.py` L42 `` (full repo-relative path) | Yes |
+| **Prose** | Signal map / narrative `foo.py L42` without `Anchor:` | No — sanity check only |
+
+Rules:
+
+- **`Files:`** — plain repo-relative paths only; no markdown link syntax. Put preview links in Spec prose.
+- **`Anchor:`** — canonical `path::symbol@Lline` (case-insensitive `anchor:` prefix). Relaxed `` `symbol` at L42 `` allowed when card `files:` supplies the path.
+- **Harden** — run `audit_anchors.py --strict`, then `suggest-anchors` for gaps, then `verify_anchors.py` until green.
 
 ### Two precision rules
 

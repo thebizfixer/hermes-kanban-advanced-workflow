@@ -1,6 +1,6 @@
 # Worker-Actionability Audit
 
-Run after anchor-point verification and before declaring a plan ready for decomposition. A section that passes anchor verification can still fail here — anchor points may be correct but the section is missing fields a worker needs to execute without guessing.
+Run after declared-anchor verification (`audit_anchors.py` + `verify_anchors.py`) and before declaring a plan ready for decomposition. A section that passes anchor verification can still fail here — pins may be fresh but the section is missing fields a worker needs to execute without guessing.
 
 ## The five checks (per section)
 
@@ -25,6 +25,7 @@ Run after anchor-point verification and before declaring a plan ready for decomp
 
 | Check | What "fail" looks like | Fix |
 |-------|----------------------|-----|
+| **Anchor on non-trivial cards** | Agent block has `Files:` / `Call-sites:` but no `Anchor:` | Add `Anchor: path::symbol@Lline` per `plan-file-format.md` |
 | **Markup-safe placeholders** | Plan uses `<plan_id>`, `<command>`, `<card2-branch>` in prose or agent blocks | Use `{plan_id}` style per `plan-file-format.md` |
 | **Spec precision (non-trivial)** | Agent block says "wire X to Y" with no `Spec:` / `Call-sites:` / `Forbidden:` | Add contract block per `kanban-planning` §Card body template |
 | **Precision verbs** | "integrate", "hook up", "handle", "support" without concrete operation | Replace with `call X from Y at Z`, `add field F to dict D`, etc. |

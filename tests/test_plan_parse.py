@@ -43,18 +43,26 @@ class TestPlanParse(unittest.TestCase):
         self.assertEqual(anchors[0].file, "backend/app/services/foo.py")
         self.assertEqual(anchors[0].line, 10)
 
-    def test_extract_anchors_files_plural_bold(self) -> None:
-        text = """**Files:** backend/app/services/bar.py
+    def test_extract_anchors_canonical_in_card(self) -> None:
+        text = """## Kanban optimization
 
-Anchor: `load` at L42
+#### Card 1 — example
+files:
+  - backend/app/services/bar.py
+
+```agent
+Anchor: backend/app/services/bar.py::load@L42
+```
 """
         anchors = pp.extract_anchors(text)
         self.assertEqual(len(anchors), 1)
         self.assertEqual(anchors[0].file, "backend/app/services/bar.py")
         self.assertEqual(anchors[0].line, 42)
 
-    def test_extract_anchors_yaml_files_list(self) -> None:
-        text = """#### Card 2 — example
+    def test_extract_anchors_yaml_card_relaxed(self) -> None:
+        text = """## Kanban optimization
+
+#### Card 2 — example
 files:
   - backend/app/services/tinyfish_sample_quality.py
 
@@ -67,10 +75,16 @@ Anchor: helper at L100
         self.assertEqual(anchors[0].file, "backend/app/services/tinyfish_sample_quality.py")
         self.assertEqual(anchors[0].line, 100)
 
-    def test_extract_anchors_plain_files_in_agent_block(self) -> None:
-        text = """```agent
+    def test_extract_anchors_plain_files_with_anchor_line(self) -> None:
+        text = """## Kanban optimization
+
+#### Card 1 — example
+files:
+  - backend/app/services/baz.py
+
+```agent
 Files: backend/app/services/baz.py (modify-only)
-Anchor: class Baz L55
+Anchor: backend/app/services/baz.py::Baz@L55
 ```
 """
         anchors = pp.extract_anchors(text)
