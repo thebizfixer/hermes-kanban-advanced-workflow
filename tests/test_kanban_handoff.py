@@ -129,6 +129,11 @@ class TestKanbanHandoff(unittest.TestCase):
             self.assertFalse(handoff._resolve_subagent_gate_enabled(root, {}))
 
     def test_build_body_includes_first_action_and_gate_body(self) -> None:
+        overlay = {
+            "notify_lifecycle": "true",
+            "walk_away_mode": "false",
+            "notify_deliver_resolved": "telegram",
+        }
         body = handoff._build_body(
             "p1",
             Path("/tmp/plan.plan.md"),
@@ -139,12 +144,22 @@ class TestKanbanHandoff(unittest.TestCase):
             gate_status="DEFERRED at test",
             parallel_gate_enabled=True,
             gateway_at_handoff="running (ok)",
+            notification_overlay=overlay,
+            cron_provision="PASSED at 2026-06-18T00:00:00Z",
         )
         self.assertIn("## FIRST ACTION", body)
         self.assertIn("gateway_at_handoff: running", body)
         self.assertIn('plan_id: p1', body)
+        self.assertIn("notify_lifecycle: true", body)
+        self.assertIn("walk_away_mode: false", body)
+        self.assertIn("cron_provision: PASSED", body)
+        self.assertIn("provision_kanban_crons.sh --check", body)
+        self.assertIn("--no-crons", body)
+        self.assertNotIn(
+            "Immediately after gate — create crons",
+            body,
+        )
         self.assertIn("Gate card. All implementation cards link to gate", body)
-        self.assertIn("resolved home-channel deliver", body)
         body = handoff._build_body(
             "p1",
             Path("/tmp/plan.plan.md"),

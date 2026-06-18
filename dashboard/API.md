@@ -220,7 +220,7 @@ Runs the equivalent of `hermes kanban-advanced init --force` with the provided p
 
 `policy_profile`: `advisory` | `balanced` | `strict` — governance enforcement level (default `balanced`).
 
-`notify_lifecycle`: when `true` (default), decomposition runs `provision_kanban_crons.sh --create`, which registers `kanban-lifecycle-notify-5m` with resolved home-channel deliver (not `local`). Dashboard toggle writes overlay only — it does not create/remove cron jobs until the next `--create`. Lifecycle messages print to stdout; Hermes cron deliver routes to the operator's configured home channel.
+`notify_lifecycle`: when `true` (default), execute/handoff (`kanban_handoff.py`) runs `provision_kanban_crons.sh --create`, which registers `kanban-lifecycle-notify-5m` with resolved home-channel deliver (not `local`); orchestrator decomposition verifies with `--check` only. **Dashboard Save** also reconciles crons (`--create` + `--check`) when lifecycle notify is on and the toggle or `notify_deliver` override changed — uses `.hermes/kanban/logs/lifecycle_plan_id` when present. Lifecycle messages print to stdout; Hermes cron deliver routes to the operator's configured home channel.
 
 `notify_deliver`: optional overlay override (`telegram` | `discord` | `slack` | `signal` | `whatsapp` | `all` | `local`). Empty/absent → auto-resolve via `notify_deliver_resolved` in status (same order as `scripts/lib/resolve_notify_deliver.sh`). POST `/save` accepts `notify_deliver`; set to `""` or omit override to clear. Completion notify uses the same resolved deliver when `walk_away_mode` is on.
 

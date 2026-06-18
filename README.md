@@ -39,7 +39,7 @@ Two steps. Restart Hermes and you're ready. Init creates `kanban-advanced-orches
 | CLI commands | 7 | `hermes kanban-advanced decompose`, `list`, `show`, `validate`, `verify-optimization`, `preflight`, `init` |
 | LLM tools | 7 | `kanban_create`, `kanban_list`, `kanban_show`, `kanban_complete`, `kanban_block`, `kanban_unblock`, `kanban_link` |
 | Lifecycle hooks | 2 | `on_session_start` (profile-aware skill hint), `post_tool_call` (board event JSONL + event-driven `auto_unblock` after successful `kanban_complete`) |
-| Dashboard tab | 1 | Settings UI in the Hermes dashboard (`/kanban-advanced`) — configure coding agent, branch, and profiles without CLI; mirrors `hermes kanban-advanced init` |
+| Dashboard tab | 1 | Settings UI in the Hermes dashboard (`/kanban-advanced`) — configure coding agent, branch, and profiles without CLI; Save reconciles lifecycle crons when notify toggles change; mirrors `hermes kanban-advanced init` |
 | Governance hooks | 2 | `worktree_setup.sh` installs pre-push (branch guard) and pre-commit (`Files:` boundary) hooks per worktree |
 | Escalation chain | 1 | `kanban_escalation_tracker.sh` + `board_keeper.sh` — coding agent → worker → orchestrator → human (configurable via `escalation_max_attempts`) |
 
@@ -108,6 +108,66 @@ The workflow moves through trigger phrases. You say them — the agent advances.
 | Postmortem | *"Yes"* (at prompt) | Structured retrospective with KPIs and lessons learned (includes cleanup cost) |
 
 You can pause anytime: *"Pause the plan"* blocks all cards. *"Resume the plan"* picks up where you left off. Full reference: [interaction model](docs/reference/interaction-model.md).
+
+---
+
+## Execution doctrine
+
+**80% deterministic / 20% agent-driven** — you own plan intent (*what*); the plugin enforces logistics (*how* gates run). Authority chain: you author the plan → the plan sets rails → agents implement inside `Files:` → deterministic scripts gate dispatch and verify without rewriting `Acceptance:` or plan markdown.
+
+```mermaid
+flowchart LR
+  OP[Operator — wants + plan]
+  PLAN[Plan file — rails]
+  DET[~80% Deterministic layer]
+  AGT[~20% Agent layer]
+  OUT[Outcome]
+
+  OP -->|authors / edits before execute| PLAN
+  PLAN --> DET
+  PLAN --> AGT
+  DET -->|idempotent gates| OUT
+  AGT -->|flexible implementation| OUT
+```
+
+Details — WARN vs BLOCK phases, governance layers, idempotency, escape hatches: [`plugin/data/references/execution-doctrine.md`](plugin/data/references/execution-doctrine.md) and [`wiki/governance.md`](wiki/governance.md) § Execution doctrine.
+
+---
+
+## Completeness role loop
+
+Board **done** must mean product **done**. Deterministic checks (eval chain E001–E021, card policy P001–P009) are the **floor**; the belt roles form the **completeness loop** — Green Belt implements, Black Belt catches coding misses (re-dispatch on the same card), Master Black Belt catches worker misses after merge (remediation cards only; orchestrator never calls the coding CLI directly).
+
+```mermaid
+flowchart LR
+  OP["Operator — Champion"]
+  MBB["Master Black Belt<br/>orchestrator"]
+  BB["Black Belt — worker"]
+  GB["Green Belt — coding CLI"]
+  YB["Yellow Belt — crons"]
+  DONE["Board done == product done"]
+
+  OP -->|plan + attestation| MBB
+  MBB -->|card dispatch| BB
+  BB -->|invoke| GB
+  GB -->|commits| BB
+  BB -->|"unmet Acceptance / Call-site → re-dispatch"| GB
+  BB -->|"verify pass"| MBB
+  MBB -->|"remediation card"| BB
+  MBB --> DONE
+  YB -.->|auto_unblock · board_keeper| BB
+  YB -.->|lifecycle notify| MBB
+```
+
+| Belt | Plugin mapping | Completeness job |
+| --- | --- | --- |
+| **Operator (Champion)** | Plan author, deploy attestation, interventions | **Define** intent — `Acceptance:` / `Call-sites:` rails the loop judges |
+| **Master Black Belt** | `kanban-advanced-orchestrator` — decompose, `final_audit_sanity.py`, remediation spawn | Catch missed surfaces **after merge**; remediation card → worker only |
+| **Black Belt** | `kanban-advanced-worker` — eval chain, Acceptance verify, re-dispatch | Catch coding misses **before** `kanban_complete` on the same card |
+| **Green Belt** | Headless CLI (`KANBAN_CODING_AGENT`) in card worktree | Implement inside `Files:` / `Mode:`; loop back on worker send-back |
+| **Yellow Belt** | `auto_unblock.sh`, `board_keeper.sh`, `cycle_detector.py`, lifecycle crons | **Control** — wave promotion, thrash detect; does not judge completeness |
+
+**Caught** violations (worker re-dispatch or orchestrator remediation) are expected and recorded in `{plan_id}_kpi.json`. **Uncaught** violations (false completions) are sail-through failures — target **0**. DMAIC lifecycle and CTQ tree: [`wiki/six-sigma-mapping.md`](wiki/six-sigma-mapping.md) · completeness matrix: [`wiki/governance.md`](wiki/governance.md) § Role-based completeness loop.
 
 ---
 

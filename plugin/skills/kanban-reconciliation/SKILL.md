@@ -71,17 +71,31 @@ Flag any task that burned > 2× the plan average. Include token totals in the KP
 
 ### 2b. Postmortem cross-check (after `generate_postmortem.py`)
 
-Run immediately after the postmortem KPI JSON is written:
+Run immediately after the postmortem KPI JSON is written — **before or after archive** (postmortem reads `kanban.db`, not the active board list):
 
 ```bash
 PLAN_ID=<plan_id>
-jq '.total_tasks' .hermes/kanban/reports/${PLAN_ID}_kpi.json
+KANBAN_DB="${KANBAN_DB:-${HERMES_HOME}/kanban.db}"
+KPI_TASKS=$(jq -r '.total_tasks' .hermes/kanban/reports/${PLAN_ID}_kpi.json)
+
+# Authoritative: plan memory task_ids (same scope as generate_postmortem.py)
+MEM_COUNT=$(python3 -c "
+import json, sys
+from pathlib import Path
+p = Path('.hermes/kanban/memory') / f'{sys.argv[1]}.json'
+print(len(json.loads(p.read_text()).get('task_ids') or [])) if p.is_file() else print(0)
+" "$PLAN_ID")
+
+echo "KPI total_tasks=${KPI_TASKS} plan_memory_task_ids=${MEM_COUNT}"
+test "$KPI_TASKS" = "$MEM_COUNT" || echo "WARN: KPI task count != plan memory task_ids"
+
+# Optional before archive: active-board spot-check (archived cards will not appear)
 hermes kanban list | rg "plan_id: ${PLAN_ID}" || true
-rg "plan_id: ${PLAN_ID}" <(hermes kanban list --json 2>/dev/null | jq -r '.[].body') 2>/dev/null || true
 ```
 
-- **Task count:** `total_tasks` in KPI JSON must match plan-scoped cards on the board (exclude archived foreign plans).
-- **Plan scoping:** no active card body should carry a different `plan_id:` than the plan under reconciliation.
+- **Task count:** `total_tasks` in KPI JSON must match plan memory `task_ids` length when memory exists (same filter as `generate_postmortem.py`).
+- **After archive:** do **not** rely on `hermes kanban list` alone — use KPI JSON + plan memory + `kanban.db`.
+- **Plan scoping:** no active card body should carry a different `plan_id:` than the plan under reconciliation (pre-archive check only).
 - **Final audit spot-check:** audit card log should mention sanity/tests/cherry-pick when the run completed cleanly.
 
 **Operator KPI corrections:** when ground truth differs from automated KPIs, record overrides in the report footer — do not silently edit KPI JSON. Supported keys: `wall_clock_hours_corrected`, `success_rate_corrected` with `correction_source` note (see `kanban-advanced:kanban-postmortem` § KPI artifact).

@@ -110,6 +110,22 @@ case "$BINARY" in
     # Cursor: -p = --print; --output-format requires -p; --trust required in worktrees
     args=( -p "$PROMPT" --output-format json --trust )
     append_model_args args
+    if [[ "$MODE" == "dispatch" ]]; then
+      OUT_FILE="$(mktemp)"
+      if run_with_coding_agent_auth_lock "$BINARY" "${args[@]}" >"$OUT_FILE" 2>&1; then
+        HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
+        HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
+          python3 "$SCRIPT_DIR/log_invoke_tokens.py" --output-file "$OUT_FILE" 2>/dev/null || true
+        cat "$OUT_FILE"
+        rm -f "$OUT_FILE"
+        exit 0
+      else
+        rc=$?
+        cat "$OUT_FILE"
+        rm -f "$OUT_FILE"
+        exit "$rc"
+      fi
+    fi
     _run_agent
     exit $?
     ;;

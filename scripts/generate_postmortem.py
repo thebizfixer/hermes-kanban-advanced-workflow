@@ -481,6 +481,16 @@ def load_task_history(
 
         if not tasks:
             notes.append(f"No tasks matched plan `{plan_id}` in `{db_path}`.")
+        else:
+            archived_count = sum(1 for task in tasks if task.status.lower() == "archived")
+            if archived_count == len(tasks):
+                notes.append(
+                    "All plan tasks are archived — metrics sourced from kanban.db (not active board list)."
+                )
+            elif archived_count:
+                notes.append(
+                    f"{archived_count} task(s) archived — postmortem metrics include archived rows from kanban.db."
+                )
 
         return tasks, notes
     finally:
@@ -1340,6 +1350,18 @@ def build_kpi_json(
         "scope_violations": len(scope_violations),
         "intervention_log_entries": len(intervention_log),
     }
+    token_coverage_pct = round(
+        (len(plan_tokens) / completed * 100.0) if completed else 0.0, 2
+    )
+    uncaught = audit_fields["uncaught_violation_count"]
+    if uncaught is None or token_coverage_pct < 50.0:
+        data_confidence = "low"
+    elif uncaught or token_coverage_pct < 80.0:
+        data_confidence = "medium"
+    else:
+        data_confidence = "high"
+    kpi["data_confidence"] = data_confidence
+    kpi["token_coverage_pct"] = token_coverage_pct
     if kpi_corrections:
         for key in ("wall_clock_hours_corrected", "success_rate_corrected"):
             if key in kpi_corrections:

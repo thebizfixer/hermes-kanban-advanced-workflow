@@ -350,7 +350,7 @@ def run_tier1(ctx: AuditContext) -> list[Violation]:
             )
         )
 
-    todo_drift = _check_plan_todo_drift(ctx.plan_text, ctx.cards)
+    todo_drift = _check_plan_todo_drift(ctx.plan_text, ctx.cards, ctx.repo_root)
     violations.extend(todo_drift)
     violations.extend(_check_verification_deploy_attestations(ctx))
     violations.extend(_check_presentation_acceptance_memory(ctx))
@@ -439,8 +439,30 @@ def _check_presentation_acceptance_memory(ctx: AuditContext) -> list[Violation]:
     return violations
 
 
+_VERIFY_RG_BULLET_RE = re.compile(
+    r"Verify:\s*rg\s+(?:-n\s+)?['\"]?([^'\"]+)['\"]?\s+(\S+)",
+    re.IGNORECASE,
+)
+
+
 def _acceptance_verifiable(bullet: str, files: list[str], repo_root: Path) -> bool:
-    """Light heuristic: procedural bullets pass; symbols checked with word boundaries."""
+    """Light heuristic: procedural bullets pass; Verify: rg enforced; symbols checked."""
+    m = _VERIFY_RG_BULLET_RE.search(bullet)
+    if m:
+        pattern, path = m.group(1), m.group(2).replace("\\", "/")
+        full = repo_root / path
+        if not full.is_file():
+            return False
+        try:
+            result = subprocess.run(
+                ["rg", "-q", pattern, str(full)],
+                capture_output=True,
+                text=True,
+            )
+            return result.returncode == 0
+        except FileNotFoundError:
+            text = full.read_text(encoding="utf-8", errors="replace")
+            return bool(re.search(pattern, text))
     if _PROCEDURAL_ACCEPTANCE_RE.search(bullet):
         return True
     if not files:
@@ -482,15 +504,18 @@ def _call_site_resolvable(site: str, repo_root: Path) -> bool:
     return False
 
 
-def _check_plan_todo_drift(plan_text: str, cards: list[dict[str, Any]]) -> list[Violation]:
+def _check_plan_todo_drift(
+    plan_text: str, cards: list[dict[str, Any]], repo_root: Path
+) -> list[Violation]:
     if not plan_text.startswith("---"):
         return []
     end = plan_text.find("\n---", 3)
     if end == -1:
         return []
     fm = plan_text[3:end]
+    violations: list[Violation] = []
     if "todos:" not in fm:
-        return []
+        return violations
     pending_impl = sum(
         1
         for c in cards
@@ -498,7 +523,7 @@ def _check_plan_todo_drift(plan_text: str, cards: list[dict[str, Any]]) -> list[
         and re.search(r"```agent", c.get("body", ""))
     )
     if pending_impl > 0 and "status: completed" in fm:
-        return [
+        violations.append(
             Violation(
                 tier="tier1",
                 class_name="plan_todo_drift",
@@ -506,8 +531,37 @@ def _check_plan_todo_drift(plan_text: str, cards: list[dict[str, Any]]) -> list[
                 detail=f"Plan todos show completed but {pending_impl} impl cards still open",
                 severity="warn",
             )
-        ]
-    return []
+        )
+    if re.search(r"status:\s*completed", fm, re.I) and re.search(
+        r"(deploy|verification-deploy)", fm, re.I
+    ):
+        try:
+            from card_body import is_verification_deploy, parse_card_body
+            from presentation_acceptance import verification_deploy_attested
+        except ImportError:
+            return violations
+        plan_id_m = re.search(r"^plan_id:\s*(\S+)", plan_text, re.MULTILINE | re.IGNORECASE)
+        plan_id = plan_id_m.group(1).strip() if plan_id_m else ""
+        for card in cards:
+            body = card.get("body", "")
+            parsed = parse_card_body(body)
+            if not is_verification_deploy(parsed, body):
+                continue
+            ck = _card_key_from_audit_body(body, card.get("id", ""))
+            if plan_id and not verification_deploy_attested(repo_root, plan_id, ck):
+                violations.append(
+                    Violation(
+                        tier="tier1",
+                        class_name="deploy_todo_premature_complete",
+                        path="",
+                        detail=(
+                            f"Plan marks deploy work completed but verification-deploy "
+                            f"card '{ck}' lacks attestation JSON"
+                        ),
+                        severity="fail",
+                    )
+                )
+    return violations
 
 
 def _is_doc_path(path: str) -> bool:

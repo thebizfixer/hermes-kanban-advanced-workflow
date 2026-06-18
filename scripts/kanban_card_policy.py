@@ -30,6 +30,7 @@ from card_body import (  # noqa: E402
     has_mode_declaration,
     is_verification_card,
     parse_card_body,
+    validate_tests_command_syntax,
 )
 from governance_profile import (  # noqa: E402
     emit_strict_notification,
@@ -198,6 +199,17 @@ def validate_card(task_id: str, body: str, policy: dict) -> List[dict]:
         elif condition == "code-gen card with parents metadata missing Parent-branches:":
             if "```agent" in body and regex.search(r"^parents:\s*\S+", body, regex.MULTILINE | regex.IGNORECASE):
                 if "Parent-branches:" not in body:
+                    violations.append(rule)
+        elif condition == "Tests: line is malformed (shlex or parentheses)":
+            tests = parsed.get("tests") or ""
+            if not tests:
+                for line in body.split("\n"):
+                    if line.startswith("Tests:") or line.strip().startswith("tests:"):
+                        tests = line.split(":", 1)[1].strip()
+                        break
+            if tests and tests.upper() != "N/A":
+                ok, _ = validate_tests_command_syntax(tests)
+                if not ok:
                     violations.append(rule)
         elif condition == "card body indicates happy-path turns > 35 ceiling":
             # P009: Count def/class mentions in body as a heuristic for iteration budget.

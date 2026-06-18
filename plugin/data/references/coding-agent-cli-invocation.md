@@ -170,3 +170,18 @@ A green dashboard coding-agent dot does not replace worktree smoke — Cursor es
 **Smoke timeout:** Dashboard and init use **180s** (`SMOKE_TIMEOUT_SECONDS` in `plugin/coding_agent.py`). Workers should allow the same when using `terminal()` (`timeout 180 bash … smoke`). Subprocess timeout returns `model_reachable: false`, not yellow/inconclusive.
 
 **Worker dispatch:** Hermes workers must use **`terminal()`** to run `bash "$INVOKE" dispatch …` (up to **900s**). Do not use `execute_code`. Resolve `$INVOKE` via `bundle_path` in config, then `$HERMES_HOME/plugins/kanban-advanced`, then `$HERMES_HOME/scripts/coding_agent_invoke.sh` after **Update Plugin** / `provision.sh`.
+
+## Parity: `coding_agent_invoke.sh` vs `plugin/coding_agent.py`
+
+Dashboard smoke and worker dispatch use **different entry points** that must stay aligned:
+
+| Binary | `coding_agent_invoke.sh` | `plugin/coding_agent.py` (`ADAPTERS`) |
+| --- | --- | --- |
+| `agent` / `cursor-agent` | `-p`, `--output-format json`, `--trust` | `extra_smoke_argv` same |
+| `claude` | `--dangerously-skip-permissions` | same |
+| `codex` | `exec --json -a never`; dispatch `--sandbox workspace-write` | `exec_argv`, `dispatch_argv` same |
+| `grok` | `--help`-detected xAI vs superagent flags | `detect_grok_cli_flavor()` + same branches |
+| `gemini` | `--yolo --output-format json` | `extra_smoke_argv` same |
+| `aider` | `--yes-always`; smoke `--no-git` | same |
+
+Regression: `tests/test_coding_agent_parity.py` greps both files for these flag tokens. After CLI upgrades, update **both** paths and re-run `python3 scripts/check_coding_agent_cli.py`.

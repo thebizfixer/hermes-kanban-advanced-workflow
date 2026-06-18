@@ -99,7 +99,7 @@ Agent reference: [wiki/bootstrap.md](../../wiki/bootstrap.md)
 
 1. **Config overlay** — `.hermes/kanban-overrides/kanban-config.yaml`
 2. **Shared skill materialization** — all 12 skills → `$HERMES_HOME/skills/kanban-advanced/`
-3. **Cron scripts (files only)** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`. Hermes cron **jobs** are created per plan at decomposition (`provision_kanban_crons.sh --create`), not at init.
+3. **Cron scripts (files only)** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`. Hermes cron **jobs** are created per plan at **execute/handoff** (`kanban_handoff.py` → `provision_kanban_crons.sh --create`), verified at orchestrator decomposition (`--check`; handoff path uses `--no-crons`), not at init.
 4. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE`, `HOME` in `.env` (kanban keys only — not app secrets)
 5. **`.worktreeinclude`** — kanban gitignored paths for card worktrees (overlay, invoke scripts); **you** add `.env` / `.venv/` as needed
 

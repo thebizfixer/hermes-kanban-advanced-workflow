@@ -16,6 +16,7 @@ source "$SCRIPT_DIR/lib/worktree_include.sh"
 TASK_ID=""
 REPO_ROOT=""
 WORKTREE_BASE=""
+DURABILITY_BRANCH=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -23,6 +24,7 @@ while [ $# -gt 0 ]; do
         --repo-root) REPO_ROOT="$2"; shift 2 ;;
         --config) export HERMES_KANBAN_CONFIG="$2"; shift 2 ;;
         --worktree-base) WORKTREE_BASE="$2"; shift 2 ;;
+        --durability-branch) DURABILITY_BRANCH="$2"; shift 2 ;;
         *) echo "[kanban-governance] ERROR: unknown arg: $1" >&2; exit 1 ;;
     esac
 done
@@ -90,5 +92,20 @@ bash "$SCRIPT_DIR/install_pre_push_hook.sh" \
     "$TRIGGER_BRANCH"
 
 bash "$SCRIPT_DIR/install_pre_commit_hook.sh" "$WORKTREE_PATH"
+
+# 6. Optional durability push (card branch on origin for gateway restart salvage)
+if [[ -z "$DURABILITY_BRANCH" && -n "${HERMES_KANBAN_CARD_BRANCH:-}" ]]; then
+    DURABILITY_BRANCH="$HERMES_KANBAN_CARD_BRANCH"
+fi
+if [[ -n "$DURABILITY_BRANCH" && "${KANBAN_PUSH_DURABILITY_BRANCH:-0}" == "1" ]]; then
+    if git -C "$WORKTREE_PATH" push -u origin "$ALLOWED_BRANCH" 2>/dev/null; then
+        echo "[kanban-governance] Pushed worktree branch $ALLOWED_BRANCH to origin" >&2
+    fi
+    if git -C "$REPO_ROOT" push origin "$ALLOWED_BRANCH:refs/heads/$DURABILITY_BRANCH" 2>/dev/null; then
+        echo "[kanban-governance] Pushed durability ref origin/$DURABILITY_BRANCH" >&2
+    else
+        echo "[kanban-governance] WARN: durability push skipped for $DURABILITY_BRANCH (no commits yet?)" >&2
+    fi
+fi
 
 echo "WORKTREE_PATH=$WORKTREE_PATH"

@@ -544,7 +544,7 @@ Then repeat **execute the plan**. Plugin reference: `plugin/data/references/prof
 
 1. **Gateway running** — `hermes gateway status` or `hermes cron status`. Crons tick inside the gateway process; CLI chat alone does not fire them.
 2. **Wave crons exist** — `hermes cron list` must show `kanban-auto-unblock-1m` and `kanban-board-keeper-3m` as `[active]` with `Deliver: local`. When `notify_lifecycle: true` (default), also expect `kanban-lifecycle-notify-5m` with **non-local** deliver (resolved home channel via `scripts/lib/resolve_notify_deliver.sh` — not `deliver=local`). Silent lifecycle → check gate card body includes `plan_id:` and lifecycle deliver is not local. Jobs must include `--workdir <repo-root>` (re-create with `provision_kanban_crons.sh --create --workdir "$(git rev-parse --show-toplevel)"` if logs never update).
-3. **Created per plan** — jobs are provisioned at decomposition (`provision_kanban_crons.sh --create`), **not** at init. Re-run create during an active plan if missing.
+3. **Created per plan** — jobs are provisioned at **execute/handoff** (`kanban_handoff.py` → `provision_kanban_crons.sh --create`), **not** at init or orchestrator decompose (`--no-crons` on the handoff path). Re-run create during an active plan if `--check` fails.
 4. **Logs** — prefer project `.hermes/kanban/logs/auto-unblock.log` (SSOT); falls back to `$HERMES_HOME/kanban/logs/` when no project kanban dir. `board_keeper.sh` warns when logs are stale >3m while cards are active.
 5. **Messaging optional** — missing Telegram/Discord does **not** stop script crons (`deliver=local`).
 6. **Headless / no gateway** — `provision_kanban_crons.sh --create --headless` prints a manual loop; run `auto_unblock.sh --stagger-sec 30` every 60s while cards are active.

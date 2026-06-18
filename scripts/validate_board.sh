@@ -63,6 +63,14 @@ body_has_tests() {
     echo "$1" | grep -qE '^(Tests:|tests:)'
 }
 
+body_tests_valid() {
+    echo "$1" | PYTHONPATH="$SCRIPT_DIR/lib" python3 -c "
+import sys
+from card_body import body_tests_valid
+sys.exit(0 if body_tests_valid(sys.stdin.read()) else 1)
+"
+}
+
 body_is_verification_local() {
     echo "$1" | grep -qiE '^(Type:|type:)[[:space:]]*verification(-local)?[[:space:]]*$'
 }
@@ -130,7 +138,7 @@ if command -v hermes >/dev/null 2>&1; then
     if bash "$SCRIPT_DIR_VAL/provision_kanban_crons.sh" --check 2>/dev/null; then
         pass "wave crons active (auto_unblock + board_keeper, deliver=local)"
     else
-        fail "wave crons check failed — run provision_kanban_crons.sh --create during decomposition"
+        fail "wave crons check failed — run kanban_handoff.py (default profile) or provision_kanban_crons.sh --create --check before decomposition"
         CRON_ISSUES=$((CRON_ISSUES + 1))
     fi
 else
@@ -310,8 +318,8 @@ for tid in $PARENTLESS_CARDS; do
 done
 [ $ORCH_ONLY_ISSUES -eq 0 ] && pass "No orchestrator-only cards assigned to workers"
 
-# â”€â”€ 11. Worker cards must have Tests: line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-echo "11. Tests: line presence (E003 prevention)"
+# ── 11. Worker cards must have Tests: line ─────────────────────────────
+echo "11. Tests: line presence and syntax (E003 / P014 prevention)"
 TEST_LINE_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
     BODY=$(hermes kanban show "$tid" 2>/dev/null)
@@ -325,11 +333,14 @@ for tid in $PARENTLESS_CARDS; do
         fail "Card $tid (assignee=$ASSIGNEE) Type: verification requires Tests: line"
         TEST_LINE_ISSUES=$((TEST_LINE_ISSUES + 1))
     elif [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$HAS_AGENT" -gt 0 ] && [ "$HAS_TESTS" -eq 0 ]; then
-        fail "Card $tid (assignee=$ASSIGNEE) has agent block but no Tests: line â€” evaluation chain will silently pass"
+        fail "Card $tid (assignee=$ASSIGNEE) has agent block but no Tests: line — evaluation chain will silently pass"
+        TEST_LINE_ISSUES=$((TEST_LINE_ISSUES + 1))
+    elif [[ "$ASSIGNEE" == "$WORKER_PROFILE" ]] && [ "$HAS_TESTS" -gt 0 ] && ! body_tests_valid "$BODY"; then
+        fail "Card $tid (assignee=$ASSIGNEE) Tests: line is malformed — fix shell syntax or move prose to Acceptance:"
         TEST_LINE_ISSUES=$((TEST_LINE_ISSUES + 1))
     fi
 done
-[ $TEST_LINE_ISSUES -eq 0 ] && pass "All worker cards have Tests: line"
+[ $TEST_LINE_ISSUES -eq 0 ] && pass "All worker cards have valid Tests: line"
 
 # ── 12. Card self-sufficiency (completeness-loop readiness) ────────────
 echo "12. Card self-sufficiency (plan_id, Acceptance, Call-sites, Parent-branches)"

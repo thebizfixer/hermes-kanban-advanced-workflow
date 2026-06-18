@@ -92,7 +92,7 @@ hermes kanban list
 
 ## Walk-away completion notify
 
-When `walk_away_mode: true` (dashboard **Cron → Walk-away mode**), post-execution automation sends a non-intervention summary after postmortem and archive. When off (default), the orchestrator prompts through reconciliation, cleanup, and postmortem checkpoints.
+When `walk_away_mode: true` (dashboard **Cron → Walk-away mode**), post-execution automation sends a non-intervention summary after postmortem and archive. When off (default), the orchestrator prompts through reconciliation, postmortem, and cleanup checkpoints (same order as walk-away; see `plugin/data/references/interaction-model.md`).
 
 | Config | Default | When enabled |
 | --- | --- | --- |

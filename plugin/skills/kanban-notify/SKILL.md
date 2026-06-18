@@ -167,7 +167,7 @@ Before the operator walks away, state explicitly:
 
 ## Lifecycle notify (separate from intervention)
 
-**Default on** (`notify_lifecycle: true` in `kanban-config.yaml` or dashboard **Cron → Lifecycle notify**). Provisions `kanban-lifecycle-notify-5m` at decomposition via `provision_kanban_crons.sh`. Cron `--deliver` is resolved by `scripts/lib/resolve_notify_deliver.sh` (overlay `notify_deliver` → `cron.default_deliver` → single home channel → `all`) — never hardcode a platform in shell scripts.
+**Default on** (`notify_lifecycle: true` in `kanban-config.yaml` or dashboard **Cron → Lifecycle notify**). Provisions `kanban-lifecycle-notify-5m` at **execute/handoff** via `kanban_handoff.py` → `provision_kanban_crons.sh --create` (orchestrator decomposition verifies with `--check` only). Cron `--deliver` is resolved by `scripts/lib/resolve_notify_deliver.sh` (overlay `notify_deliver` → `cron.default_deliver` → single home channel → `all`) — never hardcode a platform in shell scripts.
 
 | Channel | Script | When | Prefix |
 |---------|--------|------|--------|

@@ -70,22 +70,28 @@ Only these operations require the orchestrator profile (because the dispatcher m
 When the user says "execute the plan" and you're not on orchestrator, prefer the
 **board-mediated handoff** — no human session switch required:
 
-1. Create one hardened handoff card assigned to the orchestrator profile:
+**Before handoff** — confirm overlay toggles with the operator, then let `kanban_handoff.py`
+provision crons (default profile session; orchestrator verifies only):
+
+1. Read overlay: `notify_lifecycle`, `walk_away_mode`, `notify_deliver` in
+   `.hermes/kanban-overrides/kanban-config.yaml` (or dashboard status).
+2. Confirm resolved values with the operator (do not change toggles — dashboard Save first).
+3. Create one hardened handoff card (provisions crons + stamps overlay):
 
 ```bash
 python3 scripts/kanban_handoff.py --plan <plan.md>
 ```
 
-   The gateway dispatcher claims the `ready` card and spawns an orchestrator-profile
-   agent that runs the decomposition SOP autonomously. The builder runs
-   `pre_dispatch_gate.sh` at creation (stamps result), resolves `cards_yaml`, and emits
-   absolute `{BUNDLE_ROOT}/scripts/…` runbook commands. Idempotent (one open handoff per
-   `plan_id`) with precondition checks.
+   The builder runs `provision_kanban_crons.sh --create/--check` in **this session** before
+   creating the handoff card. The gateway dispatcher claims the `ready` card and spawns an
+   orchestrator-profile agent that runs the decomposition SOP (verify crons, `--no-crons`
+   decompose). Idempotent (one open handoff per `plan_id`) with precondition checks.
 2. If the builder exits non-zero, relay its `fix` message and act on it:
    - exit 2 — orchestrator profile missing → `hermes kanban-advanced init`
    - exit 3 — gateway not running → ask the user, then `hermes gateway run`
    - exit 4 — dispatcher disabled / `auto_decompose` true → run the printed
      `hermes config set …` fix, then retry
+   - exit 8 — cron provision failed → fix gateway/cron store; re-run handoff (crons must be created in **this** session)
 3. **Fallback only** (no gateway / dispatcher unavailable): the user must start a new
    orchestrator session manually — Hermes has **no in-chat profile switch**
    ([upstream slash commands](https://hermes-agent.nousresearch.com/docs/reference/slash-commands)).

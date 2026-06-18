@@ -2,6 +2,8 @@
 
 > **Purpose:** Map known vanilla `hermes kanban` bugs to workarounds so the orchestrator can plan around them before dispatching cards. Updated as new issues are discovered or fixed upstream.
 
+**Sibling:** [`planned-features.md`](planned-features.md) — deferred capabilities that need upstream Hermes APIs or unfinished plugin work (not live bugs).
+
 ## How to use
 
 The orchestrator loads this document during **Step 0b (Preflight)** and again during **Step 1 (Understand the goal)**. For each issue, check whether the current plan is exposed. If yes, bake the workaround into the plan's decomposition strategy, card creation order, and workspace configuration.

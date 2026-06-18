@@ -2,12 +2,73 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shlex
 import subprocess
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 _VERIFICATION_COMMIT_RE = re.compile(r"(?i)N/A|verification only")
 _LEGACY_VERIFICATION_BODY_RE = re.compile(r"(?i)\bverification only\b")
+_MODE_SUFFIX_RE = re.compile(r"\s*\((?:modify-only|read-only)\)\s*$", re.IGNORECASE)
+_MARKDOWN_LINK_PATH_RE = re.compile(r"^\[`([^`]+)`\]\([^)]+\)")
+_PAREN_SUFFIX_RE = re.compile(r"\s+\([^)]*\)\s*$")
+
+
+def normalize_file_path(path: str) -> str:
+    """Strip mode suffixes, anchor pins, and markdown link wrappers from a Files: entry."""
+    raw = path.strip().strip("`").strip().rstrip(".").rstrip(",")
+    link = _MARKDOWN_LINK_PATH_RE.match(raw)
+    if link:
+        raw = link.group(1).strip()
+    raw = _MODE_SUFFIX_RE.sub("", raw).strip()
+    if "@L" in raw.upper():
+        raw = re.split(r"@L\d+", raw, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+    if "::" in raw:
+        raw = raw.split("::", 1)[0].strip()
+    return raw
+
+
+def sanitize_tests_command(cmd: str) -> str:
+    """Strip trailing parenthetical prose from Tests: — logistics only, not intent change."""
+    if not cmd:
+        return cmd
+    stripped = cmd.strip()
+    if stripped.upper() == "N/A":
+        return stripped
+    return _PAREN_SUFFIX_RE.sub("", stripped).strip()
+
+
+def validate_tests_command_syntax(cmd: str) -> Tuple[bool, Optional[str]]:
+    """Return (ok, error_message). N/A and empty are valid."""
+    if not cmd or cmd.strip().upper() == "N/A":
+        return True, None
+    sanitized = sanitize_tests_command(cmd)
+    check = sanitized if sanitized else cmd.strip()
+    if check.count("(") != check.count(")"):
+        return False, "unbalanced parentheses in Tests: line"
+    try:
+        shlex.split(check, posix=(os.name != "nt"))
+    except ValueError as exc:
+        return False, str(exc)
+    return True, None
+
+
+def extract_tests_line(body: str) -> str:
+    for line in body.split("\n"):
+        stripped = line.strip()
+        if line.startswith("Tests:") or stripped.startswith("tests:"):
+            return stripped.split(":", 1)[1].strip()
+    return ""
+
+
+def body_tests_valid(body: str) -> bool:
+    """True when Tests: is absent, N/A, or parses as valid shell after sanitize."""
+    tests = extract_tests_line(body)
+    if not tests:
+        return True
+    ok, _ = validate_tests_command_syntax(tests)
+    return ok
 
 
 def parse_card_body(body: str) -> dict:
@@ -27,22 +88,26 @@ def parse_card_body(body: str) -> dict:
         stripped = line.strip()
         if line.startswith("Files:"):
             raw = line.replace("Files:", "").strip()
-            files_line = [f.strip() for f in raw.split(",") if f.strip()]
+            files_line = [
+                normalize_file_path(f.strip()) for f in raw.split(",") if f.strip()
+            ]
         elif stripped.startswith("files:") and not files_line:
             rest = stripped.split(":", 1)[1].strip()
             if rest:
-                files_line = [f.strip() for f in rest.split(",") if f.strip()]
+                files_line = [
+                    normalize_file_path(f.strip()) for f in rest.split(",") if f.strip()
+                ]
             else:
                 in_files_yaml = True
         elif in_files_yaml:
             if stripped.startswith("- "):
-                files_line.append(stripped[2:].strip())
+                files_line.append(normalize_file_path(stripped[2:].strip()))
             elif stripped and not stripped.startswith("#"):
                 in_files_yaml = False
         elif line.startswith("Mode:") or stripped.startswith("mode:"):
             mode_line = stripped.split(":", 1)[1].strip()
         elif line.startswith("Tests:") or stripped.startswith("tests:"):
-            tests_cmd = stripped.split(":", 1)[1].strip()
+            tests_cmd = sanitize_tests_command(stripped.split(":", 1)[1].strip())
         elif line.startswith("Commit:") or stripped.startswith("commit:"):
             commit_line = stripped.split(":", 1)[1].strip().strip('"').strip("'")
         elif line.startswith("Lines:") or stripped.startswith("estimated_lines:"):

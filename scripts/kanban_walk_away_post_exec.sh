@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# kanban_walk_away_post_exec.sh — unattended reconciliation → cleanup → postmortem → notify.
+# kanban_walk_away_post_exec.sh — unattended reconciliation → postmortem → archive → cleanup → notify.
 #
 # Runs only when walk_away_mode is enabled in kanban-config.yaml (dashboard Cron toggle).
 # Idempotent per plan_id via .hermes/kanban/logs/post_exec_complete_<plan_id>.

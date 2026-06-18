@@ -14,6 +14,18 @@ Workers in worktrees: index + governance skills first — do not assume `wiki/` 
 
 **Canonical map:** this section is the single source of truth for the full stack (plan → worker). User-facing summary: [`docs/reference/architecture.md`](../docs/reference/architecture.md) § Governance layers. Script implementations: [`docs/reference/scripts.md`](../docs/reference/scripts.md).
 
+## Execution doctrine
+
+**80% deterministic / 20% agent-driven** — operator owns plan intent; plugin enforces logistics only. Full SSOT: [`execution-doctrine.md`](../plugin/data/references/execution-doctrine.md).
+
+| Phase | Scripts | `advisory` | `balanced` / `strict` |
+| --- | --- | --- | --- |
+| Decompose dry-run | `kanban_decompose --dry-run` | WARN malformed `Tests:` / paths | WARN (no board writes) |
+| Pre-dispatch | `pre_dispatch_gate.sh`, `validate_board.sh`, `kanban_card_policy.py` | WARN + allow | BLOCK on P001–P014, E-codes |
+| Complete / audit | eval chain, final audit | WARN tier gaps | BLOCK verify-deploy without attestation (planned) |
+
+Sanitizers (`Tests:` parenthetical strip, `Files:` mode-suffix normalize) change **logistics**, not `Acceptance:` prose. Re-run gates after plan edits — outcomes must be idempotent.
+
 ## Full pre-execution governance stack
 
 Layers run in order before implementation cards dispatch workers. **Blocking** layers exit non-zero; **WARN** layers log and continue.
@@ -371,12 +383,12 @@ bash hermes-kanban-advanced-workflow/scripts/board_keeper.sh
 
 ### Cron governance (hardened in v1.1)
 
-**Lifecycle:** Init/bootstrap materializes **script files** only. **Cron jobs** are created per plan at decomposition (`provision_kanban_crons.sh --create`) and removed at cleanup (`--remove`). Gateway must run for ticks; messaging platforms are optional.
+**Lifecycle:** Init/bootstrap materializes **script files** only. **Cron jobs** are created per plan at **execute/handoff** (`kanban_handoff.py` → `provision_kanban_crons.sh --create`), verified at orchestrator decomposition (`--check`; handoff decompose uses `--no-crons`), and removed at cleanup (`--remove`). Gateway must run for ticks; messaging platforms are optional.
 
 | Layer | When | Checks |
 |-------|------|--------|
 | `pre_dispatch_gate.sh` | Before decomposition | Plan on branch, preflight, coding-agent CLI, attestation, plan memory, DB, cron scripts executable, hermes on PATH; **coding_agent_auth_prewarm** (WARN after pass) |
-| Decomposition Steps 3–5 | Before impl cards | `provision_kanban_crons.sh --create` + `--check` |
+| Decomposition Steps 3–5 | Before impl cards | `provision_kanban_crons.sh --check` (create only if handoff skipped or `--check` fails) |
 | `validate_board.sh` check 0 | Before completing gate | `provision_kanban_crons.sh --check` (active, deliver=local, no-agent) |
 
 **Why hermes PATH matters:** Cron jobs run in a minimal environment. If `hermes` is at `~/.local/bin/hermes` but cron's PATH doesn't include `~/.local/bin`, `auto_unblock.sh` and `board_keeper.sh` will fail silently. The gate checks for this before any cards are dispatched.

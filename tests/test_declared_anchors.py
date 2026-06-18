@@ -73,11 +73,11 @@ Contracts:
     def test_prose_only_line_ref_not_extracted(self) -> None:
         text = """## Kanban optimization
 
-Signal: tinyfish.py L1864 does something.
+Signal: example.py L1864 does something.
 
 #### Card 1 — example
 files:
-  - backend/app/services/tinyfish.py
+  - backend/app/services/example.py
 
 ```agent
 Fix the handler.

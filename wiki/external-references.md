@@ -17,7 +17,7 @@ The orchestrator, worker, kanban board, gateway, and profile system are all Herm
 
 ### Hermes Kanban — upstream issues kanban-advanced works around
 
-Bundled reference: `plugin/data/references/vanilla-kanban-known-issues.md`. Agent FAQ for **why** our decomposition differs: [[decomposition-workflow]].
+Bundled reference: `plugin/data/references/vanilla-kanban-known-issues.md`. Agent FAQ for **why** our decomposition differs: [[decomposition-workflow]]. **Deferred features** (upstream or incomplete): `plugin/data/references/planned-features.md`.
 
 | Issue | Topic | kanban-advanced response |
 |-------|-------|--------------------------|
@@ -112,3 +112,18 @@ source. Do not guess about platform behavior.
 **Agent rule for platform questions:** always cite the upstream source, not your own
 knowledge. "According to the Hermes Desktop docs..." is better than "I think Windows does X."
 point there for plugin-specific details, and upstream for Hermes/platform fundamentals.
+
+## v7 hardening sources (2026)
+
+Research-backed patterns behind kanban-advanced v7 logistics gates — not scope expansion. SSOT for doctrine: `plugin/data/references/execution-doctrine.md`.
+
+| Topic | Source | v7 mapping |
+| --- | --- | --- |
+| Shift-left / deployment gates | [Datadog — shift-left testing](https://www.datadoghq.com/blog/shift-left-testing-best-practices/); [IBM — shift-left](https://www.ibm.com/think/topics/shift-left-testing); [Azure deployment gates](https://learn.microsoft.com/en-us/azure/devops/pipelines/release/approvals/gates) | WARN at decompose dry-run; BLOCK at `pre_dispatch_gate` / dispatch |
+| Idempotency | [Idempotency guide (2025)](https://medium.com/@jyc.dev/idempotency-in-software-engineering-why-it-matters-and-how-to-implement-it-2025-guide-c1ef8ad21965); Google SRE postmortem practice | Safe re-run of gates, cron provision, decompose archive-before-redo |
+| Command injection / `Tests:` safety | [OWASP — Command Injection](https://owasp.org/www-community/attacks/Command_Injection); [Datadog static analysis](https://docs.datadoghq.com/security/code_security/static_analysis/static_analysis_rules/python-flask/command-injection/) | `sanitize_tests_command`, P014, `validate_board` check 11 |
+| Blameless postmortem | [Google SRE Workbook — Postmortem Culture](https://sre.google/workbook/postmortem-culture/); [Atlassian — blameless postmortem](https://www.atlassian.com/incident-management/postmortem/blameless) | Postmortem before archive; data-confidence KPIs |
+| Documentation structure | [Diátaxis](https://diataxis.fr/) | `docs/` tutorial / how-to / reference / explanation split |
+| Human-in-the-loop / walk-away | Hermes kanban RFC [#16102](https://github.com/NousResearch/hermes-agent/issues/16102); overlay toggles + notify deliver | Operator sets `notify_lifecycle` / `walk_away_mode`; scripts provision and verify |
+
+**When to refer:** Questions about why v7 adds a gate, WARN-vs-BLOCK timing, or Tests: sanitization philosophy.

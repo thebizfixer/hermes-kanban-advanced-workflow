@@ -52,7 +52,7 @@ flowchart LR
     PF --> ATT["Attest"]
     ATT --> PDG["Pre-dispatch<br/>gate"]
     PDG --> HO["Handoff<br/>optional"]
-    HO --> DEC["Decompose<br/>crons + validate"]
+    HO --> DEC["Decompose<br/>verify crons + validate"]
     DEC --> W0["Worker<br/>E021 + smoke"]
     W0 --> EC["Eval chain<br/>E001–E020"]
 
@@ -64,8 +64,8 @@ flowchart LR
 | 0 | After Optimize | `verify_goal_cards.py` | Yes (via attestation) |
 | 1 | Pre-decompose | `preflight.sh` → `kanban_attestation.py` | Yes (A001–A003) |
 | 2 | Pre-decompose | `pre_dispatch_gate.sh` (+ OAuth pre-warm WARN) | Yes on FAIL |
-| 3 | Execute (non-orchestrator) | `kanban_handoff.py` + dispatcher preconditions | Yes (exit 2–4) |
-| 4 | Decompose | `provision_kanban_crons --check`, card policy, `validate_board.sh` | Yes |
+| 3 | Execute (non-orchestrator) | `kanban_handoff.py` + dispatcher preconditions + `provision_kanban_crons.sh --create` | Yes (exit 2–4, 8) |
+| 4 | Decompose | `provision_kanban_crons.sh --check` (`--no-crons` on handoff path), card policy, `validate_board.sh` | Yes |
 | 5 | Worker Step 3 | `worktree_setup.sh`, **E021**, coding-agent smoke | Yes |
 | 6 | Worker Step 6 | `kanban_evaluation_chain.py` | Yes (DENY) |
 
@@ -94,8 +94,8 @@ Handoff detail (metadata, runbook, Hermes config): [`wiki/decomposition-workflow
 | Verify      | (automatic)                              | `kanban-advanced:kanban-worker`         | **Evaluation chain** E001–E020 (DAL ALLOW/DENY); **E021** is Layer 5 pre-exec |
 | Audit       | (automatic)                              | `kanban-advanced:kanban-orchestrator`   | 10-gate final audit                                        |
 | Reconcile   | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-reconciliation` | Error code → recovery mapping                              |
+| Postmortem  | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-postmortem`     | Structured retrospective from kanban.db (before archive)   |
 | Cleanup     | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-cleanup`        | Board archive + cron removal                               |
-| Postmortem  | `"Yes"` (at checkpoint)                  | `kanban-advanced:kanban-postmortem`     | Structured retrospective (includes cleanup cost)           |
 | Recovery    | (on failure)                             | `kanban_recover.py`     | 10 automated recovery actions + cascade triage             |
 | Pause/Reset | `"Pause the plan"` / `"Block and reset"` | `kanban-advanced:kanban-orchestrator`   | Blocks all cards, preserves plan file                      |
 

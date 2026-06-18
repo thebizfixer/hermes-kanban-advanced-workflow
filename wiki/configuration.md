@@ -107,7 +107,7 @@ plan_search_dirs:
 
 **Plan memory `acceptance_matrix`:** After decompose, `.hermes/kanban/memory/{plan_id}.json` stores `acceptance_matrix` from plan frontmatter when present, otherwise parsed from the optimization section (`extract_acceptance_matrix`). Card stamping uses the same loader (`decompose_stamp.load_acceptance_matrix`).
 
-Set `notify_lifecycle: false` or dashboard **Cron → Lifecycle notify** off to skip lifecycle cron provisioning. Set `walk_away_mode: true` or dashboard **Cron → Walk-away mode** on for unattended reconciliation → cleanup → postmortem → completion notify after final audit. Full contract: `plugin/data/references/walk-away-mode.md`. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged.
+Set `notify_lifecycle: false` or dashboard **Cron → Lifecycle notify** off to skip lifecycle cron provisioning at handoff. When enabled, `kanban_handoff.py` runs `provision_kanban_crons.sh --create`; orchestrator decomposition verifies only (`--check`; `--no-crons` on the handoff path). Set `walk_away_mode: true` or dashboard **Cron → Walk-away mode** on for unattended reconciliation → postmortem → archive → cleanup → completion notify after final audit. Full contract: `plugin/data/references/walk-away-mode.md`. Intervention paging (`kanban-advanced:kanban-notify`) is unchanged.
 
 ## Coding agent resolution
 

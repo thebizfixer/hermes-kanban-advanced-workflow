@@ -37,6 +37,11 @@ Exit codes:
     5  plan file not found / plan_id could not be determined
     6  card creation failed
     7  board not clean (existing plan cards — archive after operator confirms, or --force)
+    8  cron provisioning failed (provision_kanban_crons --create/--check)
+
+Cron jobs are provisioned in the **default profile session** (this script) before the
+handoff card is created — not by the orchestrator agent. Orchestrator runbook verifies
+only (`--check`), with idempotent `--create` fallback when check fails.
 """
 
 from __future__ import annotations
@@ -83,6 +88,103 @@ def _read_overlay(project_root: Path) -> dict[str, str]:
             key, _, val = line.partition(":")
             config[key.strip()] = val.strip().strip('"').strip("'")
     return config
+
+
+def _overlay_bool(value: str | None, *, default: bool) -> bool:
+    if value is None or not str(value).strip():
+        return default
+    s = str(value).strip().lower()
+    if s in ("false", "0", "no", "off"):
+        return False
+    if s in ("true", "1", "yes", "on"):
+        return True
+    return default
+
+
+def _resolve_notification_overlay(
+    project_root: Path, overlay: dict[str, str]
+) -> dict[str, str]:
+    """Snapshot notify_lifecycle / walk_away_mode / deliver for handoff stamp."""
+    notify_lifecycle = _overlay_bool(
+        overlay.get("notify_lifecycle"), default=True
+    )
+    walk_away_mode = _overlay_bool(
+        overlay.get("walk_away_mode")
+        or overlay.get("notify_on_complete"),
+        default=False,
+    )
+    deliver = "unknown"
+    lib_dir = Path(__file__).resolve().parent / "lib"
+    if str(lib_dir) not in sys.path:
+        sys.path.insert(0, str(lib_dir))
+    try:
+        from hermes_notify_deliver import resolve_notify_deliver  # type: ignore
+
+        deliver = resolve_notify_deliver(project_root)
+    except Exception:
+        pass
+    return {
+        "notify_lifecycle": "true" if notify_lifecycle else "false",
+        "walk_away_mode": "true" if walk_away_mode else "false",
+        "notify_deliver_resolved": deliver,
+    }
+
+
+def _run_cron_provision(
+    plan_id: str,
+    bundle_root: Path,
+    project_root: Path,
+    *,
+    dry_run: bool = False,
+) -> tuple[str, bool, str]:
+    """Run provision_kanban_crons --create then --check in default-profile session."""
+    cron_script = bundle_root / "scripts" / "provision_kanban_crons.sh"
+    if not cron_script.is_file():
+        cron_script = project_root / "scripts" / "provision_kanban_crons.sh"
+    if not cron_script.is_file():
+        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        return f"FAILED at {ts}: provision_kanban_crons.sh not found", False, "script missing"
+
+    ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    bash_cron = _bash_path(cron_script)
+    create_cmd = ["bash", bash_cron, "--create", "--plan-id", plan_id]
+    check_cmd = ["bash", bash_cron, "--check"]
+    if dry_run:
+        create_cmd.append("--dry-run")
+
+    try:
+        create = subprocess.run(
+            create_cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            cwd=str(project_root),
+        )
+        if create.returncode != 0 and not dry_run:
+            detail = (create.stdout + create.stderr).strip()[:400]
+            return f"FAILED at {ts}: create exit {create.returncode}", False, detail
+
+        check = subprocess.run(
+            check_cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            cwd=str(project_root),
+        )
+        if check.returncode != 0 and not dry_run:
+            detail = (check.stdout + check.stderr).strip()[:400]
+            return f"FAILED at {ts}: check exit {check.returncode}", False, detail
+
+        mode = "dry-run" if dry_run else "PASSED"
+        return f"{mode} at {ts}", True, (check.stdout or create.stdout).strip()[:200]
+    except subprocess.TimeoutExpired:
+        return f"FAILED at {ts}: cron provision timed out", False, "timeout"
+    except Exception as exc:
+        return f"FAILED at {ts}: {exc}", False, str(exc)
 
 
 def _bundle_has_scripts(root: Path) -> bool:
@@ -568,7 +670,9 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
                 gate_status: str = "UNKNOWN (not run)",
                 gate_script: Path | None = None,
                 parallel_gate_enabled: bool = False,
-                gateway_at_handoff: str = "unknown") -> str:
+                gateway_at_handoff: str = "unknown",
+                notification_overlay: dict[str, str] | None = None,
+                cron_provision: str = "UNKNOWN (not run)") -> str:
     """SOP-only handoff body. NO ``agent -p`` block by design.
 
     Designed as a command-first runbook: literal CLI commands are pre-substituted
@@ -620,6 +724,10 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
         if parallel_gate_enabled or gate_status.startswith("DEFERRED")
         else "Step 1 — Pre-dispatch gate (if needed)"
     )
+    notify = notification_overlay or {}
+    notify_lifecycle = notify.get("notify_lifecycle", "true")
+    walk_away_mode = notify.get("walk_away_mode", "false")
+    notify_deliver = notify.get("notify_deliver_resolved", "unknown")
 
     return f"""Type: {HANDOFF_TYPE}
 plan_id: {plan_id}
@@ -632,13 +740,17 @@ BUNDLE_ROOT: {bundle}
 {parallel_gate_line}
 gateway_at_handoff: {gateway_at_handoff}
 pre_dispatch_gate: {gate_status}
+notify_lifecycle: {notify_lifecycle}
+walk_away_mode: {walk_away_mode}
+notify_deliver_resolved: {notify_deliver}
+cron_provision: {cron_provision}
 
 ## FIRST ACTION (execute in order — do not read the Plan file)
 
 1. `skill_view("kanban-advanced:kanban-orchestrator")`
 2. **Step 0** — Gateway check (below)
 3. **{step1_label}** — only when stamp is not `PASSED`
-4. **Step 2** — Create gate card and crons
+4. **Step 2** — Create gate card; verify crons (pre-provisioned at handoff)
 
 ## Decomposition runbook
 
@@ -646,6 +758,7 @@ You are the **{orchestrator_profile}** profile. This is a board-mediated handoff
 SOP-only, no `agent -p` block, not a coding task.
 
 **Do not read the full Plan file — execute this runbook only.** Use `Plan:` for metadata.
+**Post-exec branch on stamped `walk_away_mode`** (`{walk_away_mode}`) — not live overlay.
 
 ### Step 0 — Gateway
 
@@ -659,32 +772,36 @@ hermes gateway status
 
 {gate_skip}
 
-### Step 2 — Create gate card and crons
+### Step 2 — Create gate card; verify crons (pre-provisioned)
+
+Crons were provisioned in the **default profile session** before this handoff was created
+(`cron_provision: {cron_provision}`). **Do not run `--create` unless `--check` fails.**
 
 ```bash
 hermes kanban create "Gate — {plan_id}" --assignee {orchestrator_profile} --body "{gate_body_escaped}"
 # note the gate_id printed above, then:
 hermes kanban block <gate_id> "Gate — awaiting links"
+bash {bundle}/scripts/provision_kanban_crons.sh --check
 ```
 
-**Immediately after gate — create crons BEFORE impl cards:**
+Wave crons (auto-unblock, board-keeper) use `deliver=local` and `no_agent=true` — gateway must run.
+When `notify_lifecycle` is `{notify_lifecycle}`, lifecycle cron deliver is `{notify_deliver}` (not local).
+
+**If `--check` fails**, re-create once idempotently then re-check:
 ```bash
 bash {bundle}/scripts/provision_kanban_crons.sh --create --plan-id {plan_id}
 bash {bundle}/scripts/provision_kanban_crons.sh --check
 ```
 
-Wave crons (auto-unblock, board-keeper) use `deliver=local` and `no_agent=true` — gateway must run.
-When `notify_lifecycle` is enabled, the lifecycle cron uses **resolved home-channel deliver** (not local).
-
-**STOP if `provision_kanban_crons.sh --check` fails — do not create implementation cards.**
+**STOP if `--check` still fails — do not create implementation cards.**
 
 ### Step 3 — Decompose
 
 Substitute `<gate_id>` from Step 2:
 ```bash
-python3 {bundle}/scripts/kanban_decompose.py {decompose_source} --gate-id <gate_id>
+python3 {bundle}/scripts/kanban_decompose.py {decompose_source} --gate-id <gate_id> --no-crons
 ```
-{source_note} — block-on-create; never `--triage`, never `--parent` on create.
+{source_note} — block-on-create; never `--triage`, never `--parent` on create. Crons already provisioned.
 
 ### Step 4 — Validate
 
@@ -731,6 +848,11 @@ def main() -> int:
         help="After operator approval, archive non-running plan cards before handoff",
     )
     parser.add_argument("--json", action="store_true", help="Machine-readable output")
+    parser.add_argument(
+        "--skip-cron-provision",
+        action="store_true",
+        help="Skip provision_kanban_crons (tests or manual recovery only)",
+    )
     args = parser.parse_args()
 
     def emit(payload: dict) -> None:
@@ -790,18 +912,8 @@ def main() -> int:
         gate_status, gate_script = _run_pre_dispatch_gate(plan_id, project_root, overlay)
 
     title = f"Decompose: {plan_id}"
-    body = _build_body(
-        plan_id, plan_path, project_root, working_branch,
-        orchestrator_profile,
-        bundle_root=bundle_root,
-        cards_yaml_path=cards_yaml_path,
-        gate_status=gate_status,
-        gate_script=gate_script,
-        parallel_gate_enabled=parallel_gate_enabled,
-        gateway_at_handoff=gateway_stamp,
-    )
 
-    # ── Preconditions ──────────────────────────────────────────────────────
+    # ── Preconditions (gateway required for cron provision) ────────────────
     if not _orchestrator_profile_exists(orchestrator_profile):
         emit({
             "ok": False,
@@ -834,16 +946,56 @@ def main() -> int:
             })
             return 3
 
+    notification_overlay = _resolve_notification_overlay(project_root, overlay)
+    if args.skip_cron_provision:
+        cron_stamp = "SKIPPED (manual/test)"
+        cron_ok = True
+    else:
+        cron_stamp, cron_ok, cron_detail = _run_cron_provision(
+            plan_id,
+            bundle_root,
+            project_root,
+            dry_run=args.dry_run,
+        )
+        if not cron_ok and not args.dry_run:
+            emit({
+                "ok": False,
+                "error": "cron_provision_failed",
+                "detail": cron_detail,
+                "cron_provision": cron_stamp,
+                "plan_id": plan_id,
+                "fix": (
+                    "Run from default profile: "
+                    f"bash {bundle_root.as_posix()}/scripts/provision_kanban_crons.sh "
+                    f"--create --plan-id {plan_id} && "
+                    f"bash {bundle_root.as_posix()}/scripts/provision_kanban_crons.sh --check"
+                ),
+            })
+            return 8
+
+    body = _build_body(
+        plan_id, plan_path, project_root, working_branch,
+        orchestrator_profile,
+        bundle_root=bundle_root,
+        cards_yaml_path=cards_yaml_path,
+        gate_status=gate_status,
+        gate_script=gate_script,
+        parallel_gate_enabled=parallel_gate_enabled,
+        gateway_at_handoff=gateway_stamp,
+        notification_overlay=notification_overlay,
+        cron_provision=cron_stamp,
+    )
+
     # ── Idempotency ────────────────────────────────────────────────────────
     existing = _find_open_handoff(plan_id, title)
     if existing:
         emit({"ok": True, "reused": True, "id": existing, "title": title,
-              "plan_id": plan_id})
+              "plan_id": plan_id, "cron_provision": cron_stamp})
         return 0
 
     if args.dry_run:
         emit({"ok": True, "dry_run": True, "title": title, "assignee": orchestrator_profile,
-              "plan_id": plan_id})
+              "plan_id": plan_id, "cron_provision": cron_stamp})
         print(body)
         return 0
 

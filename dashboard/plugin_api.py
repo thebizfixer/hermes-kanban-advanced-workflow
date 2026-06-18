@@ -50,7 +50,11 @@ from plugin.config_overlay import (  # noqa: E402
     sync_project_env,
 )
 from plugin.coding_agent_env import ensure_coding_agent_runtime_env  # noqa: E402
-from plugin.script_materialize import materialize_hermes_scripts  # noqa: E402
+from plugin.script_materialize import (  # noqa: E402
+    materialize_hermes_scripts,
+    materialize_skills_with_preservation,
+)
+from plugin.profile_bootstrap import materialize_skill_dir  # noqa: E402
 from plugin.worktree_provision import ensure_worktreeinclude  # noqa: E402
 from plugin.coding_agent import (  # noqa: E402
     CONFLICT_HINT,
@@ -525,23 +529,87 @@ def _materialize_plugin_assets(plugin_root: Path, hermes_home: Path) -> list[str
     lines: list[str] = []
     skills_src = plugin_root / "plugin" / "skills"
     skills_dst = hermes_home / "skills" / "kanban-advanced"
-    count = 0
-    if skills_src.is_dir():
-        for child in sorted(skills_src.iterdir()):
-            skill_md = child / "SKILL.md"
-            if child.is_dir() and skill_md.exists():
-                dst_dir = skills_dst / child.name
-                dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(
-                    read_utf8_text(skill_md), encoding="utf-8"
-                )
-                count += 1
+    data_refs = plugin_root / "plugin" / "data" / "references"
+    count, warnings = materialize_skills_with_preservation(
+        skills_src,
+        skills_dst,
+        materialize_skill_dir=materialize_skill_dir,
+        bundle_data_references=data_refs,
+        log=lines.append,
+    )
+    if count:
         lines.append(f"   OK {count} skills -> {skills_dst}")
+    lines.extend(warnings)
 
     lines.extend(
         materialize_hermes_scripts(plugin_root / "scripts", hermes_home / "scripts")
     )
     return lines
+
+
+def _read_lifecycle_plan_id(project_root: Path) -> str:
+    path = project_root / ".hermes" / "kanban" / "logs" / "lifecycle_plan_id"
+    if path.is_file():
+        return path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def _reconcile_kanban_crons(
+    project_root: Path,
+    plugin_root: Path,
+    plan_id: str,
+    *,
+    log: list[str] | None = None,
+) -> bool:
+    """Create/check wave crons after dashboard Save when lifecycle notify is on."""
+    out = log if log is not None else []
+    cron_script = plugin_root / "scripts" / "provision_kanban_crons.sh"
+    if not cron_script.is_file():
+        cron_script = project_root / "scripts" / "provision_kanban_crons.sh"
+    if not cron_script.is_file():
+        out.append("   !  provision_kanban_crons.sh not found — skip cron reconcile")
+        return False
+    bash = "bash"
+    create_cmd = [bash, str(cron_script), "--create"]
+    if plan_id:
+        create_cmd.extend(["--plan-id", plan_id])
+    check_cmd = [bash, str(cron_script), "--check"]
+    try:
+        create = subprocess.run(
+            create_cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            cwd=str(project_root),
+        )
+        if create.stdout.strip():
+            out.append(create.stdout.strip())
+        if create.returncode != 0:
+            detail = (create.stderr or create.stdout).strip()[:200]
+            out.append(f"   !  cron --create failed (exit {create.returncode}): {detail}")
+            return False
+        check = subprocess.run(
+            check_cmd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+            cwd=str(project_root),
+        )
+        if check.stdout.strip():
+            out.append(check.stdout.strip())
+        if check.returncode != 0:
+            detail = (check.stderr or check.stdout).strip()[:200]
+            out.append(f"   !  cron --check failed (exit {check.returncode}): {detail}")
+            return False
+        out.append("   OK Lifecycle crons reconciled (create + check)")
+        return True
+    except subprocess.TimeoutExpired:
+        out.append("   !  cron reconcile timed out")
+        return False
 
 
 def _check_plugin_git_status(*, fetch: bool = True) -> dict:
@@ -989,17 +1057,18 @@ def _execute_init(body: dict, output: list[str]) -> dict:
     # Materialize skills
     skills_src = resolve_plugin_skills_src(DEFAULT_PLUGIN_NAME)
     skills_dst = hermes_home / "skills" / "kanban-advanced"
-    count = 0
-    if skills_src.is_dir():
-        for child in sorted(skills_src.iterdir()):
-            skill_md = child / "SKILL.md"
-            if child.is_dir() and skill_md.exists():
-                dst_dir = skills_dst / child.name
-                dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(read_utf8_text(skill_md), encoding="utf-8")
-                count += 1
-        output.append(f"   OK {count} skills -> {skills_dst}")
-    else:
+    data_refs = plugin_root / "plugin" / "data" / "references"
+    skill_count, skill_warnings = materialize_skills_with_preservation(
+        skills_src,
+        skills_dst,
+        materialize_skill_dir=materialize_skill_dir,
+        bundle_data_references=data_refs,
+        log=output.append,
+    )
+    if skill_count:
+        output.append(f"   OK {skill_count} skills -> {skills_dst}")
+    output.extend(skill_warnings)
+    if not skill_count:
         output.append(f"   X Skills not found at {skills_src}")
 
     # Reconcile profiles: rename → seed role-only skills → verify (+ fix retry)
@@ -1102,6 +1171,11 @@ def _execute_save(body: dict, output: list[str]) -> dict:
         notify_lifecycle = normalize_notify_lifecycle(body.get("notify_lifecycle"))
     else:
         notify_lifecycle = resolve_notify_lifecycle(project_root, config=config)
+    prior_notify_lifecycle = resolve_notify_lifecycle(project_root, config=config)
+    lifecycle_toggle_changed = (
+        "notify_lifecycle" in body
+        and notify_lifecycle != prior_notify_lifecycle
+    )
     merged_config = dict(config)
     if "notify_deliver" in body:
         deliver_override = normalize_notify_deliver(body.get("notify_deliver"))
@@ -1191,16 +1265,17 @@ def _execute_save(body: dict, output: list[str]) -> dict:
 
     skills_src = resolve_plugin_skills_src(DEFAULT_PLUGIN_NAME)
     skills_dst = hermes_home / "skills" / "kanban-advanced"
-    count = 0
-    if skills_src.is_dir():
-        for child in sorted(skills_src.iterdir()):
-            skill_md = child / "SKILL.md"
-            if child.is_dir() and skill_md.exists():
-                dst_dir = skills_dst / child.name
-                dst_dir.mkdir(parents=True, exist_ok=True)
-                (dst_dir / "SKILL.md").write_text(read_utf8_text(skill_md), encoding="utf-8")
-                count += 1
-        output.append(f"   OK {count} skills -> {skills_dst}")
+    data_refs = plugin_root / "plugin" / "data" / "references"
+    skill_count, skill_warnings = materialize_skills_with_preservation(
+        skills_src,
+        skills_dst,
+        materialize_skill_dir=materialize_skill_dir,
+        bundle_data_references=data_refs,
+        log=output.append,
+    )
+    if skill_count:
+        output.append(f"   OK {skill_count} skills -> {skills_dst}")
+    output.extend(skill_warnings)
 
     worker_profile, orchestrator_profile = dispatch_profile_names(config)
     reconcile_dispatch_profiles(
@@ -1213,6 +1288,11 @@ def _execute_save(body: dict, output: list[str]) -> dict:
         force=True,
         log=output.append,
     )
+
+    if notify_lifecycle and (lifecycle_toggle_changed or "notify_deliver" in body):
+        plan_id = _read_lifecycle_plan_id(project_root)
+        output.append("=== Reconciling lifecycle crons ===")
+        _reconcile_kanban_crons(project_root, plugin_root, plan_id, log=output)
 
     output.append("OK Settings saved")
     _invalidate_status_cache()

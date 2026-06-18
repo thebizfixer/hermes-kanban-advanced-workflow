@@ -65,7 +65,7 @@ from .profile_bootstrap import (
     materialize_skill_dir,
     reconcile_dispatch_profiles,
 )
-from .script_materialize import materialize_hermes_scripts
+from .script_materialize import materialize_hermes_scripts, materialize_skills_with_preservation
 from .worktree_provision import ensure_worktreeinclude
 
 logger = logging.getLogger(__name__)
@@ -489,21 +489,19 @@ def _handle_init(args) -> int:
     print("2a. Materializing skills...")
     skills_src = resolve_plugin_skills_src()
     skills_dst = hermes_home / "skills" / "kanban-advanced"
-    count = 0
-    if skills_src.is_dir():
-        for child in sorted(skills_src.iterdir()):
-            skill_md = child / "SKILL.md"
-            if child.is_dir() and skill_md.exists():
-                data_refs = PLUGIN_ROOT / "plugin" / "data" / "references"
-                bundle = data_refs if child.name == "kanban-advanced" else None
-                materialize_skill_dir(
-                    child,
-                    skills_dst / child.name,
-                    bundle_data_references=bundle,
-                )
-                count += 1
+    data_refs = PLUGIN_ROOT / "plugin" / "data" / "references"
+    count, skill_warnings = materialize_skills_with_preservation(
+        skills_src,
+        skills_dst,
+        materialize_skill_dir=materialize_skill_dir,
+        bundle_data_references=data_refs,
+        log=print,
+    )
+    if count:
         print(f"   OK {count} skills -> {skills_dst}")
-    else:
+    for line in skill_warnings:
+        print(line)
+    if not count:
         print(f"   X Skills not found at {skills_src}")
         return 1
 

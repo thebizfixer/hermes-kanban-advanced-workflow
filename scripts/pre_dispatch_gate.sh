@@ -87,6 +87,14 @@ check "plan_memory" \
 check "kanban_db" \
   "python3 -c \"import sqlite3; db=sqlite3.connect('${HERMES_HOME}/kanban.db'); assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'\""
 
+if [[ -n "$PLAN_REL" && -f "${BUNDLE_PATH}/scripts/validate_card_bodies.py" ]]; then
+  check "card_bodies_fidelity" \
+    "python3 ${BUNDLE_PATH}/scripts/validate_card_bodies.py --plan '${PLAN_REL}' --repo-root '${REPO_ROOT}'"
+elif [[ -n "$PLAN_ID" && -f "${BUNDLE_PATH}/scripts/validate_card_bodies.py" ]]; then
+  check "card_bodies_fidelity" \
+    "python3 ${BUNDLE_PATH}/scripts/validate_card_bodies.py --plan-id '${PLAN_ID}' --repo-root '${REPO_ROOT}'"
+fi
+
 check "cron_scripts" \
   "test -x ${HERMES_HOME}/scripts/auto_unblock.sh && test -x ${HERMES_HOME}/scripts/board_keeper.sh && test -x ${HERMES_HOME}/scripts/worktree_setup.sh"
 
@@ -95,6 +103,11 @@ check "cron_hermes_path" \
 
 warn "gateway_running" \
   "hermes cron status 2>&1 | grep -qiE 'running|active'"
+
+if [[ -f "${BUNDLE_PATH}/scripts/cycle_detector.py" ]]; then
+  check "cycle_detect" \
+    "python3 ${BUNDLE_PATH}/scripts/cycle_detector.py --plan-id '${PLAN_ID}' --repo-root '${REPO_ROOT}'"
+fi
 
 echo ""
 echo "[GATE] Result: $FAILURES failures, $WARNINGS warnings"
@@ -136,3 +149,6 @@ if [[ -f "${PLAN_MEMORY_PATH}/${PLAN_ID}.json" ]]; then
 fi
 
 echo "[GATE] PASSED — proceed to decomposition"
+python3 "${BUNDLE_PATH}/scripts/lib/orchestrator_token_checkpoint.py" \
+  --plan-id "${PLAN_ID}" \
+  --checkpoint pre-dispatch-gate-pass 2>/dev/null || true

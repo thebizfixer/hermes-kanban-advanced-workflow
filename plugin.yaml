@@ -15,6 +15,7 @@ provides_skills:
   - kanban-reconciliation
   - kanban-worker
   - kanban-worker-governance
+  - kanban-git
 provides_hooks:
   - on_session_start
   - post_tool_call

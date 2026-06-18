@@ -35,8 +35,8 @@ After final audit passes, the agent prompts at each stage:
 | Agent prompts                                                          | You say                | Agent does                                                                      |
 | ---------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------- |
 | *"Final audit complete. Proceed to reconciliation?"*                   | `"Yes"` / `"Proceed"`  | File-level compliance, token burn report, failure-mode taxonomy                 |
-| *"Reconciliation complete. Ready to clean up?"*                        | `"Yes"` / `"Clean up"` | Archives board, removes wave crons, cleans worktrees                            |
-| *"Cleanup complete. Ready for post-mortem report?"*                    | `"Yes"` / `"Proceed"`  | Generates postmortem with timeline, KPIs, failure taxonomy, lessons learned     |
+| *"Reconciliation complete. Proceed to postmortem?"*                    | `"Yes"` / `"Proceed"`  | Generates postmortem + KPI JSON from `kanban.db` (before archive)               |
+| *"Postmortem complete. Proceed to cleanup?"*                             | `"Yes"` / `"Clean up"` | Archives board, removes wave crons, cleans worktrees                            |
 
 You can say `"No"` or `"Wait"` at any checkpoint — the agent holds state and resumes when you're ready.
 

@@ -281,4 +281,15 @@ def verification_deploy_attested(repo_root: Path, plan_id: str, card_key: str) -
         data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return False
-    return bool(data.get("plan_id")) and bool(data.get("card_key") or data.get("card"))
+    pid = str(data.get("plan_id", "")).strip()
+    ck = str(data.get("card_key") or data.get("card") or "").strip()
+    if not pid or not ck:
+        return False
+    if plan_id and pid != plan_id:
+        return False
+    if card_key and ck != card_key:
+        return False
+    for field in ("attested_at", "operator", "evidence"):
+        if not str(data.get(field, "")).strip():
+            return False
+    return True

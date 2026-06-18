@@ -51,6 +51,45 @@ class TestGeneratePostmortem(unittest.TestCase):
             self.assertEqual(ids, {"t_a", "t_b"})
             self.assertTrue(any("plan memory" in n for n in notes))
 
+    def test_load_task_history_treats_archived_as_terminal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            mem_dir = root / ".hermes" / "kanban" / "memory"
+            mem_dir.mkdir(parents=True)
+            (mem_dir / "my-plan.json").write_text(
+                json.dumps({"task_ids": ["t_a", "t_b"]}),
+                encoding="utf-8",
+            )
+            db = root / "kanban.db"
+            conn = sqlite3.connect(db)
+            conn.execute(
+                "CREATE TABLE tasks (id TEXT, title TEXT, status TEXT, body TEXT, plan_id TEXT)"
+            )
+            conn.execute(
+                "INSERT INTO tasks VALUES (?,?,?,?,?)",
+                ("t_a", "A", "archived", "plan_id: my-plan", "my-plan"),
+            )
+            conn.execute(
+                "INSERT INTO tasks VALUES (?,?,?,?,?)",
+                ("t_b", "B", "done", "plan_id: my-plan", "my-plan"),
+            )
+            conn.commit()
+            conn.close()
+
+            tasks, notes = pm.load_task_history(db, "my-plan", root)
+            self.assertEqual(len(tasks), 2)
+            kpi = pm.build_kpi_json(
+                plan_id="my-plan",
+                tasks=tasks,
+                token_entries=[],
+                intervention_count=0,
+                intervention_log=[],
+                scope_violations=[],
+            )
+            self.assertEqual(kpi["total_tasks"], 2)
+            self.assertEqual(kpi["success_rate"], 100.0)
+            self.assertTrue(any("archived" in n.lower() for n in notes))
+
     def test_build_kpi_json_writes_expected_keys(self) -> None:
         task = pm.TaskRecord(
             task_id="t_rem",

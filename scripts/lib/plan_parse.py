@@ -11,6 +11,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from card_body import normalize_file_path, sanitize_tests_command  # noqa: E402
+
 _CARD_HEADING_RE = re.compile(r"^#### (Card \d+.*?)$", re.MULTILINE)
 _CARD_ORDINAL_RE = re.compile(r"^#### Card (\d+)", re.MULTILINE)
 _OPT_SECTION_RE = re.compile(
@@ -49,7 +51,6 @@ _RELAXED_PIN_RE = re.compile(
 _CONTRACT_ENTRY_RE = re.compile(r"^-\s*(?P<body>.+)$", re.MULTILINE)
 _FILES_LINE_RE = re.compile(r"^Files:\s*(.+)$", re.MULTILINE | re.IGNORECASE)
 _MARKDOWN_LINK_IN_FILES_RE = re.compile(r"\[`")
-_MODE_SUFFIX_RE = re.compile(r"\s*\((?:modify-only|read-only)\)\s*$", re.IGNORECASE)
 _MARKDOWN_LINK_PATH_RE = re.compile(r"^\[`([^`]+)`\]\([^)]+\)")
 
 
@@ -161,7 +162,7 @@ def _extract_markdown_files(block: str) -> list[str]:
     raw = m.group(1).strip()
     files: list[str] = []
     for part in re.split(r",\s*", raw):
-        path = _normalize_file_path(part)
+        path = normalize_file_path(part)
         if path:
             files.append(path)
     return files
@@ -172,23 +173,15 @@ def extract_files_from_text(text: str) -> list[str]:
     for m in re.finditer(r"\*\*Files:\*\*\s*(.+)", text, re.IGNORECASE):
         raw = m.group(1).strip()
         for part in re.split(r",\s*", raw):
-            path = _normalize_file_path(part)
+            path = normalize_file_path(part)
             if path and path not in files:
                 files.append(path)
     return files
 
 
 def _normalize_file_path(path: str) -> str:
-    raw = path.strip().strip("`").strip().rstrip(".").rstrip(",")
-    link = _MARKDOWN_LINK_PATH_RE.match(raw)
-    if link:
-        raw = link.group(1).strip()
-    raw = _MODE_SUFFIX_RE.sub("", raw).strip()
-    if "@L" in raw.upper():
-        raw = re.split(r"@L\d+", raw, maxsplit=1, flags=re.IGNORECASE)[0].strip()
-    if "::" in raw:
-        raw = raw.split("::", 1)[0].strip()
-    return raw
+    """Backward-compatible alias — prefer normalize_file_path from card_body."""
+    return normalize_file_path(path)
 
 
 def parse_anchor_body(
@@ -647,6 +640,8 @@ def parse_card_block(block: str) -> dict | None:
         files = extract_files_from_block(block)
     mode = _extract_field(block, r"mode:\s*(.+)") or extract_markdown_field(block, "Mode")
     tests = _extract_field(block, r"tests:\s*(.+)") or extract_markdown_field(block, "Tests")
+    if tests:
+        tests = sanitize_tests_command(tests)
     commit = _extract_field(block, r'commit:\s*"?(.+?)"?\s*$')
     estimated_lines = _extract_field(block, r"estimated_lines:\s*(\d+)")
     wave = _extract_field(block, r"wave:\s*(\d+)")

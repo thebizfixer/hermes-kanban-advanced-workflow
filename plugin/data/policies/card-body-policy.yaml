@@ -100,6 +100,12 @@ rules:
     reason: "Dependent cards must include Parent-branches: for kanban-git integration merge."
     error_code: P013_MISSING_PARENT_BRANCHES
 
+  - name: require-valid-tests-line
+    condition: "Tests: line is malformed (shlex or parentheses)"
+    action: deny
+    reason: "Tests: must be valid shell after stripping trailing parenthetical comments."
+    error_code: P014_TESTS_LINE_MALFORMED
+
 profiles:
   advisory:
     default_action: allow

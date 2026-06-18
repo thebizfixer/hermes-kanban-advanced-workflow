@@ -190,7 +190,7 @@ def step_1_file_compliance(
         if mb.returncode == 0 and mb.stdout.strip():
             mb_range = f"{mb.stdout.strip()}..HEAD"
             mb_result = subprocess.run(
-                ["git", "diff", "--stat", mb_range],
+                ["git", "diff", "--stat=200", mb_range],
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
@@ -205,7 +205,7 @@ def step_1_file_compliance(
             return True, None
 
     result = subprocess.run(
-        ["git", "diff", "--stat", diff_range],
+        ["git", "diff", "--stat=200", diff_range],
         capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         cwd=workspace,
@@ -271,6 +271,34 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
         # Log scope violations for postmortem reconciliation
         _log_scope_violations(task_id, unlisted, workspace)
         return True, None
+    return True, None
+
+
+def step_impl_before_test(
+    files: List[str], card_body: str, workspace: str, baseline: str
+) -> Tuple[bool, Optional[str]]:
+    """Block test-only card when Spec references production file with zero diff (unless TDD: allowed)."""
+    if re.search(r"TDD:\s*allowed", card_body, re.I):
+        return True, None
+    norm = [f.replace("\\", "/") for f in (files or []) if f]
+    if not norm or not all("test" in f.lower() for f in norm):
+        return True, None
+    _lib_fa = os.path.join(os.path.dirname(__file__), "lib")
+    if _lib_fa not in sys.path:
+        sys.path.insert(0, _lib_fa)
+    from final_audit import file_has_diff, git_changed_paths  # noqa: E402
+
+    changed = git_changed_paths(baseline, Path(workspace))
+    for m in re.finditer(r"`([^`]+\.(?:py|ts|tsx|js|sh))`", card_body):
+        ref = m.group(1).replace("\\", "/")
+        if "test" in ref.lower() or ref in norm:
+            continue
+        full = Path(workspace) / ref
+        if not full.is_file():
+            continue
+        if ref not in changed and not file_has_diff(ref, baseline, Path(workspace)):
+            print(f"[E003] impl_before_test_missing: {ref} referenced but no diff")
+            return False, "E003_IMPL_BEFORE_TEST_MISSING"
     return True, None
 
 
@@ -478,7 +506,7 @@ def step_6_zero_output(
         return True, None
     diff_range = _diff_range(baseline, workspace)
     result = subprocess.run(
-        ["git", "diff", "--stat", diff_range],
+        ["git", "diff", "--stat=200", diff_range],
         capture_output=True, text=True,
         encoding="utf-8", errors="replace",
         cwd=workspace,
@@ -591,7 +619,9 @@ def run_chain(task_id: str, workspace: str, card_body: str,
         card_key = _card_key_from_body(card_body, task_id)
         from presentation_acceptance import verification_deploy_attested  # noqa: E402
 
-        if plan_id and not verification_deploy_attested(Path(workspace), plan_id, card_key):
+        if not plan_id:
+            return False, "verification_deploy_requires_plan_id"
+        if not verification_deploy_attested(Path(workspace), plan_id, card_key):
             return False, "verification_deploy_requires_attestation"
         if parsed.get("tests"):
             ok, err = step_3_tests_pass(parsed["tests"], workspace, parsed.get("files") or [])
@@ -661,6 +691,12 @@ def run_chain(task_id: str, workspace: str, card_body: str,
             card_body=card_body, working_branch=working_branch,
         )),
         ("Unlisted changes", lambda: step_2_unlisted_changes(parsed["files"], baseline, workspace, task_id)),
+        (
+            "Impl before test (E003)",
+            lambda: step_impl_before_test(
+                parsed.get("files") or [], card_body, workspace, baseline
+            ),
+        ),
         ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace, parsed.get("files") or [])),
         ("Presentation acceptance (E028/E029)", presentation_step),
         ("Commit match", lambda: step_4_commit_match(parsed["commit"], workspace)),

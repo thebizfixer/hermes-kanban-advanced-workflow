@@ -71,10 +71,15 @@ def parse_args():
     p.add_argument("--plan", help="Path to the optimized plan file (markdown)")
     p.add_argument("--cards-yaml", help="Path to structured cards YAML file (preferred)")
     p.add_argument("--dry-run", action="store_true", help="Parse and print cards, don't create")
-    p.add_argument("--no-crons", action="store_true", help="Skip cron creation")
+    p.add_argument("--no-crons", action="store_true", help="Skip cron check (handoff path)")
+    p.add_argument(
+        "--provision-crons",
+        action="store_true",
+        help="Create wave crons (manual orchestrator decomposition without handoff)",
+    )
     p.add_argument("--json", action="store_true", help="Machine-readable JSON output")
-    p.add_argument("--gate-id", help="Reuse an existing gate card ID instead of auto-creating one "
-                                     "(pass when orchestrator SOP already created the gate)")
+    p.add_argument("--archive-prior", action="store_true",
+                   help="Archive non-running plan cards before decompose (exit 7 if any running)")
     p.add_argument("--stagger-ms", type=int, default=1500,
                    help="Millis between card creates (default: 1500)")
     p.add_argument("--pause-every", type=int, default=5,
@@ -372,6 +377,47 @@ def find_existing_plan_cards(plan_id: str, card_keys: list[str]) -> dict[str, st
     return existing
 
 
+def archive_prior_plan_cards(plan_id: str) -> tuple[bool, str, list[str]]:
+    """Archive all non-running cards for plan_id. Refuse when any card is running."""
+    if not plan_id:
+        return True, "", []
+    out, _, rc = hermes("kanban", "list")
+    if rc != 0:
+        return False, "hermes kanban list failed", []
+    running: list[str] = []
+    to_archive: list[str] = []
+    for line in out.splitlines():
+        parts = line.split()
+        if not parts or not parts[0].startswith("t_"):
+            continue
+        tid = parts[0]
+        detail, _, _ = hermes("kanban", "show", tid)
+        if f"plan_id: {plan_id}" not in detail and f"plan_id:{plan_id}" not in detail.replace(" ", ""):
+            continue
+        status = ""
+        for row in detail.splitlines():
+            if row.strip().startswith("status:"):
+                status = row.split(":", 1)[1].strip().lower()
+                break
+        if status == "running":
+            running.append(tid)
+        else:
+            to_archive.append(tid)
+    if running:
+        return (
+            False,
+            f"Cannot archive-prior: running card(s) for {plan_id}: {', '.join(running)}",
+            [],
+        )
+    archived: list[str] = []
+    for tid in to_archive:
+        _, err, arc = hermes("kanban", "archive", tid)
+        if arc != 0:
+            return False, f"archive {tid} failed: {err[:200]}", archived
+        archived.append(tid)
+    return True, f"Archived {len(archived)} card(s) for {plan_id}", archived
+
+
 def verify_links(card_map: dict[str, str], cards: list[dict]) -> list[str]:
     """Verify all declared dependencies have corresponding links."""
     errors = []
@@ -429,7 +475,7 @@ def _normalize_card_assignee(card: dict, worker: str, orchestrator: str) -> None
     if assignee in ("worker", worker) or (not assignee and card_type == "code-gen"):
         card["assignee"] = worker
     elif assignee in ("orchestrator", orchestrator) or card_type in (
-        "root", "gate", "audit", "manual"
+        "root", "gate", "audit", "manual", "verification-deploy"
     ):
         card["assignee"] = orchestrator
     elif not assignee:
@@ -485,6 +531,23 @@ def main():
         plan_text = load_plan_text(args.plan)
         for warning in integration_verify_warnings(all_cards, plan_text):
             print(f"WARN: {warning}", file=sys.stderr)
+        from lib.card_body_fidelity import (  # noqa: E402
+            _fmt_violation,
+            validate_parsed_cards,
+        )
+
+        fidelity = validate_parsed_cards(
+            plan_path=Path(args.plan),
+            plan_text=plan_text,
+            cards=all_cards,
+            repo_root=project_root,
+            plan_id=plan_id,
+            profile="advisory" if args.dry_run else "balanced",
+        )
+        for v in fidelity:
+            print(_fmt_violation(v), file=sys.stderr)
+        if not args.dry_run and any(v.severity == "block" for v in fidelity):
+            sys.exit(1)
     for card in all_cards:
         if plan_file_rel and "plan_file:" not in card.get("body", ""):
             card["body"] = f"plan_file: {plan_file_rel}\ncard_key: {card.get('key', '')}\n{card['body']}"
@@ -494,17 +557,25 @@ def main():
     if not args.dry_run and plan_id:
         dupes = find_existing_plan_cards(plan_id, [c["key"] for c in impl_cards])
         if dupes:
-            print(
-                f"ERROR: plan_id '{plan_id}' already has cards on board: "
-                + ", ".join(f"{k}={v}" for k, v in sorted(dupes.items())),
-                file=sys.stderr,
-            )
-            print(
-                "Archive the prior board or pass --gate-id to reuse the gate. "
-                "Do not decompose twice without archiving.",
-                file=sys.stderr,
-            )
-            sys.exit(7)
+            if args.archive_prior:
+                ok, msg, archived = archive_prior_plan_cards(plan_id)
+                print(msg, file=sys.stderr)
+                if not ok:
+                    print(f"ERROR: {msg}", file=sys.stderr)
+                    sys.exit(7)
+                dupes = find_existing_plan_cards(plan_id, [c["key"] for c in impl_cards])
+            if dupes:
+                print(
+                    f"ERROR: plan_id '{plan_id}' already has cards on board: "
+                    + ", ".join(f"{k}={v}" for k, v in sorted(dupes.items())),
+                    file=sys.stderr,
+                )
+                print(
+                    "Archive the prior board, pass --archive-prior, or pass --gate-id to reuse the gate. "
+                    "Do not decompose twice without archiving.",
+                    file=sys.stderr,
+                )
+                sys.exit(7)
 
     # Auto-generate gate card (every board needs one)
     gate_card = {
@@ -736,25 +807,34 @@ def main():
     print(f"")
     print(f"  Do NOT unblock the gate — complete it. Completing triggers wave promotion.")
 
-    # ── Step 6: Create crons (optional) ──
+    # ── Step 6: Cron health (check by default; create only with --provision-crons) ──
     plan_id_for_cron = parsed.get("plan_id", "")
     if not plan_id_for_cron and args.plan:
         plan_id_for_cron = Path(args.plan).stem.replace(".plan", "")
     if not args.no_crons:
-        print(f"\n=== Step 6: Create auto-unblock + board-keeper crons ===")
         cron_script = Path(__file__).resolve().parent / "provision_kanban_crons.sh"
-        cron_cmd = ["bash", str(cron_script), "--create"]
-        if plan_id_for_cron:
-            cron_cmd.extend(["--plan-id", plan_id_for_cron])
-        if args.dry_run:
-            cron_cmd.append("--dry-run")
+        if args.provision_crons:
+            print(f"\n=== Step 6: Create auto-unblock + board-keeper crons ===")
+            cron_cmd = ["bash", str(cron_script), "--create"]
+            if plan_id_for_cron:
+                cron_cmd.extend(["--plan-id", plan_id_for_cron])
+            if args.dry_run:
+                cron_cmd.append("--dry-run")
+        else:
+            print(f"\n=== Step 6: Verify wave crons (pre-provisioned at handoff) ===")
+            cron_cmd = ["bash", str(cron_script), "--check"]
         result = subprocess.run(cron_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.stdout:
             print(result.stdout.rstrip())
         if result.stderr:
             print(result.stderr.rstrip(), file=sys.stderr)
         if result.returncode != 0 and not args.dry_run:
-            sys.exit("Cron provisioning failed — fix gateway/hermes cron and retry")
+            if args.provision_crons:
+                sys.exit("Cron provisioning failed — fix gateway/hermes cron and retry")
+            sys.exit(
+                "Wave crons check failed — default profile must run kanban_handoff.py "
+                "(provisions crons) or re-run: provision_kanban_crons.sh --create --check"
+            )
 
     # ── Output ──
     print(f"\n=== Summary ===")
@@ -767,6 +847,16 @@ def main():
             len(impl_cards),
             {k: v for k, v in card_ids.items() if k not in ("gate", "root", "audit")},
         )
+        try:
+            from lib.orchestrator_token_checkpoint import maybe_log_orchestrator_checkpoint  # noqa: E402
+
+            maybe_log_orchestrator_checkpoint(
+                plan_id_for_cron,
+                "decompose-complete",
+                note=f"{len(impl_cards)} impl cards",
+            )
+        except Exception:
+            pass
     if args.json:
         print(json.dumps({"gate": gate_id, "cards": card_ids}, indent=2))
     else:

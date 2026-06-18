@@ -32,7 +32,7 @@ In **walk-away mode**, you run the full pipeline unattended and **notify only fo
    - Cross-task consistency (merge conflicts, line counts)
    - Push + monitor CI until green
 
-8. **Reconciliation + cleanup + postmortem.** After audit: reconcile skills/README, run cleanup (archive board, remove crons), **then generate the postmortem report** so cleanup costs are included in the totals.
+8. **Reconciliation → postmortem → cleanup.** After audit: reconcile skills/README and token burn, **generate the postmortem report before archiving** (same order as `kanban_walk_away_post_exec.sh`), then cleanup (archive board, remove crons).
 
 ## Anti-temptation rules
 
@@ -46,7 +46,7 @@ In **walk-away mode**, you run the full pipeline unattended and **notify only fo
 ## Walk-away workflow (end-to-end)
 
 ```
-plan → optimize → preflight → decompose → execute → verify → audit → reconcile → cleanup → postmortem
+plan → optimize → preflight → decompose → execute → verify → audit → reconcile → postmortem → cleanup
 ```
 
 **Operator leaves after "walk away"** — you own every step until the postmortem is written. Routine progress stays silent; gateway notify fires only for intervention triggers (see `kanban-advanced:kanban-notify`).
@@ -191,7 +191,7 @@ When the operator says **"walk away"**, **"run unattended"**, or leaves after pr
 3. **Confirm notification channel** — gateway reachable; test delivery if unsure
 4. **Replace tmux watch with walk-away cron** — 5-minute recurring job monitors heartbeats, staleness, and intervention triggers (see `kanban-advanced:kanban-orchestrator` § Walk-away monitoring)
 5. **Tell the operator** what will trigger a notify vs what runs silently
-6. On **plan complete** (final audit done): when `walk_away_mode: true`, `board_keeper` runs `kanban_walk_away_post_exec.sh`; otherwise orchestrator checkpoints for reconciliation → cleanup → postmortem
+6. On **plan complete** (final audit done): when `walk_away_mode: true`, `board_keeper` runs `kanban_walk_away_post_exec.sh`; otherwise orchestrator checkpoints for reconciliation → postmortem → cleanup
 
 ```bash
 # Walk-away monitoring cron (example — adjust path to your Hermes home)
@@ -208,7 +208,7 @@ After final audit and reconciliation, **before** archiving tasks:
 python hermes-kanban-advanced-workflow/scripts/generate_postmortem.py --plan-id <plan_id> --output .hermes/kanban/reports/
 ```
 
-The postmortem is the learning artifact for the next plan (8 sections per `kanban-advanced:kanban-postmortem`). Run `kanban-advanced:kanban-cleanup` first (archive, remove crons, kill tmux) so cleanup tokens are counted, then generate the postmortem report.
+The postmortem is the learning artifact for the next plan (8 sections per `kanban-advanced:kanban-postmortem`). Generate it **before** `kanban-advanced:kanban-cleanup` archives the board — metrics come from `kanban.db` and token JSONL (`archived` tasks remain in the DB and count as terminal). Then run cleanup (archive, remove crons, kill tmux).
 
 ## Final audit checklist
 

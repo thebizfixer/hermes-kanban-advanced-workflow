@@ -196,6 +196,59 @@ def recover_e029_presentation_a11y(task_id: str, workspace: str, registry: dict)
     )
 
 
+def salvage_worktree_branch(
+    repo_root: str,
+    *,
+    task_id: str = "",
+    durability_branch: str = "",
+) -> bool:
+    """Salvage orphaned worktree commits via reflog or origin (gateway restart / prune)."""
+    root = Path(repo_root)
+    candidates: list[str] = []
+    if task_id:
+        candidates.append(f"wt/{task_id}")
+    if durability_branch:
+        candidates.append(durability_branch)
+    salvaged = False
+    for branch in candidates:
+        reflog = subprocess.run(
+            ["git", "reflog", "show", branch, "-n", "5", "--format=%H %gs"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(root),
+        )
+        if reflog.returncode == 0 and reflog.stdout.strip():
+            head = reflog.stdout.strip().splitlines()[0].split()[0]
+            subprocess.run(
+                ["git", "branch", "-f", branch, head],
+                cwd=str(root),
+                capture_output=True,
+            )
+            print(f"[recover] Salvaged {branch} from reflog ({head[:8]})")
+            salvaged = True
+            continue
+        remote = subprocess.run(
+            ["git", "ls-remote", "--heads", "origin", branch],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(root),
+        )
+        if remote.stdout.strip():
+            sha = remote.stdout.split()[0]
+            subprocess.run(
+                ["git", "branch", "-f", branch, sha],
+                cwd=str(root),
+                capture_output=True,
+            )
+            print(f"[recover] Restored {branch} from origin ({sha[:8]})")
+            salvaged = True
+    return salvaged
+
+
 def recover_e011_cross_mount(task_id: str, workspace: str, registry: dict):
     """E011: Cross-mount filesystem."""
     print("[recover] E011: Cross-mount filesystem detected.")
@@ -297,7 +350,8 @@ if __name__ == "__main__":
     parser.add_argument("--list", action="store_true", help="List all known recovery actions")
     parser.add_argument("--workspace", default=os.getcwd(), help="Repo root / worktree path")
     parser.add_argument("--registry", default="", help="Path to error-codes.yaml")
-    parser.add_argument("--recovery-dir", default="", help="Recovery state directory")
+    parser.add_argument("--salvage-branch", action="store_true", help="Salvage wt/* or durability branch via reflog")
+    parser.add_argument("--durability-branch", default="", help="kanban/{plan_id}/{card_key} for --salvage-branch")
     args = parser.parse_args()
 
     repo_root = args.workspace
@@ -319,6 +373,14 @@ if __name__ == "__main__":
     if args.cascade:
         triage_cascade(recovery_dir, registry)
         sys.exit(0)
+
+    if args.salvage_branch:
+        ok = salvage_worktree_branch(
+            repo_root,
+            task_id=args.task_id,
+            durability_branch=args.durability_branch,
+        )
+        sys.exit(0 if ok else 1)
 
     if not args.task_id or not args.error_code:
         parser.print_help()

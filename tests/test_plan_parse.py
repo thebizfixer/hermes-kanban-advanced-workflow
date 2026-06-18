@@ -64,7 +64,7 @@ Anchor: backend/app/services/bar.py::load@L42
 
 #### Card 2 — example
 files:
-  - backend/app/services/tinyfish_sample_quality.py
+  - backend/app/services/example_sample_quality.py
 
 ```agent
 Anchor: helper at L100
@@ -72,7 +72,7 @@ Anchor: helper at L100
 """
         anchors = pp.extract_anchors(text)
         self.assertEqual(len(anchors), 1)
-        self.assertEqual(anchors[0].file, "backend/app/services/tinyfish_sample_quality.py")
+        self.assertEqual(anchors[0].file, "backend/app/services/example_sample_quality.py")
         self.assertEqual(anchors[0].line, 100)
 
     def test_extract_anchors_plain_files_with_anchor_line(self) -> None:

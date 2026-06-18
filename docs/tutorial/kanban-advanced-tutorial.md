@@ -251,7 +251,7 @@ hermes kanban dispatch --daemon
 hermes kanban watch          # live events
 ```
 
-The three scanner cards dispatch in parallel. As each completes, the auto-unblock cron (provisioned at **decomposition** via `provision_kanban_crons.sh`, removed at cleanup) detects that WS4's parents are done and promotes the formatter to `ready`. The worker runs the evaluation chain on every card — deterministic checks that include file compliance, tests, token exactness, and more:
+The three scanner cards dispatch in parallel. As each completes, the auto-unblock cron (provisioned at **execute/handoff** via `kanban_handoff.py` → `provision_kanban_crons.sh --create`; orchestrator decomposition verifies with `--check` only; removed at cleanup) detects that WS4's parents are done and promotes the formatter to `ready`. The worker runs the evaluation chain on every card — deterministic checks that include file compliance, tests, token exactness, and more:
 
 1. Every file in `Files:` was actually changed
 2. No files outside `Files:` were modified
@@ -270,11 +270,11 @@ The three scanner cards dispatch in parallel. As each completes, the auto-unbloc
 
 ### Why reconciliation and cleanup matter
 
-All four cards complete. The dashboard works. We could stop here — but the next two steps are where the compound effect lives. Every plan you reconcile feeds the next one. Cleanup archives the board and captures the final token costs. The postmortem that follows includes those cleanup costs, so your totals are complete. Skip these steps now and you'll skip them on a ten-card plan when something actually fails.
+All four cards complete. The dashboard works. We could stop here — but the next steps are where the compound effect lives. Every plan you reconcile feeds the next one. Postmortem runs **before** archive so task history in `kanban.db` is intact; cleanup then archives the board and removes crons. Building the habit on a successful plan means you won't skip it when a ten-card plan actually fails.
 
 **Agent says:**
 
-> "The dashboard is built and working. But we're not done. Reconciliation checks compliance and shows what this cost. Cleanup archives the board so the postmortem includes those final token counts. Building the habit on a successful plan means you won't skip it when a plan actually fails. Say 'Yes' when the orchestrator prompts."
+> "The dashboard is built and working. But we're not done. Reconciliation checks compliance and shows what this cost. Postmortem captures KPIs while history is intact. Cleanup archives the board last. Same order as walk-away mode. Say 'Yes' when the orchestrator prompts."
 
 ---
 
@@ -288,23 +288,23 @@ File-level compliance checks, token burn report, failure-mode taxonomy.
 
 ---
 
-## Step 11: Cleanup
+## Step 11: Postmortem
 
-The orchestrator prompts: *"Reconciliation complete. Ready to clean up?"*
+The orchestrator prompts: *"Reconciliation complete. Proceed to postmortem?"*
+
+**You say:** "Yes"
+
+Structured retrospective with timeline, KPIs, and lessons learned. Generated **before** archive so metrics read from `kanban.db`.
+
+---
+
+## Step 12: Cleanup
+
+The orchestrator prompts: *"Postmortem complete. Proceed to cleanup?"*
 
 **You say:** "Yes"
 
 Board archived, cron jobs removed, worktrees cleaned.
-
----
-
-## Step 12: Postmortem
-
-The orchestrator prompts: *"Cleanup complete. Ready for post-mortem report?"*
-
-**You say:** "Yes"
-
-Structured retrospective with timeline, KPIs, and lessons learned. The postmortem includes the cost of cleanup itself, so your token totals are complete.
 
 ---
 

@@ -56,9 +56,11 @@ Without this, triage cards may be LLM-rewritten even when you intended manual de
 0.  VERIFY DB integrity         PRAGMA integrity_check → 'ok'
 1.  CREATE root card            create root, do not block (completed immediately)
 2.  CREATE gate → block         create gate, block immediately (<1s race window)
-3.  CREATE wave crons           bash scripts/provision_kanban_crons.sh --create --plan-id <id>
-4.  (kanban_decompose Step 6 also calls --create if orchestrator skipped Steps 3–5)
-5.  VERIFY wave crons            bash scripts/provision_kanban_crons.sh --check — gateway must run; wave crons deliver=local; lifecycle deliver=resolved home channel when notify_lifecycle enabled
+3.  VERIFY wave crons           bash scripts/provision_kanban_crons.sh --check
+                                 (Created at execute/handoff by kanban_handoff.py — default profile.
+                                  Re-create only if check fails: --create --plan-id <id> then --check.)
+4.  (kanban_decompose Step 6: --check default; handoff path passes --no-crons)
+5.  (reserved)
 6.  CREATE impl cards (stagger) create each card, block immediately; ≥1s stagger, 3s pause / 5 cards
                                  pass --gate-id to kanban_decompose.py to avoid duplicate gate
 7.  CREATE audit card           create + block (gates on all impl)
@@ -68,7 +70,7 @@ Without this, triage cards may be LLM-rewritten even when you intended manual de
 11. COMPLETE gate (orchestrator) validate passes → hermes kanban complete <gate_id>
 ```
 
-`kanban_decompose.py` implements steps 6–9 (pass `--gate-id` to skip re-creating the gate). Crons (steps 3–5) are **orchestrator-created before card creation** per `kanban-orchestrator` SKILL. Step 11 is **orchestrator-only** — not a human checkpoint.
+Crons (steps 3–5) are **provisioned at execute/handoff** by `kanban_handoff.py` in the default profile session; orchestrator decomposition **verifies** only (`--check`). Step 11 is **orchestrator-only** — not a human checkpoint.
 
 Manual orchestration may create root before gate (SKILL step order); both paths must **complete root** and use **block-on-create** for gate, impl, and audit.
 
@@ -100,17 +102,22 @@ Handoff body metadata (stamped by `kanban_handoff.py`):
 |-------|---------|
 | `BUNDLE_ROOT` | Absolute plugin checkout — runbook commands use `{BUNDLE_ROOT}/scripts/…` |
 | `gate_script` | Resolved `pre_dispatch_gate.sh` path (forensics for double-`lib/` incidents) |
-| `pre_dispatch_gate` | `PASSED …` when serial gate ran at build; `DEFERRED …` when parallel subagent gate is enabled (orchestrator runs Step 1 from runbook) |
+| `pre_dispatch_gate` | `PASSED` / `DEFERRED` / `FAILED` — orchestrator skips serial gate when `PASSED` |
 | `parallel_gate` | `enabled` or `disabled` — mirrors overlay `subagent_gate.enabled` at handoff build time |
 | `cards_yaml` | Structured decompose input when optimize/harden wrote `.hermes/kanban/memory/<plan_id>.yaml` (or plan-adjacent YAML) |
+| `notify_lifecycle` | Overlay snapshot at handoff build |
+| `walk_away_mode` | Overlay snapshot — orchestrator branches post-exec on stamped value |
+| `notify_deliver_resolved` | Resolved lifecycle/completion deliver slug |
+| `cron_provision` | `PASSED at {iso8601}` when `provision_kanban_crons --create/--check` ran in default profile session |
 
 Cards YAML convention: optimize/harden may write `{plan_memory_path}/{plan_id}.yaml` (default `.hermes/kanban/memory/`). Handoff discovers plan-adjacent YAML first, then plan memory.
 
 The builder is **idempotent** (one open `todo/ready/running/blocked` handoff per
 `plan_id`, plus a Hermes `--idempotency-key`) and checks its own preconditions before
 creating anything: orchestrator profile exists, `kanban.dispatch_in_gateway` is on,
-`kanban.auto_decompose` is off, and the gateway is running. It exits non-zero with a
-`fix` hint otherwise (use `--allow-offline` to create the card regardless). A manual
+`kanban.auto_decompose` is off, gateway is running, and **wave crons provision**
+(`provision_kanban_crons.sh --create/--check` in the default profile session). It exits non-zero with a
+`fix` hint otherwise (use `--allow-offline` to create the card regardless; exit **8** on cron failure). A manual
 `hermes -p kanban-advanced-orchestrator chat` session is the **fallback** when the gateway is
 unavailable — see `plugin/data/references/profile-switching.md`.
 

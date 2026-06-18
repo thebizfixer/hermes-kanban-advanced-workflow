@@ -107,11 +107,25 @@ Before Optimize completes:
 1. **One YAML todo → one surface or explicit checklist** — If a todo bundles pytest + operator script + deploy, split cards or numbered `Acceptance:` items.
 2. **`Call-sites:`** — `rg` all callers; list every path:symbol that must change.
 3. **`Files:` completeness** — `rg` helper symbols across repo; all subscriber-facing call sites in `Files:` or a follow-up card.
-4. **Verification taxonomy** — `verification-local` (pytest) vs `verification-deploy` (operator + deploy); never mark deploy todos `completed` on merge alone.
-5. **Same-file graph** — Cards touching the same production file: serialize via `wave_parent`, not parallel gate-only siblings.
-6. **Multi-parent cap** — Test/doc cards: max **2** production parents unless `Mode: read-only`.
-7. **Surface-slots** — Presentation plans declare `Surface-slots:` under `## Kanban optimization` (see `frontend-neutrality.md`).
-8. **Presentation acceptance** — Layout/motion work includes grep-verifiable `Acceptance (layout):` and `Acceptance (a11y):` in agent blocks when Spec mentions DOM order, fade, or choreography.
+4. **Verification taxonomy** — `verification-local` (pytest) vs `verification-deploy` (operator + deploy); never mark deploy todos `completed` on merge alone. When the plan includes deploy smoke, add an operator-authored **deploy stub** card (below) between implementation and verify waves — the plugin never auto-inserts deploy cards.
+5. **Deploy stub (operator-authored only)** — When a YAML todo or Acceptance mentions deploy, API rerun, Cloud Run, or browser smoke against `{env}`, the planner adds a deploy orchestrator card **between** the last implementation wave and `verification-deploy` cards. Verify cards list the deploy card as a parent. The plugin does not create this card without an explicit plan todo.
+
+```agent
+Type: orchestrator-handoff
+Title: Deploy API to {env}
+Acceptance:
+- Done when: Cloud Run revision {revision} serving staging commit
+- Verify: gcloud run services describe {service} --format='value(status.latestReadyRevisionName)'
+Deploy: {service}-{env}
+Commit: N/A
+```
+
+`verification-deploy` cards require `Deploy: {service}-{env}`, assignee orchestrator, local `Tests:` pre-checks only, and `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` before archive.
+
+6. **Same-file graph** — Cards touching the same production file: serialize via `wave_parent`, not parallel gate-only siblings.
+7. **Multi-parent cap** — Test/doc cards: max **2** production parents unless `Mode: read-only`.
+8. **Surface-slots** — Presentation plans declare `Surface-slots:` under `## Kanban optimization` (see `frontend-neutrality.md`).
+9. **Presentation acceptance** — Layout/motion work includes grep-verifiable `Acceptance (layout):` and `Acceptance (a11y):` in agent blocks when Spec mentions DOM order, fade, or choreography.
 
 ### Acceptance (presentation) — layout + motion
 

@@ -92,13 +92,13 @@ Per-plan cron lifecycle for wave progression and optional lifecycle notify. Uses
 
 | Job | Schedule | `deliver` | When |
 |-----|----------|-----------|------|
-| `kanban-auto-unblock-1m` | every 1m | `local` | always at decomposition |
-| `kanban-board-keeper-3m` | every 3m | `local` | always at decomposition |
+| `kanban-auto-unblock-1m` | every 1m | `local` | always at execute/handoff |
+| `kanban-board-keeper-3m` | every 3m | `local` | always at execute/handoff |
 | `kanban-lifecycle-notify-5m` | every 5m | resolved home channel (`scripts/lib/resolve_notify_deliver.sh`) | when `notify_lifecycle: true` (default) |
 
 Wave crons use `deliver=local` (file-only). Lifecycle/completion crons print to **stdout**; Hermes routes output to the resolved platform (`telegram`, `discord`, `all`, etc.) — never hardcode a platform. Resolver order: overlay `notify_deliver` → `cron.default_deliver` in `~/.hermes/config.yaml` → single configured `*_HOME_CHANNEL` → `all`. `--check` fails when lifecycle job is missing, inactive, or `Deliver: local`.
 
-**Not** called at init — create at decomposition (`--create --plan-id <id>`), remove at cleanup (`--remove`). Stores job IDs in `.hermes/kanban/memory/<plan_id>.json`. Lifecycle script reads active plan id from `.hermes/kanban/logs/lifecycle_plan_id` (written at create). `--check` WARNs when session `HERMES_HOME` is profile-scoped.
+**Not** called at init — **create** at execute/handoff (`kanban_handoff.py` in default profile session), **verify** at orchestrator decomposition (`--check`), remove at cleanup (`--remove`). Manual orchestrator decomposition without handoff: `kanban_decompose.py --provision-crons`. Stores job IDs in `.hermes/kanban/memory/<plan_id>.json`. Lifecycle script reads active plan id from `.hermes/kanban/logs/lifecycle_plan_id` (written at create). `--check` WARNs when session `HERMES_HOME` is profile-scoped.
 
 ### `kanban_lifecycle_notify.sh`
 
@@ -143,6 +143,8 @@ bash scripts/worktree_setup.sh \
 ```
 
 Atomic worktree lifecycle: prune stale entries → create/reuse worktree → copy `.worktreeinclude` paths from main repo → cross-platform workspace trust → install pre-push and pre-commit hooks. Reads `working_branch` and `trigger_branch` from config (no hardcoded fallbacks). Outputs `WORKTREE_PATH=<path>` on stdout.
+
+**Durability (optional):** `--durability-branch kanban/{plan_id}/{card_key}` or env `HERMES_KANBAN_CARD_BRANCH` with `KANBAN_PUSH_DURABILITY_BRANCH=1` pushes the worktree branch (and durability ref) to `origin` after setup. Salvage orphaned branches with `kanban_recover.py --salvage-branch`.
 
 Workers resolve the script via `_resolve_kanban_script` in `scripts/lib/kanban_bundle.sh` — prefer `$HERMES_HOME/scripts/worktree_setup.sh` (materialized at init / Update Plugin), then plugin bundle. Do not use a cwd-relative path inside an empty worktree.
 
@@ -244,7 +246,9 @@ python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md
 
 Creates one hardened, idempotent orchestrator-handoff card when a non-orchestrator profile needs to trigger decomposition without a manual session switch.  The card title is `Decompose: <plan_id>` and carries `Type: orchestrator-handoff` — a governance carve-out that exempts it from the worker code-gen rules (P001/P002/P003).  The body is SOP-only: **no `agent -p` block** (to prevent auto-decompose into stub children).
 
-The runbook uses **absolute** `{BUNDLE_ROOT}/scripts/…` paths, stamps `pre_dispatch_gate` (orchestrator skips re-run when `PASSED`), resolves `cards_yaml` from plan-adjacent or `{plan_memory_path}/{plan_id}.yaml`, and records `gate_script` for forensics. Resolves gate script from `$HERMES_HOME/scripts/`, overlay `bundle_path`, or plugin checkout — not only `repo_root/scripts/`.
+**Cron SSOT:** This script runs `provision_kanban_crons.sh --create` and `--check` in the **default profile session** before creating the handoff card. The orchestrator runbook verifies only (`--check`, with idempotent `--create` fallback). Decompose uses `--no-crons` on the handoff path.
+
+The runbook uses **absolute** `{BUNDLE_ROOT}/scripts/…` paths, stamps `pre_dispatch_gate` (orchestrator skips re-run when `PASSED`), overlay notification fields (`notify_lifecycle`, `walk_away_mode`, `notify_deliver_resolved`, `cron_provision`), resolves `cards_yaml` from plan-adjacent or `{plan_memory_path}/{plan_id}.yaml`, and records `gate_script` for forensics.
 
 Exit codes:
 
@@ -254,8 +258,9 @@ Exit codes:
 | 2 | Orchestrator profile missing | `hermes kanban-advanced init` |
 | 3 | Gateway not running | `hermes gateway run` |
 | 4 | Dispatcher off or `auto_decompose=true` | Run the printed `hermes config set …` fix |
+| 8 | Cron provision failed | Fix gateway/cron store; re-run handoff |
 
-`--allow-offline` bypasses exit 3/4 to create the card anyway (for deferred dispatch). Idempotency: if an open handoff card for the same `plan_id` already exists, the script exits 0 without creating a duplicate.
+`--allow-offline` bypasses exit 3/4 to create the card anyway (for deferred dispatch). `--skip-cron-provision` for tests/recovery only. Idempotency: if an open handoff card for the same `plan_id` already exists, the script exits 0 without creating a duplicate.
 
 ## Recovery (`kanban_recover.py`)
 

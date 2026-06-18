@@ -312,6 +312,38 @@ codes:
     source: card_body_policy
     retry: false
 
+  P014:
+    code: P014_TESTS_LINE_MALFORMED
+    severity: error
+    description: "Tests: line fails shlex validation or has unbalanced parentheses"
+    recovery: "Remove inline prose from Tests:; use Acceptance: for commentary. Trailing (note) is stripped at decompose."
+    source: card_body_policy
+    retry: false
+
+  V001:
+    code: V001_SPEC_FILE_UNASSIGNED
+    severity: error
+    description: "Plan Spec file not assigned to any decomposed card"
+    recovery: "Add file to a card Files: line or remove from plan Spec; re-run validate_card_bodies."
+    source: validate_card_bodies
+    retry: false
+
+  V004:
+    code: V004_TESTS_MALFORMED
+    severity: error
+    description: "Tests: line fails validation at decompose fidelity gate"
+    recovery: "Fix Tests: shell syntax; use Acceptance: for commentary."
+    source: validate_card_bodies
+    retry: false
+
+  V008:
+    code: V008_PATH_MISSING
+    severity: error
+    description: "Card Files: path not present in repository"
+    recovery: "Fix plan path or create file before decompose."
+    source: validate_card_bodies
+    retry: false
+
   # ── Attestation errors (Workstream 2) ──
   A001:
     code: A001_ATTESTATION_MISSING

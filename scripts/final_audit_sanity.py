@@ -307,6 +307,13 @@ def main(argv: list[str] | None = None) -> int:
 
     report_dir = repo_root / ".hermes" / "kanban" / "reports"
 
+    try:
+        from orchestrator_token_checkpoint import maybe_log_orchestrator_checkpoint  # noqa: E402
+
+        maybe_log_orchestrator_checkpoint(plan_id, "audit-start", note="final_audit_sanity")
+    except Exception:
+        pass
+
     if args.spawn_remediation:
         round_num = args.round
         if round_num is None:

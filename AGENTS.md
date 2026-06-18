@@ -44,6 +44,14 @@ Load the relevant wiki page for detailed instructions:
 | E028 / E029 layout or a11y acceptance failed | `plugin/data/references/frontend-neutrality.md` → `wiki/troubleshooting.md` § Layout / presentation acceptance |
 | Frontend overlay `ui_stack` / surface slots | `wiki/configuration.md` § `ui_stack` + `plugin/data/references/frontend-neutrality.md` |
 | verification-deploy attestation | `wiki/governance.md` § Card attestation + `wiki/troubleshooting.md` |
+| `validate_card_bodies` blocked pre-dispatch | `plugin/data/references/execution-doctrine.md` § v7 logistics fixes + `scripts/validate_card_bodies.py` |
+| P014 `Tests:` line malformed | `plugin/data/policies/card-body-policy.yaml` + `validate_board.sh` check 11 |
+| Cycle detect thrash (≥3 same E-code) | `scripts/cycle_detector.py` + `plugin/data/references/execution-doctrine.md` |
+| `pre_complete` gate (verify-deploy archive) | `scripts/kanban_pre_complete_gate.py` + `wiki/troubleshooting.md` § verification-deploy without attestation |
+| Vanilla Hermes kanban bugs + workarounds | `plugin/data/references/vanilla-kanban-known-issues.md` |
+| Deferred features needing upstream / full implementation | `plugin/data/references/planned-features.md` |
+| Worktree branch salvage (reflog / origin) | `python3 scripts/kanban_recover.py <task_id> dummy --salvage-branch --durability-branch kanban/{plan_id}/{card_key}` |
+| Skill preservation on Update Plugin / Save | `plugin/script_materialize.py` — `.materialize-manifest.json` under `$HERMES_HOME/skills/kanban-advanced/` |
 | Where are upstream docs? | `wiki/external-references.md` |
 
 ## Requirements

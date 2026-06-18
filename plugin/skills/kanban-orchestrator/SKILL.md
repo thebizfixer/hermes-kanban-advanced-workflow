@@ -220,11 +220,26 @@ This skill is the deeper playbook when you're an orchestrator profile whose whol
 
 After the last implementation card completes and the final audit passes:
 
-1. **Reconciliation checkpoint** — Present token burn, success rate, failure taxonomy. Ask: "Proceed to cleanup? Say yes."
-2. **Cleanup checkpoint** — Remove crons, archive board, clean worktrees. Ask: "Proceed to postmortem? Say yes."
-3. **Postmortem checkpoint** — Generate report, confirm all 8 sections. Present file path.
+1. **Reconciliation checkpoint** — File compliance, token burn report, failure-mode taxonomy. Ask: "Proceed to postmortem? Say yes."
+2. **Postmortem checkpoint** — Run `generate_postmortem.py` **before** archiving (task history and token logs intact; metrics read from `kanban.db`, including `archived` rows if already present). Confirm all 8 sections and KPI JSON. Ask: "Proceed to cleanup? Say yes."
+3. **Cleanup checkpoint** — Remove wave crons, archive board, kill tmux watch, `git_safe_cleanup.sh`. Present completion.
 
-At each checkpoint the orchestrator MUST present findings and wait for the user's explicit "yes" before proceeding — **unless** `walk_away_mode: true` (then `kanban_walk_away_post_exec.sh` handles stages 1–3 autonomously after final audit). Silently finishing or skipping checkpoints without walk-away mode is a governance violation. See `plugin/data/references/interaction-model.md` and `plugin/data/references/walk-away-mode.md`.
+**Order matches walk-away:** `kanban_walk_away_post_exec.sh` runs reconciliation artifact → postmortem → archive/cron removal → git cleanup → completion notify. Interactive runs use the same sequence with operator gates between steps.
+
+### Handoff-stamped overlay (read first)
+
+When the handoff card body includes stamped overlay fields, treat them as authoritative for this run:
+
+| Stamp field | Use |
+| --- | --- |
+| `walk_away_mode:` | Post-exec automation — **read stamp before live dashboard overlay** |
+| `notify_lifecycle:` | Whether lifecycle cron should exist |
+| `notify_deliver_resolved:` | Deliver channel for lifecycle notify |
+| `cron_provision:` | Result of handoff `--create/--check` |
+
+**Fallback:** If stamps are missing (legacy handoff), read live `.hermes/kanban-overrides/kanban-config.yaml` and confirm with operator before changing notify/cron behavior.
+
+At each checkpoint the orchestrator MUST present findings and wait for the user's explicit "yes" before proceeding — **unless** `walk_away_mode: true` (then `kanban_walk_away_post_exec.sh` handles reconciliation → postmortem → cleanup autonomously after final audit). Silently finishing or skipping checkpoints without walk-away mode is a governance violation. See `plugin/data/references/interaction-model.md` and `plugin/data/references/walk-away-mode.md`.
 
 **Known vanilla hermes bugs:** See `plugin/data/references/vanilla-kanban-known-issues.md` — maps 12 upstream kanban bugs to structural workarounds. Load during Step 0b (Preflight) and apply fixes before decomposition.
 
@@ -369,13 +384,14 @@ Draft the graph out loud before creating anything:
 1.  CREATE root card                 hermes kanban create "<plan>" --assignee ${orchestrator_profile}
 2.  CREATE gate (blocked)           hermes kanban create gate --assignee ${orchestrator_profile}
                                      hermes kanban block <gate_id> "Gate — awaiting dependency links"
-3.  CREATE wave crons (shell)       bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh
-                                      --create --plan-id <plan_id>
-                                      (deliver=local, no_agent=true — no messaging platform required)
-4.  (reserved — kanban_decompose Step 6 also calls --create if Steps 3–5 skipped)
-5.  VERIFY wave crons               bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh --check
-                                      Gateway must run (`hermes gateway start`). STOP if check fails —
-                                      do not create implementation cards without functioning auto-unblock.
+3.  VERIFY wave crons (shell)       bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh --check
+                                     Crons are created at **execute/handoff** by the default profile
+                                     (`kanban_handoff.py`). Re-create only when `--check` fails:
+                                     `provision_kanban_crons.sh --create --plan-id <plan_id>` then `--check`.
+                                     Gateway must run (`hermes gateway start`). STOP if check fails —
+                                     do not create implementation cards without functioning auto-unblock.
+4.  (reserved — manual orchestrator path without handoff uses kanban_decompose --provision-crons)
+5.  (reserved)
 6.  CREATE all implementation cards Create independent cards as ready. Create dependent cards as ready,
     (STAGGERED)                     then immediately block before the dispatcher claims them.
                                      Stagger creates: ≥1s between cards, ≥3s pause every 5 cards.
@@ -731,11 +747,11 @@ Optional: `hermes kanban notify-subscribe <audit_task_id>` for instant audit-rea
 
 6. **Handle completion** — When all worker tasks reach `done`:
    - Run **Final audit (mandatory)** on the orchestrator profile.
-   - Run **`kanban-advanced:kanban-reconciliation`** if intervention ratio exceeded thresholds mid-run.
-   - Run **`kanban-advanced:kanban-cleanup`** (postmortem generation, board archive) — see **`kanban-advanced:kanban-postmortem`** / cleanup skill.
-   - Remove monitoring cron (`cronjob(action="remove", job_id="<id>")`).
+   - Run **`kanban-advanced:kanban-reconciliation`** (compliance + token report; mid-run if intervention ratio exceeded thresholds).
+   - Run **`kanban-advanced:kanban-cleanup`** Step 0 (postmortem) **before** Step 1 (archive) — see **`kanban-advanced:kanban-postmortem`** / cleanup skill.
+   - Finish cleanup (archive, wave crons, git-safe cleanup); remove optional monitoring cron (`cronjob(action="remove", job_id="<id>")`).
    - Complete the stranded root card if it auto-promoted to `ready`.
-   - Post-execution runs via `kanban_walk_away_post_exec.sh` when walk-away mode is on; completion notify is the final step of that pipeline.
+   - When `walk_away_mode: true`, `kanban_walk_away_post_exec.sh` runs the same order after final audit; completion notify is the final step.
 
 **Operator boundary (walk-away):** Gateway pages are for true manual interventions only. Everything else — progress, heartbeats, successful auto-retry, non-intervention blocks — stays silent. A **plan complete** gateway summary is sent only when `walk_away_mode: true` (end of `kanban_walk_away_post_exec.sh`).
 

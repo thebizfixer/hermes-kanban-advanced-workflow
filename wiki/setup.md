@@ -158,7 +158,7 @@ The user should:
 2. The orchestrator runs preflight → attestation → decomposition
 3. Workers execute, evaluation chain verifies, orchestrator audits
 
-**Guide the user through the interaction model:** The workflow uses trigger phrases at each stage — `"Plan this out"` → `"Do a sanity check"` → `"Harden the plan"` → `"Optimize for Kanban"` → `"Execute the plan"`. After execution, the agent checkpoints at reconciliation, cleanup, and postmortem **unless** dashboard **Cron → Walk-away mode** is on (`walk_away_mode: true` — then post-execution is automated after final audit). Full details in [Interaction Model](../docs/reference/interaction-model.md) and `plugin/data/references/walk-away-mode.md`.
+**Guide the user through the interaction model:** The workflow uses trigger phrases at each stage — `"Plan this out"` → `"Do a sanity check"` → `"Harden the plan"` → `"Optimize for Kanban"` → `"Execute the plan"`. After execution, the agent checkpoints at reconciliation, postmortem, and cleanup **unless** dashboard **Cron → Walk-away mode** is on (`walk_away_mode: true` — then post-execution is automated after final audit). Full details in [Interaction Model](../docs/reference/interaction-model.md) and `plugin/data/references/walk-away-mode.md`.
 
 **KPIs are automatic.** The agent surfaces success rate, intervention rate, token burn, and failure-mode distribution at the reconciliation checkpoint. See the [README Agent KPIs](../README.md#agent-kpis).
 

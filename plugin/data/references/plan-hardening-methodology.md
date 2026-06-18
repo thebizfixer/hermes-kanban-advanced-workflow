@@ -35,4 +35,4 @@ python3 hermes-kanban-advanced-workflow/scripts/verify_anchors.py --plan .hermes
 python3 hermes-kanban-advanced-workflow/scripts/lib/plan_parse.py suggest-anchors --plan .hermes/kanban/plans/{plan_id}.plan.md --json
 ```
 
-**Prose-only line refs** (`tinyfish.py L1864` in signal maps without `Anchor:`) are **sanity-check scope** — review manually; they are not extracted for `verify_anchors`.
+**Prose-only line refs** (`example.py L1864` in signal maps without `Anchor:`) are **sanity-check scope** — review manually; they are not extracted for `verify_anchors`.

@@ -6,7 +6,7 @@
 
 ## What it does
 
-When **off** (default), the orchestrator follows the interactive post-execution contract: after final audit passes, it stops at reconciliation, cleanup, and postmortem checkpoints and waits for explicit operator approval (`plugin/data/references/interaction-model.md`).
+When **off** (default), the orchestrator follows the interactive post-execution contract: after final audit passes, it stops at reconciliation, postmortem, and cleanup checkpoints (in that order) and waits for explicit operator approval (`plugin/data/references/interaction-model.md`).
 
 When **on**, the operator can decompose a plan and leave the keyboard. During execution:
 

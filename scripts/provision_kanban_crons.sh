@@ -7,7 +7,8 @@
 #   bash scripts/provision_kanban_crons.sh --check [--json]
 #
 # Creates kanban-auto-unblock-1m + kanban-board-keeper-3m with deliver=local, no_agent=true.
-# NOT invoked at init/bootstrap — only at decomposition (create) and cleanup (remove).
+# NOT invoked at init/bootstrap — created at execute/handoff (kanban_handoff.py default profile),
+# verified at decomposition, removed at cleanup.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

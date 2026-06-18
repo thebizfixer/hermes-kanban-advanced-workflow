@@ -56,7 +56,15 @@ The planning phase proceeds through five stages in this exact order. Do not skip
 | **Harden** | `"Harden the plan"` | Apply the hardening checklist to close gaps discovered during sanity check (or self-discovered). Tier-gated pass: Critical -> Important -> Nice-to-have. | Hardened plan (content-complete) |
 | **Revise** | `"Revise section X"` | Edit in-place, return to review — conversational updates to plan content | Revised plan |
 | **Optimize** | `"Optimize for Kanban"` | Close execution-formatting gaps: add agent-prompt blocks, draw dependency graph, estimate iteration budgets, add Files:/Mode: lines, plan same-provider staggering, pre-write commit messages. See §Optimize checklist below. | Decomposition-ready plan |
-| **Execute** | `"Execute the plan"` | **Orchestrator profile only.** Decompose into kanban cards, dispatch workers. Non-orchestrator profiles prefer the **board-mediated handoff**: `python3 scripts/kanban_handoff.py --plan <plan.md>` creates one hardened handoff card the dispatcher runs under the orchestrator profile (idempotent; checks its own preconditions). **Fallback only** (no gateway): start a new orchestrator session — `/profile` does **not** switch — via `hermes -p orchestrator chat`. See `plugin/data/references/profile-switching.md`. | Decomposed board |
+| **Execute** | `"Execute the plan"` | **Default profile:** confirm `notify_lifecycle` / `walk_away_mode` with operator, then `python3 scripts/kanban_handoff.py --plan <plan.md>` (provisions crons + stamps overlay). Orchestrator profile decomposes via handoff runbook (verify crons only). **Fallback only** (no gateway): `hermes -p orchestrator chat`. See `plugin/data/references/profile-switching.md`. | Decomposed board |
+
+### Execute checklist (default profile — before handoff)
+
+1. **Dashboard toggles** — Operator sets `notify_lifecycle` and `walk_away_mode` on dashboard; read values back and confirm aloud.
+2. **Canonical plan** — Plan at `.hermes/kanban/plans/{plan_id}.plan.md` on `working_branch`.
+3. **Dry-run fidelity** — `python3 scripts/kanban_decompose.py --plan <file> --dry-run` (WARN from `validate_card_bodies`; fix plan before handoff).
+4. **Handoff** — `python3 scripts/kanban_handoff.py --plan <file>` (cron `--create/--check`, overlay stamps, handoff card).
+5. **Orchestrator** — Gate → `provision_kanban_crons.sh --check` → `kanban_decompose.py --no-crons` (use `--archive-prior` if re-decomposing after operator archives).
 
 **Critical ordering rule:** Sanity check, Harden, and Revise iterate BEFORE Optimize. Sanity check is read-only — it finds gaps. Harden closes them. Optimize formats for execution. The interaction model is: **Draft -> Sanity check -> Harden -> Revise -> repeat -> Optimize -> execute**. Never Optimize before Harden — formatting a plan with content gaps wastes tokens on cards that will be blocked or produce wrong code.
 
@@ -120,7 +128,8 @@ When a workstream changes subscriber-visible layout or motion:
 2. **`{feature}-route-wiring`** — wire helpers into the route shell (`Files:` includes `{ui_stack.page_glob}`).
 3. **`{feature}-route-layout`** — DOM order + `Acceptance (layout):` grep bullets (line order before/after slot anchors).
 4. **`integration-verify`** — `Type: verification-local` card after the route-layout group; runs pytest + `kanban_layout_acceptance.sh` paths.
-5. **Deploy smoke** — `Type: verification-deploy` with `Deploy:` line; requires `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` before archive.
+5. **Deploy stub (when plan scope includes deploy)** — Operator-authored orchestrator card between implementation and verify (see `plan-file-format.md` § Deploy stub). Plugin never auto-inserts.
+6. **Deploy smoke** — `Type: verification-deploy` with `Deploy:` line; parent = deploy stub when present; requires `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` before archive.
 
 Declare `Surface-slots:` in the plan and mirror host paths in overlay `ui_stack` (`frontend-neutrality.md`). `verify_optimization.sh` checks 19–21 enforce presentation acceptance at Optimize time.
 
@@ -422,6 +431,7 @@ Run `bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh --plan 
 - `plugin/data/references/documentation-sanity-check.md` — stale reference detection, code fence integrity, table formatting, package tree maintenance
 - `plugin/data/references/readme-formatting-pitfalls.md` — URL-encoded HTML artifacts, HTML entities, broken code fences, triple blanks, user-authored prose preservation
 - `plugin/data/references/vanilla-kanban-known-issues.md` — upstream Hermes Agent kanban bugs mapped to structural workarounds (dependency gating, workspace isolation, dispatcher resilience, root card anti-patterns)
+- `plugin/data/references/planned-features.md` — deferred capabilities blocked on upstream Hermes APIs or unfinished plugin-only work (sibling to known-issues)
 - `plugin/data/references/iteration-budget-case-study.md` — worked example: WS9 19-function extraction exhausted 90-turn budget; how to calculate operation counts and split correctly
 - `plugin/data/references/governance-sad-path-audit.md` — full flowchart trace of every transition with 23 sad paths, governance coverage assessment, and prioritized gaps (kanban-advanced:kanban-orchestrator reference)
 - `plugin/data/references/plan-hardening-checklist.md` — 11-item first-pass hardening checklist (Critical -> Important -> Nice-to-have) + redundant change detection pattern; runs between sanity check and optimization
