@@ -134,6 +134,49 @@ Anchor: backend/a.py::foo@L1
         report = pp.audit_anchors(text)
         self.assertEqual(len(report["files_not_plain_path"]), 1)
 
+    def test_audit_finds_anchor_after_agent_preamble(self) -> None:
+        text = """## Kanban optimization
+
+#### Card 1 — example
+files:
+  - backend/a.py
+
+```agent
+agent -p "Implement the change"
+Files: backend/a.py (modify-only)
+Call-sites: backend/a.py:handler
+Spec:
+- Behavior: change handler
+Anchor: backend/a.py::handler@L10
+```
+"""
+        report = pp.audit_anchors(text)
+        self.assertEqual(report["cards_missing_anchor"], [])
+
+    def test_parse_card_investigate_title_is_code_gen(self) -> None:
+        block = """#### Card 6 — Merge overyield: investigate + clamp
+files:
+  - backend/a.py
+
+```agent
+Files: backend/a.py
+Anchor: backend/a.py::foo@L1
+```
+"""
+        card = pp.parse_card_block(block)
+        self.assertIsNotNone(card)
+        assert card is not None
+        self.assertEqual(card["type"], "code-gen")
+
+    def test_parse_card_quality_gate_title_is_gate(self) -> None:
+        block = """#### Card 4 — Matrix quality gate
+Type: gate
+"""
+        card = pp.parse_card_block(block)
+        self.assertIsNotNone(card)
+        assert card is not None
+        self.assertEqual(card["type"], "gate")
+
     def test_parse_anchor_body_canonical(self) -> None:
         parsed = pp.parse_anchor_body("backend/app/x.py::run@L99")
         self.assertIsNotNone(parsed)

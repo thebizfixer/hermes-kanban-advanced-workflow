@@ -37,7 +37,7 @@ _DEF_CLASS_RE = re.compile(r"(?:def|class|function|async def)\s+(\w+)")
 _SYMBOL_BACKTICK_RE = re.compile(r"`([a-zA-Z_][a-zA-Z0-9_]*)`")
 _WORKSTREAM_START_RE = re.compile(r"^### Workstream", re.MULTILINE | re.IGNORECASE)
 _SECTION_BREAK_RE = re.compile(r"^(?:---|## |\Z)", re.MULTILINE)
-_ANCHOR_LINE_RE = re.compile(r"^Anchor:\s*(.+)$", re.IGNORECASE)
+_ANCHOR_LINE_RE = re.compile(r"^Anchor:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _CANONICAL_PIN_RE = re.compile(
     r"^(?P<file>[^\s:@]+(?:::(?P<sym>[\w]+))?)\s*@L(?P<line>\d+)\s*$",
     re.IGNORECASE,
@@ -611,7 +611,7 @@ def parse_card_block(block: str) -> dict | None:
     if "ROOT" in title or "root" in title.lower():
         card_type = "root"
         assignee = "orchestrator"
-    elif "Gate" in title or "gate" in title.lower():
+    elif re.search(r"\bgate\b", title, re.IGNORECASE):
         card_type = "gate"
         assignee = "orchestrator"
     elif is_manual:
