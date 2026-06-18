@@ -131,6 +131,38 @@ def _run(
     )
 
 
+def _coerce_max_turns(value: object, default: int = 180) -> int:
+    """Normalize dashboard max_turns (JSON may send number or string)."""
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, int):
+        return max(1, value)
+    if isinstance(value, float):
+        return max(1, int(value))
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped.isdigit():
+            return max(1, int(stripped))
+    try:
+        return max(1, int(value))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
+
+
+def _dashboard_action_failure(
+    output: list[str],
+    exc: Exception,
+    *,
+    action: str,
+) -> dict:
+    logger.exception("kanban-advanced %s failed", action)
+    msg = str(exc).strip() or exc.__class__.__name__
+    if not output:
+        output.append(f"=== {action} ===")
+    output.append(f"   X {msg}")
+    return {"success": False, "output": output, "error": msg}
+
+
 def _run_coding_agent_cli(
     cmd: list[str], timeout: int = SMOKE_TIMEOUT_SECONDS, cwd: str | None = None, env: dict | None = None
 ) -> subprocess.CompletedProcess:
@@ -776,16 +808,23 @@ def _append_coding_agent_cli_log(
 @router.post("/init")
 async def init(request: Request):
     """POST /api/plugins/kanban-advanced/init"""
+    output: list[str] = []
     try:
         body = await request.json()
     except Exception:
         body = {}
+    try:
+        return _execute_init(body, output)
+    except Exception as exc:
+        return _dashboard_action_failure(output, exc, action="Bootstrap")
 
+
+def _execute_init(body: dict, output: list[str]) -> dict:
     project_root = resolve_project_root()
     config_file = overlay_path(project_root)
     existing_config = _read_config(project_root)
     env = _read_env(project_root)
-    max_turns = body.get("max_turns", 180)
+    max_turns = _coerce_max_turns(body.get("max_turns"))
 
     if existing_config:
         working_branch, trigger_branch, kept = resolve_branch_settings(project_root)
@@ -816,12 +855,11 @@ async def init(request: Request):
             body.get("coding_agent_model", "auto")
         )
 
-    output = []
     output.append(f"kanban-advanced init -- bootstrapping {project_root}")
     hermes_home_pre = resolve_hermes_home(project_root)
     output.append(f"   HERMES_HOME: {hermes_home_pre}")
     output.append(f"   Working branch: {working_branch}")
-    output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
+    output.append(f"   Trigger branch: {trigger_branch or '(none - optional)'}")
     if "policy_profile" in body:
         policy_profile = normalize_policy_profile(body.get("policy_profile"))
     elif existing_config.get("policy_profile"):
@@ -907,8 +945,17 @@ async def init(request: Request):
     if current_turns >= max_turns:
         output.append(f"   OK {orchestrator_profile}: max_turns = {current_turns}")
     else:
-        _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)], env=init_env)
-        output.append(f"   OK max_turns set to {max_turns}")
+        try:
+            _run(
+                [HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)],
+                env=init_env,
+            )
+            output.append(f"   OK max_turns set to {max_turns}")
+        except subprocess.TimeoutExpired:
+            output.append(
+                f"   !  Timed out setting max_turns — run: hermes -p {orchestrator_profile} "
+                f"config set agent.max_turns {max_turns}"
+            )
 
     # Coding agent binary + model (+ smoke when binary is on PATH)
     _append_coding_agent_cli_log(
@@ -1014,16 +1061,26 @@ async def init(request: Request):
 @router.post("/save")
 async def save(request: Request):
     """POST /api/plugins/kanban-advanced/save — persist dashboard settings to config (not plugin Pull)."""
+    output: list[str] = []
     try:
         body = await request.json()
     except Exception:
         body = {}
+    try:
+        return _execute_save(body, output)
+    except Exception as exc:
+        return _dashboard_action_failure(output, exc, action="Saving settings")
 
+
+def _execute_save(body: dict, output: list[str]) -> dict:
     project_root = resolve_project_root()
     config = _read_config(project_root)
     config_file = overlay_path(project_root)
     if not config_file.is_file():
-        return {"error": "Config file not found. Run bootstrap first."}
+        return {
+            "success": False,
+            "error": "Config file not found. Run bootstrap first.",
+        }
 
     env = _read_env(project_root)
     working_branch = body.get("working_branch") or config.get("working_branch") or detect_default_working_branch(project_root) or "main"
@@ -1051,12 +1108,11 @@ async def save(request: Request):
             merged_config["notify_deliver"] = deliver_override
         else:
             merged_config.pop("notify_deliver", None)
-    max_turns = body.get("max_turns", 180)
+    max_turns = _coerce_max_turns(body.get("max_turns"))
 
-    output = []
     output.append("=== Saving settings ===")
     output.append(f"   Working branch: {working_branch}")
-    output.append(f"   Trigger branch: {trigger_branch or '(none — optional)'}")
+    output.append(f"   Trigger branch: {trigger_branch or '(none - optional)'}")
     output.append(f"   Governance profile: {policy_profile}")
     output.append(f"   Notifications (lifecycle): {'on' if notify_lifecycle else 'off'}")
     deliver_resolved = resolve_notify_deliver(
@@ -1120,8 +1176,17 @@ async def save(request: Request):
     current_turns = _get_max_turns(project_root)
     _, orchestrator_profile, _ = resolve_dispatch_profiles(config)
     if current_turns < max_turns:
-        _run([HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)])
-        output.append(f"   OK max_turns set to {max_turns}")
+        try:
+            _run(
+                [HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)],
+                env=_hermes_subprocess_env(hermes_home),
+            )
+            output.append(f"   OK max_turns set to {max_turns}")
+        except subprocess.TimeoutExpired:
+            output.append(
+                f"   !  Timed out setting max_turns — run: hermes -p {orchestrator_profile} "
+                f"config set agent.max_turns {max_turns}"
+            )
 
     skills_src = resolve_plugin_skills_src(DEFAULT_PLUGIN_NAME)
     skills_dst = hermes_home / "skills" / "kanban-advanced"

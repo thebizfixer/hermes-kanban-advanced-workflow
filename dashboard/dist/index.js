@@ -394,13 +394,20 @@
       };
     }
 
+    function saveSucceeded(r) {
+      if (!r || r.error || r.success === false) {
+        throw new Error((r && r.error) || "Save failed");
+      }
+      return r;
+    }
+
     function persistNotifyLifecycle(next) {
       setNotifyLifecycle(next);
       if (!initialized) return;
       setNotifySaving(true);
       var data = getFormData();
       data.notify_lifecycle = next;
-      apiSave(data).then(function () {
+      apiSave(data).then(saveSucceeded).then(function () {
         reloadStatus();
       }).catch(function (e) {
         setNotifyLifecycle(!next);
@@ -416,7 +423,7 @@
       setNotifySaving(true);
       var data = getFormData();
       data.walk_away_mode = next;
-      apiSave(data).then(function () {
+      apiSave(data).then(saveSucceeded).then(function () {
         reloadStatus();
       }).catch(function (e) {
         setWalkAwayMode(!next);
@@ -446,8 +453,9 @@
       var data = getFormData();
       addLines(["=== Bootstrap starting ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary + " (" + data.coding_agent_model + ")", "Max turns: " + data.max_turns, ""]);
       apiInit(data).then(function (r) {
-        if (r.error) {
-          addLines(["ERROR: " + r.error], "line-err");
+        if (r.error || r.success === false) {
+          addLines(["ERROR: " + (r.error || "Bootstrap failed")], "line-err");
+          if (r.output) addLines(r.output);
         } else if (r.output) {
           addLines(r.output);
           if (r.success) setInitialized(true);
@@ -465,7 +473,7 @@
       setConsoleLines([]);
       var data = getFormData();
       addLines(["=== Saving settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary + " (" + data.coding_agent_model + ")", "Max turns: " + data.max_turns, ""]);
-      apiSave(data).then(function (r) {
+      apiSave(data).then(saveSucceeded).then(function (r) {
         if (r.output) addLines(r.output);
         setBootstrapping(false);
         reloadStatus();
