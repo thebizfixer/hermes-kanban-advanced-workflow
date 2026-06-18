@@ -205,14 +205,9 @@
   }
 
   // ── Main page ──
-  function hydrateStatusFromSession() {
-    var cached = readSessionStatus();
-    return cached && cached.data ? cached.data : null;
-  }
-
   function KanbanAdvancedPage() {
-    var _useState = useState(hydrateStatusFromSession), status = _useState[0], setStatus = _useState[1];
-    var _useState2 = useState(false), loading = _useState2[0], setLoading = _useState2[1];
+    var _useState = useState(null), status = _useState[0], setStatus = _useState[1];
+    var _useState2 = useState(true), loading = _useState2[0], setLoading = _useState2[1];
     var _useState3 = useState(""), workingBranch = _useState3[0], setWorkingBranch = _useState3[1];
     var _useState3b = useState(""), triggerBranch = _useState3b[0], setTriggerBranch = _useState3b[1];
     var _useState4 = useState("agent"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
