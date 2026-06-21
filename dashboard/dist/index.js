@@ -210,7 +210,7 @@
     var _useState2 = useState(true), loading = _useState2[0], setLoading = _useState2[1];
     var _useState3 = useState(""), workingBranch = _useState3[0], setWorkingBranch = _useState3[1];
     var _useState3b = useState(""), triggerBranch = _useState3b[0], setTriggerBranch = _useState3b[1];
-    var _useState4 = useState("agent"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
+    var _useState4 = useState("hermes"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
     var _useState4b = useState(""), codingAgentModel = _useState4b[0], setCodingAgentModel = _useState4b[1];
     var _useState5 = useState(""), customAgent = _useState5[0], setCustomAgent = _useState5[1];
     var _useState6 = useState(180), maxTurns = _useState6[0], setMaxTurns = _useState6[1];
@@ -264,7 +264,12 @@
 
     function codingAgentModelDisplay() {
       if (!codingAgentModel) return "(select a model)";
-      if (codingAgentModel === "auto") return "auto (CLI default)";
+      if (codingAgentModel === "auto") {
+        if (codingAgentModelOptions && codingAgentModelOptions.models && codingAgentModelOptions.models.length > 0) {
+          return codingAgentModelOptions.models[0].label || "auto (profile config)";
+        }
+        return "auto (profile config)";
+      }
       return codingAgentModel;
     }
 
@@ -280,7 +285,12 @@
 
     function resetCodingAgentModelForBinary(binary) {
       if (!binary) return;
-      setCodingAgentModel("");
+      // Hermes uses the profile config model by default — pre-select auto
+      if (binary === "hermes") {
+        setCodingAgentModel("auto");
+      } else {
+        setCodingAgentModel("");
+      }
       setPendingCodingAgentModel(null);
       setCodingAgentModelQuery("");
       setCodingAgentModelOptions(null);
@@ -290,7 +300,7 @@
         }).catch(function () {
           setCodingAgentModelOptions({
             error: true,
-            models: [{ id: "auto", label: "Auto (CLI default)" }]
+            models: [{ id: "auto", label: "Auto (profile config)" }]
           });
         });
       }

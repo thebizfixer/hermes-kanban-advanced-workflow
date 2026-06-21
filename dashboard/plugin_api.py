@@ -678,7 +678,7 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         cache_set=_cache_set,
         probe_ttl=_TTL_MODEL_PROBE,
     )
-    coding_agent_cli["model_label"] = model_display_label(coding_agent_model)
+    coding_agent_cli["model_label"] = model_display_label(coding_agent_model, binary=coding_agent)
     if is_contested_binary_name(coding_agent):
         coding_agent_cli["conflict"] = CONFLICT_MESSAGE
         coding_agent_cli["conflict_hint"] = CONFLICT_HINT
@@ -745,7 +745,7 @@ async def status(request: Request):
 @router.get("/coding-agent/models")
 async def coding_agent_models(request: Request):
     """GET /api/plugins/kanban-advanced/coding-agent/models?binary=agent"""
-    binary = (request.query_params.get("binary") or "agent").strip()
+    binary = (request.query_params.get("binary") or "hermes").strip()
     return list_models_for_binary(binary, _run_coding_agent_cli)
 
 
@@ -853,7 +853,7 @@ def _append_coding_agent_cli_log(
         cache_set=_cache_set if probe else None,
         probe_ttl=_TTL_MODEL_PROBE,
     )
-    label = model_display_label(model)
+    label = model_display_label(model, binary=binary)
     if not cli.get("on_path"):
         output.append(f"   !  '{binary}' not found on PATH")
         return

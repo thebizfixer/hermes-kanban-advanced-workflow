@@ -50,14 +50,15 @@ CONTESTED_AGENT_LABEL = (
 )
 
 # product_key -> (display_name, preferred_commands, contested_commands)
+# hermes is first so it's the default pick for new users and --force mode.
 PRODUCT_REGISTRY: dict[str, tuple[str, tuple[str, ...], tuple[str, ...]]] = {
+    "hermes": ("Hermes Agent", ("hermes",), ()),
     "cursor": ("Cursor CLI", ("cursor-agent",), ("agent",)),
     "claude": ("Claude Code", ("claude",), ()),
     "codex": ("OpenAI Codex", ("codex",), ()),
     "grok": ("Grok CLI", ("grok",), ("agent",)),
     "aider": ("Aider", ("aider",), ()),
     "gemini": ("Gemini CLI", ("gemini",), ()),
-    "hermes": ("Hermes Agent", ("hermes",), ()),
 }
 
 
@@ -468,6 +469,42 @@ def list_models_for_binary(
         except Exception:
             pass
 
+    # Hermes: read model from the default profile config so the dashboard
+    # model picker shows the actual model rather than just "auto".
+    if binary == "hermes":
+        models: list[dict[str, str]] = [
+            {"id": CODING_AGENT_MODEL_AUTO, "label": "Auto (profile config)"}
+        ]
+        try:
+            from plugin.hermes_model_config import read_active_model_config
+
+            cfg = read_active_model_config(run, binary, timeout=15)
+            if cfg.get("default"):
+                model_id = cfg["default"]
+                provider = cfg.get("provider", "")
+                label = f"{model_id}"
+                if provider:
+                    label = f"{provider}/{model_id}" if "/" not in model_id else model_id
+                # Show the profile model as a distinct selectable entry
+                if model_id not in {m["id"] for m in models}:
+                    models.append({"id": model_id, "label": label})
+                # Annotate auto with the resolved model
+                models[0]["label"] = f"Auto (profile: {label})"
+                return {
+                    "binary": binary,
+                    "models": models,
+                    "source": "profile_config",
+                    "supports_model_pick": True,
+                }
+        except Exception:
+            pass
+        return {
+            "binary": binary,
+            "models": models,
+            "source": "defaults",
+            "supports_model_pick": True,
+        }
+
     models = [{"id": mid, "label": lbl} for mid, lbl in adapter.default_models]
     return {
         "binary": binary,
@@ -809,8 +846,15 @@ def smoke_test_coding_agent(
         return None
 
 
-def model_display_label(model_id: str, models: list[dict[str, str]] | None = None) -> str:
+def model_display_label(
+    model_id: str,
+    models: list[dict[str, str]] | None = None,
+    *,
+    binary: str | None = None,
+) -> str:
     if is_auto_model(model_id):
+        if binary == "hermes":
+            return "Auto (profile config)"
         return "Auto (CLI default)"
     if models:
         for entry in models:

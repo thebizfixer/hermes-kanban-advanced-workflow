@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 DEFAULT_WORKING_BRANCH = "main"
-DEFAULT_CODING_AGENT = "agent"
+DEFAULT_CODING_AGENT = "hermes"
 DEFAULT_CODING_AGENT_MODEL = "auto"
 DEFAULT_POLICY_PROFILE = "balanced"
 DEFAULT_NOTIFY_LIFECYCLE = True

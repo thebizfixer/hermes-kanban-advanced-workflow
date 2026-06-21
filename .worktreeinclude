@@ -1,0 +1,6 @@
+# Managed by kanban-advanced — gitignored paths for card worktrees
+# Copied by worktree_setup.sh (and Hermes -w when configured)
+.hermes/kanban-overrides/
+.hermes/kanban/memory/
+.hermes/kanban/preflight_cache.json
+.cursor/rules/
