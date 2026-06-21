@@ -1300,6 +1300,33 @@ def build_kpi_json(
         if len(task.events) > 0
     }
 
+    # New KPI enrichment fields (G1-G3, G6, G10)
+    blocker_chain = _build_blocker_chain(tasks)
+    deploy_state = _detect_deploy_state(tasks)
+    completion_methods = Counter(
+        _infer_completion_method(t) for t in tasks if t.status.lower() in TERMINAL_STATUSES
+    )
+    regression_check = _regression_check_failure_class(failure_rows)
+
+    # Interventions: operator-observed placeholder (G2)
+    # The automated counter is intervention_count; operator_observed is a seed
+    # that the operator fills in during §9 Operator Ground Truth.
+    operator_observed_interventions = intervention_count  # seed from counter
+    # Check intervention log for any operator-authored entries
+    for entry in intervention_log:
+        if entry.get("source") == "operator" or entry.get("operator_override"):
+            operator_observed_interventions = max(
+                operator_observed_interventions, 
+                len([e for e in intervention_log if e.get("source") == "operator"]),
+            )
+            break
+
+    completion_method_breakdown: dict[str, int] = {
+        "eval_chain": completion_methods.get("eval_chain", 0),
+        "operator_cli": completion_methods.get("operator_cli", 0),
+        "unknown": completion_methods.get("unknown", 0),
+    }
+
     token_note = None
     if not plan_tokens:
         token_note = "No plan-scoped token rows — totals omitted (foreign rows excluded)."
@@ -1349,6 +1376,18 @@ def build_kpi_json(
         "audit_tier_notes": audit_notes,
         "scope_violations": len(scope_violations),
         "intervention_log_entries": len(intervention_log),
+        "blocker_chain": blocker_chain,
+        "deploy_state": deploy_state,
+        "interventions_operator_observed": operator_observed_interventions,
+        "completion_method": completion_method_breakdown,
+        "regression_check": {
+            "failure_class": regression_check,
+            "description": (
+                "test_drift — stale thresholds/SLO values, not logic bugs" if regression_check == "test_drift"
+                else "logic_bug — production code fault" if regression_check == "logic_bug"
+                else None
+            ),
+        },
     }
     token_coverage_pct = round(
         (len(plan_tokens) / completed * 100.0) if completed else 0.0, 2
@@ -1385,6 +1424,226 @@ def write_kpi_json(kpi: dict[str, Any], output: Path, plan_id: str) -> Path:
     history = dest.parent / "kpi_history.jsonl"
     with open(history, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(kpi, sort_keys=True) + "\n")
+    return dest
+
+
+def _build_blocker_chain(
+    tasks: list[TaskRecord],
+) -> list[dict[str, Any]]:
+    """G1 — Blocker chain for thrash outliers: eval code, Tests line, wait condition."""
+    chains: list[dict[str, Any]] = []
+    for task in tasks:
+        reblocks = [e for e in task.events if "block" in e.kind.lower()]
+        if len(reblocks) < 3:
+            continue
+        chain = {
+            "task_id": task.task_id,
+            "reblock_count": len(reblocks),
+            "blocks": [],
+        }
+        for event in reblocks:
+            summary = event.summary or ""
+            # Extract error code and Tests line from block reason
+            error_match = re.search(r"(E\d{3}[_\w]*)", summary)
+            tests_match = re.search(r"Tests:\s*(\S[^\n]{0,120})", task.body, re.I)
+            chain["blocks"].append({
+                "timestamp": event.timestamp.isoformat() if event.timestamp else None,
+                "error_code": error_match.group(1) if error_match else None,
+                "reason_snippet": summary[:200],
+            })
+        if not chain["blocks"]:
+            continue
+        # Annotate with card's Tests line for context
+        tests_line = ""
+        for line in task.body.split("\n"):
+            if line.strip().lower().startswith("tests:"):
+                tests_line = line.strip()[6:].strip()[:200]
+                break
+        chain["tests_line"] = tests_line
+        chains.append(chain)
+    return chains
+
+
+def _infer_completion_method(task: TaskRecord) -> str:
+    """Infer how a completed task was marked done.
+    
+    Returns:
+      - 'eval_chain' — last event before terminal was an eval chain ALLOW
+      - 'operator_cli' — marked done via hermes kanban complete (operator CLI)
+      - 'unknown' — can't determine from available events
+    """
+    if task.status.lower() not in TERMINAL_STATUSES:
+        return "unknown"
+    # Check last few events for eval chain signature
+    for event in reversed(task.events[-10:]):
+        summary = (event.summary or "").lower()
+        if "evaluation chain" in summary or "eval chain" in summary:
+            return "eval_chain"
+        if "[chain] allow" in summary or "all checks passed" in summary:
+            return "eval_chain"
+        if event.kind.lower() in ("completed", "done", "archived"):
+            raw = json.dumps(event.raw) if isinstance(event.raw, dict) else str(event.raw)
+            if "evaluation chain" in raw.lower() or "eval_chain" in raw.lower():
+                return "eval_chain"
+    # If no eval chain signature found, assume operator CLI
+    return "operator_cli" if task.events else "unknown"
+
+
+def _detect_deploy_state(
+    tasks: list[TaskRecord],
+) -> dict[str, str] | None:
+    """G3 — Detect deploy state from verification-deploy cards."""
+    for task in tasks:
+        deploy_match = re.search(r"(?m)^Deploy:\s*(.+)$", task.body, re.I)
+        if deploy_match:
+            parts = deploy_match.group(1).strip().split("-", 1)
+            return {
+                "service": parts[0].strip() if parts else "",
+                "environment": parts[1].strip() if len(parts) > 1 else "unknown",
+                "card_task_id": task.task_id,
+                "card_status": task.status,
+            }
+    return None
+
+
+def _regression_check_failure_class(failure_rows: dict[str, list[str]]) -> str | None:
+    """Classify regression failures as test_drift or logic_bug from failure mode patterns."""
+    if "test_failure" in {k.lower() for k in failure_rows}:
+        return "test_drift"
+    if any("test" in k.lower() or "e003" in k.lower() for k in failure_rows):
+        return "test_drift"
+    if failure_rows:
+        return "logic_bug"
+    return None
+
+
+def build_reconciliation(
+    plan_id: str,
+    tasks: list[TaskRecord],
+    token_entries: list[dict[str, Any]],
+    intervention_count: int,
+    scope_violations: list[dict[str, Any]],
+    source_notes: list[str],
+) -> str:
+    """Machinery-health reconciliation sidecar (separate from project-outcome postmortem).
+    
+    Focuses on plugin/agent health: evaluation chain stats, parser misses, thrash patterns,
+    scope violations. Complements the project-outcome postmortem for operators tuning the
+    kanban-advanced workflow itself.
+    """
+    plan_tokens = [e for e in token_entries if e.get("plan_id") == plan_id]
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines: list[str] = [
+        "---",
+        f"plan_id: {plan_id}",
+        f"generated_at: {generated_at}",
+        "document_type: reconciliation",
+        "generator: hermes-kanban-advanced-workflow/scripts/generate_postmortem.py",
+        "---",
+        "",
+        f"# Reconciliation — {plan_id}",
+        "",
+        "> **Machinery-health report.** Focuses on plugin/agent evaluation chain performance,",
+        "> parser misses, scope violations, and thrash patterns. For project outcomes",
+        "> (what shipped, what didn't, acceptance gaps), see the postmortem companion.",
+        "",
+    ]
+
+    if source_notes:
+        lines.extend(["> **Data notes:**"] + [f"> - {note}" for note in source_notes] + [""])
+
+    # 1. Evaluation chain stats
+    total = len(tasks) if tasks else len({_task_id_from_token(e) for e in plan_tokens})
+    completed = sum(1 for t in tasks if t.status.lower() in TERMINAL_STATUSES)
+    completion_methods = Counter(_infer_completion_method(t) for t in tasks if t.status.lower() in TERMINAL_STATUSES)
+    
+    lines.extend([
+        "## 1. Evaluation Chain Performance",
+        "",
+        f"- **Tasks processed:** {total}",
+        f"- **Completed:** {completed}",
+        f"- **Eval chain completions:** {completion_methods.get('eval_chain', 0)}",
+        f"- **Operator CLI completions:** {completion_methods.get('operator_cli', 0)}",
+        f"- **Unknown method:** {completion_methods.get('unknown', 0)}",
+        "",
+    ])
+
+    # 2. Thrash analysis (blocker chain)
+    thrash = _build_blocker_chain(tasks)
+    if thrash:
+        lines.extend(["## 2. Thrash Analysis (Blocker Chain)", ""])
+        lines.extend(["| Task | Reblocks | Top error | Tests line |", "| --- | ---: | --- | --- |"])
+        for chain in thrash[:10]:
+            top_error = chain["blocks"][0]["error_code"] if chain["blocks"] else "?"
+            tests = (chain.get("tests_line") or "?")[:80]
+            lines.append(f"| `{chain['task_id']}` | {chain['reblock_count']} | {top_error} | {tests} |")
+        lines.append("")
+
+    # 3. Scope violations
+    if scope_violations:
+        total_reverted = sum(v.get("count", 0) for v in scope_violations)
+        affected = len(set(v.get("task_id", "") for v in scope_violations))
+        lines.extend([
+            "## 3. Scope Violations",
+            "",
+            f"- **Cards affected:** {affected}",
+            f"- **Files reverted:** {total_reverted}",
+            "",
+        ])
+        lines.extend(["| Task | Files reverted |", "| --- | --- |"])
+        for v in scope_violations[:20]:
+            files = ", ".join(f"`{f}`" for f in v.get("files_reverted", [])[:5])
+            lines.append(f"| `{v.get('task_id', '?')}` | {files} |")
+        lines.append("")
+
+    # 4. Completion method breakdown
+    lines.extend([
+        "## 4. Completion Method Breakdown",
+        "",
+        "| Task | Status | Method | Events |",
+        "| --- | --- | --- | ---: |",
+    ])
+    for task in sorted(tasks, key=lambda t: t.task_id):
+        if task.status.lower() not in TERMINAL_STATUSES:
+            continue
+        method = _infer_completion_method(task)
+        lines.append(f"| `{task.task_id}` | {task.status} | {method} | {len(task.events)} |")
+    lines.append("")
+
+    # 5. Parser and audit health
+    root = _project_root()
+    tier1, tier2, audit_notes = _load_audit_tier_reports(plan_id, root)
+    parser_miss_count = _count_parser_misses(tier1, tier2)
+    lines.extend([
+        "## 5. Parser & Audit Health",
+        "",
+        f"- **Parser misses (tier1+tier2):** {parser_miss_count}",
+        f"- **Audit notes:** {len(audit_notes)}",
+    ])
+    for note in audit_notes[:10]:
+        lines.append(f"  - {note}")
+    if tier1:
+        violations = tier1.get("violations") or []
+        lines.append(f"- **Tier1 violations:** {len(violations)}")
+    if tier2:
+        violations = tier2.get("violations") or []
+        lines.append(f"- **Tier2 violations:** {len(violations)}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def write_reconciliation(content: str, output: Path, plan_id: str) -> Path:
+    """Write reconciliation sidecar to reports directory."""
+    if output.suffix == ".md":
+        dest = output
+    else:
+        output.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        dest = output / f"{plan_id}_reconciliation_{stamp}.md"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(content, encoding="utf-8")
     return dest
 
 
@@ -1494,6 +1753,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"warning: cross-plan lesson write skipped: {exc}", file=sys.stderr)
     print(f"Postmortem written: {dest}")
     print(f"KPI JSON written: {kpi_dest}")
+
+    # Reconciliation sidecar (machinery health)
+    reconciliation = build_reconciliation(
+        plan_id=plan_id,
+        tasks=tasks,
+        token_entries=token_entries,
+        intervention_count=intervention_count,
+        scope_violations=scope_violations,
+        source_notes=source_notes,
+    )
+    recon_dest = write_reconciliation(reconciliation, Path(args.output), plan_id)
+    print(f"Reconciliation written: {recon_dest}")
+
     if args.stdout:
         print()
         print(report)
