@@ -78,6 +78,18 @@ PLAN_ID=<plan_id>
 KANBAN_DB="${KANBAN_DB:-${HERMES_HOME}/kanban.db}"
 KPI_TASKS=$(jq -r '.total_tasks' .hermes/kanban/reports/${PLAN_ID}_kpi.json)
 
+### 2c. Reconciliation sidecar (machinery health)
+
+`generate_postmortem.py` now produces a **reconciliation sidecar** (`{plan_id}_reconciliation_{date}.md`) alongside the postmortem and KPI JSON. The boundary:
+
+| Artifact | Audience | Focus |
+|----------|----------|-------|
+| Postmortem (`_postmortem_`) | Project stakeholders | What shipped, what didn't, acceptance gaps |
+| Reconciliation (`_reconciliation_`) | Operator / plugin maintainer | Evaluation chain health, parser misses, thrash patterns, scope violations |
+| KPI JSON (`_kpi_`) | Dashboards, cross-run trends | Machine-readable metrics including `blocker_chain`, `deploy_state`, `completion_method`, `regression_check` |
+
+The reconciliation is where you go to **tune the kanban-advanced workflow itself** — adjust card granularity, fix recurring eval-chain gaps, and tighten scope discipline. The postmortem is where you go to report to stakeholders. Do not blend machinery health into the postmortem unless it serves the project outcome narrative.
+
 # Authoritative: plan memory task_ids (same scope as generate_postmortem.py)
 MEM_COUNT=$(python3 -c "
 import json, sys
