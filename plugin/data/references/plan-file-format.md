@@ -122,6 +122,20 @@ Commit: N/A
 
 `verification-deploy` cards require `Deploy: {service}-{env}`, assignee orchestrator, local `Tests:` pre-checks only, and `.hermes/kanban/card-attestations/{plan_id}-{card_key}.json` before archive.
 
+**Acceptance-verify template —** Runs after parent merges to `${working_branch}`. Mode: read-only. No agent block. Worker runs the verify commands only. Implementation card cannot own the acceptance judge (conflict-of-interest rule).
+
+```text
+Type: acceptance-verify
+Title: Verify: {parent-card-todo}
+Tests: {command-or-N/A}
+Acceptance:
+- 1. rg 'def test_{name}' tests/ — assert new test file exists
+- 2. rg '{symbol}' docs/ — assert docs updated on HEAD
+Mode: read-only
+Commit: N/A
+Parent: Card {N}
+```
+
 6. **Same-file graph** — Cards touching the same production file: serialize via `wave_parent`, not parallel gate-only siblings.
 7. **Multi-parent cap** — Test/doc cards: max **2** production parents unless `Mode: read-only`.
 8. **Surface-slots** — Presentation plans declare `Surface-slots:` under `## Kanban optimization` (see `frontend-neutrality.md`).
