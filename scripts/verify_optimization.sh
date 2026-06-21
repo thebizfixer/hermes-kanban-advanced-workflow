@@ -430,6 +430,85 @@ else
     check_pass "All card block Tests: lines pass command-syntax validation"
 fi
 
+# ── 23. Harden delta gate — draft-vs-canonical drift check ────────────────
+echo "23. Harden delta gate — draft vs canonical drift"
+# Look for draft plan path in the plan's frontmatter or via convention
+DRAFT_PLAN=$(echo "$PLAN_CONTENT" | grep -oP '(?<=draft_plan: )\\S+' | head -1 || true)
+if [[ -z "$DRAFT_PLAN" ]]; then
+    # Try .cursor/plans/{plan_id}.plan.md convention
+    PLAN_ID=$(echo "$PLAN_CONTENT" | grep -oP '(?<=plan_id: )\\S+' | head -1 || true)
+    DRAFT_CANDIDATE="$REPO_ROOT/.cursor/plans/${PLAN_ID}.plan.md"
+    if [[ -f "$DRAFT_CANDIDATE" ]]; then
+        DRAFT_PLAN="$DRAFT_CANDIDATE"
+    fi
+fi
+if [[ -n "$DRAFT_PLAN" && -f "$DRAFT_PLAN" ]]; then
+    # Compare checksums (ignoring CRLF vs LF)
+    CANONICAL_SUM=$(tr -d '\\r' < "$PLAN" | md5sum | cut -d' ' -f1 2>/dev/null || true)
+    DRAFT_SUM=$(tr -d '\\r' < "$DRAFT_PLAN" | md5sum | cut -d' ' -f1 2>/dev/null || true)
+    if [[ -z "$CANONICAL_SUM" ]]; then
+        # md5sum not available — use python
+        CANONICAL_SUM=$(python3 -c "import hashlib; print(hashlib.md5(open('$PLAN','rb').read().replace(b'\\r',b'')).hexdigest())" 2>/dev/null || echo "")
+        DRAFT_SUM=$(python3 -c "import hashlib; print(hashlib.md5(open('$DRAFT_PLAN','rb').read().replace(b'\\r',b'')).hexdigest())" 2>/dev/null || echo "")
+    fi
+    if [[ "$CANONICAL_SUM" = "$DRAFT_SUM" && -n "$CANONICAL_SUM" ]]; then
+        check_warn "Draft and canonical plan are byte-identical — Harden produced no semantic delta. Verify hardening was applied (see plan-hardening-methodology.md). Use plan_hardening_diff.py to inspect."
+    else
+        check_pass "Draft and canonical plan differ — Harden delta confirmed"
+    fi
+else
+    check_warn "No draft plan found for delta comparison — skipping Harden delta gate"
+fi
+
+# ── 24. Inverted-graph WARN — docs cards before implementation ───────────
+echo "24. Docs-before-implementation ordering check (Issue 8 F1)"
+OPT_SECTION_24=$(awk '/^## Kanban optimization/{p=1; next} p && /^## /{exit} p' "$PLAN")
+if [[ -z "$OPT_SECTION_24" ]]; then
+    check_warn "No Kanban optimization section — skipping docs-ordering check"
+else
+    DOCS_FIRST=$(python3 - "$PLAN" <<'PY' 2>/dev/null
+import re, sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+opt_match = re.search(r'## Kanban optimization\n(.*?)(?=\n## |\Z)', text, re.DOTALL)
+if not opt_match:
+    print(0)
+    sys.exit(0)
+opt = opt_match.group(1)
+cards = list(re.finditer(r'#### Card (\d+)', opt))
+card_nums = {int(m.group(1)): m.start() for m in cards}
+# Find docs cards and their ordinal
+docs_cards = []
+for m in re.finditer(r'#### Card (\d+).*?(?=#### Card \d+|\Z)', opt, re.DOTALL):
+    num = int(m.group(1))
+    block = m.group(0)
+    if re.search(r'Type:\s*docs', block, re.I):
+        docs_cards.append(num)
+# Find implementation cards referenced by docs cards
+warnings = 0
+for m in re.finditer(r'#### Card (\d+).*?(?=#### Card \d+|\Z)', opt, re.DOTALL):
+    num = int(m.group(1))
+    block = m.group(0)
+    if not re.search(r'Type:\s*docs', block, re.I):
+        continue
+    # Check if this docs card references implementation cards with higher ordinals
+    refs = re.findall(r'Card (\d+)', block)
+    for ref in refs:
+        ref_num = int(ref)
+        if ref_num > num and ref_num in card_nums:
+            print(f"  Docs Card {num} references Card {ref_num} (appears later in dispatch)")
+            warnings += 1
+print(warnings)
+PY
+)
+    DOCS_FIRST=${DOCS_FIRST:-0}
+    if [[ "${DOCS_FIRST:-0}" -gt 0 ]]; then
+        check_warn "Docs card(s) appear before referenced implementation cards — docs will ship stale. Reorder docs cards to final wave, or add 'Reconcile against HEAD after wave N' acceptance (see kanban-planning decomposition rules)"
+    else
+        check_pass "Docs cards ordered after referenced implementation (or no docs-before-impl pattern detected)"
+    fi
+fi
+
 # ── Summary ─────────────────────────────────────────────────────────────
 echo ""
 echo "=== Results: $PASSES passed, $WARNINGS warnings, $FAILURES failures ==="
