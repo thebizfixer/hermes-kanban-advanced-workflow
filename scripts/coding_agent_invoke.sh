@@ -247,7 +247,10 @@ case "$BINARY" in
     ;;
 
   hermes)
-    args=( chat -q "$PROMPT" --yolo )
+    # --ignore-rules prevents the child Hermes from loading kanban-worker
+    # skills, which would otherwise instruct it to dispatch via this same
+    # script — causing infinite recursive dispatch loops.
+    args=( chat -q "$PROMPT" --yolo --ignore-rules )
     append_model_args args
     if [[ "$MODE" == "dispatch" ]]; then
       _dispatch_hermes_and_meter "${args[@]}"
