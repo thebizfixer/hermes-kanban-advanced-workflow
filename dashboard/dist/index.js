@@ -296,7 +296,8 @@
       setPendingCodingAgentModel(null);
       setCodingAgentModelQuery("");
       setCodingAgentModelOptions(null);
-      if (!codingAgentBinaryConflict(binary)) {
+      // For hermes, the model catalog is loaded lazily in openCodingAgentModelPicker
+      if (binary !== "hermes" && !codingAgentBinaryConflict(binary)) {
         apiCodingAgentModels(binary).then(function (opts) {
           setCodingAgentModelOptions(opts);
         }).catch(function () {
@@ -616,11 +617,25 @@
       setPendingCodingAgentModel(codingAgentModel || null);
       setCodingAgentModelQuery("");
       setEditingCodingAgentModel(true);
-      apiCodingAgentModels(binary).then(function (opts) {
-        setCodingAgentModelOptions(opts);
-      }).catch(function () {
-        setCodingAgentModelOptions({ error: true, models: [{ id: "auto", label: "Auto (CLI default)" }] });
-      });
+      if (binary === "hermes") {
+        // Hermes uses the same provider/model catalog as profile model pickers
+        if (!modelOptions) {
+          apiFetch("/api/model/options").then(function (opts) {
+            setModelOptions(opts);
+            setCodingAgentModelOptions({ providers: opts.providers || [], source: "catalog" });
+          }).catch(function () {
+            setCodingAgentModelOptions({ error: true, models: [{ id: "auto", label: "Auto (profile config)" }] });
+          });
+        } else {
+          setCodingAgentModelOptions({ providers: modelOptions.providers || [], source: "catalog" });
+        }
+      } else {
+        apiCodingAgentModels(binary).then(function (opts) {
+          setCodingAgentModelOptions(opts);
+        }).catch(function () {
+          setCodingAgentModelOptions({ error: true, models: [{ id: "auto", label: "Auto (CLI default)" }] });
+        });
+      }
     }
 
     function applyCodingAgentModelChoice() {
@@ -1146,6 +1161,50 @@
           ),
           React.createElement("div", { className: "flex-1 overflow-y-auto min-h-0" },
             !codingAgentModelOptions ? React.createElement("p", { className: "p-4 text-xs text-muted-foreground" }, "Loading models…")
+              : codingAgentModelOptions.error ? React.createElement("p", { className: "p-4 text-xs text-red-400" }, "Could not load models")
+              : codingAgentModelOptions.providers ? function () {
+                  var q = (codingAgentModelQuery || "").toLowerCase();
+                  var provs = (codingAgentModelOptions.providers || []).map(function (prov) {
+                    var provId = prov.id || prov.slug || (typeof prov === "string" ? prov : "");
+                    var provLabel = prov.name || provId || prov;
+                    var provModels = (prov.models || []).filter(function (m) {
+                      var modelId = typeof m === "string" ? m : m.id || m.name;
+                      var modelLabel = typeof m === "string" ? m : m.name || m.id;
+                      if (!q) return true;
+                      return (modelId || "").toLowerCase().indexOf(q) >= 0 || (modelLabel || "").toLowerCase().indexOf(q) >= 0 || (provLabel || "").toLowerCase().indexOf(q) >= 0;
+                    });
+                    if (!provModels.length) return null;
+                    return React.createElement("div", { key: provId || provLabel },
+                      React.createElement("div", { className: "px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide bg-muted/30" }, provLabel),
+                      provModels.map(function (m) {
+                        var modelId = typeof m === "string" ? m : m.id || m.name;
+                        var modelLabel = typeof m === "string" ? m : m.name || m.id;
+                        var fullId = provId && modelId.indexOf("/") < 0 ? provId + "/" + modelId : modelId;
+                        var isSel = pendingCodingAgentModel === fullId || pendingCodingAgentModel === modelId;
+                        var isCurrent = codingAgentModel === fullId || codingAgentModel === modelId;
+                        return React.createElement("div", {
+                          key: fullId,
+                          className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (isSel ? " bg-accent/10" : ""),
+                          onClick: function () { setPendingCodingAgentModel(fullId); }
+                        },
+                          React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, isSel ? "✓" : ""),
+                          React.createElement("span", { className: "flex-1 truncate font-mono" }, modelLabel),
+                          isCurrent ? React.createElement("span", { className: "text-[10px] text-primary shrink-0" }, "current") : null
+                        );
+                      })
+                    );
+                  }).filter(Boolean);
+                  // Prepend the "Auto" option for hermes
+                  var autoEntry = React.createElement("div", {
+                    key: "__auto__",
+                    className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (pendingCodingAgentModel === "auto" ? " bg-accent/10" : ""),
+                    onClick: function () { setPendingCodingAgentModel("auto"); }
+                  },
+                    React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, pendingCodingAgentModel === "auto" ? "✓" : ""),
+                    React.createElement("span", { className: "flex-1 truncate font-mono" }, codingAgentModelDisplay())
+                  );
+                  return [autoEntry].concat(provs);
+                }()
               : (codingAgentModelOptions.models || []).filter(function (m) {
                   var q = (codingAgentModelQuery || "").toLowerCase();
                   if (!q) return true;
