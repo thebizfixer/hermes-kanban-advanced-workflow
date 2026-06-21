@@ -18,6 +18,7 @@ PARITY_ROWS = (
     ("gemini yolo", "--yolo", "--yolo"),
     ("grok always-approve", "--always-approve", "--always-approve"),
     ("aider yes-always", "--yes-always", "--yes-always"),
+    ("hermes yolo", "--yolo", "--yolo"),
 )
 
 

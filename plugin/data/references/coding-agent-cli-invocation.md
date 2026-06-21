@@ -16,6 +16,7 @@ Verify installed flags with `<binary> --help` after upgrades. `plugin/coding_age
 | `grok` | xAI: `-p` / `--single`; superagent: `--prompt` | xAI: `--output-format json`; superagent: `--format json` | xAI: `--always-approve` | `--model <id>` when supported |
 | `gemini` | `-p` / `--prompt` | `--output-format json` | `--yolo` or `--approval-mode=yolo` for walk-away runs | `--model <id>` |
 | `aider` | `--message "<prompt>"` | text only (no JSON envelope) | `--yes-always` (or `--yes`) | `--model <id>` |
+| `hermes` | `chat -q "<prompt>"` | text only (no JSON envelope) | `--yolo` | `--model <id>` |
 
 ## Cursor CLI (`cursor-agent` or `agent`)
 
@@ -140,6 +141,26 @@ aider --message "$FULL_PROMPT" --yes-always
 
 **Output:** human-readable text only. Token extraction falls back to estimates (E020 path) unless you add a separate metering hook.
 
+## Hermes Agent (`hermes`)
+
+**Docs:** [Hermes Agent CLI](https://hermes-agent.nousresearch.com/docs/) — `hermes chat -q` runs a single query non-interactively; `--yolo` skips dangerous-command approval prompts.
+
+**Smoke:**
+
+```bash
+hermes chat -q "say ok" --yolo
+```
+
+**Dispatch:**
+
+```bash
+hermes chat -q "$FULL_PROMPT" --yolo
+```
+
+**Output:** human-readable text only. Token extraction falls back to estimates (E020 path) unless you add a separate metering hook.
+
+**Auth:** Uses the Hermes profile's own provider config — no separate CLI login needed.
+
 ## Shell helper
 
 From the worktree (after `worktree_setup.sh`):
@@ -183,5 +204,6 @@ Dashboard smoke and worker dispatch use **different entry points** that must sta
 | `grok` | `--help`-detected xAI vs superagent flags | `detect_grok_cli_flavor()` + same branches |
 | `gemini` | `--yolo --output-format json` | `extra_smoke_argv` same |
 | `aider` | `--yes-always`; smoke `--no-git` | same |
+| `hermes` | `--yolo` | `extra_smoke_argv` same |
 
 Regression: `tests/test_coding_agent_parity.py` greps both files for these flag tokens. After CLI upgrades, update **both** paths and re-run `python3 scripts/check_coding_agent_cli.py`.

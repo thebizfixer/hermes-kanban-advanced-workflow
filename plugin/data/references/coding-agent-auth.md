@@ -84,6 +84,7 @@ If smoke works at project root but fails in the worktree with exit 127 on `codin
 | `grok` | API key | `GROK_API_KEY` | Export key in `.env` / gateway env |
 | `gemini` | Google login cache or API key | `GEMINI_API_KEY` / `GOOGLE_API_KEY` | Headless: API key or pre-cached login on gateway ([Gemini CLI auth](https://google-gemini.github.io/gemini-cli/docs/get-started/authentication.html)) |
 | `aider` | Provider API keys | `.aider.conf` / `.env` per provider | Configure model provider keys before dispatch |
+| `hermes` | Hermes profile config | `config.yaml` + `.env` (provider API keys) | `hermes auth add <provider>` or set API keys in `.env` — no separate CLI login |
 
 ## Plugin checks (three layers)
 

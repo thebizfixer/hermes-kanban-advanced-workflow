@@ -123,6 +123,38 @@ Tip: use --model <id>
         self.assertIn("--yolo", argv)
         self.assertIn("--output-format", argv)
 
+    def test_build_smoke_argv_hermes_auto(self) -> None:
+        argv = build_smoke_argv("hermes", CODING_AGENT_MODEL_AUTO)
+        self.assertEqual(argv[0], "hermes")
+        self.assertIn("chat", argv)
+        self.assertIn("-q", argv)
+        self.assertIn("--yolo", argv)
+        self.assertNotIn("--model", argv)
+
+    def test_build_smoke_argv_hermes_explicit_model(self) -> None:
+        argv = build_smoke_argv("hermes", "anthropic/claude-sonnet-4")
+        self.assertIn("--model", argv)
+        self.assertIn("anthropic/claude-sonnet-4", argv)
+        self.assertIn("--yolo", argv)
+
+    def test_build_dispatch_argv_hermes(self) -> None:
+        argv = build_dispatch_argv("hermes", "implement feature", CODING_AGENT_MODEL_AUTO)
+        self.assertIn("chat", argv)
+        self.assertIn("-q", argv)
+        self.assertIn("implement feature", argv)
+        self.assertIn("--yolo", argv)
+
+    def test_hermes_smoke_exit0_is_success(self) -> None:
+        self.assertTrue(
+            _interpret_smoke_result(
+                "hermes",
+                returncode=0,
+                stdout="ok",
+                stderr="",
+                json_attempt=False,
+            )
+        )
+
     def test_build_dispatch_argv_codex_sandbox(self) -> None:
         argv = build_dispatch_argv("codex", "do work", CODING_AGENT_MODEL_AUTO)
         self.assertIn("--sandbox", argv)

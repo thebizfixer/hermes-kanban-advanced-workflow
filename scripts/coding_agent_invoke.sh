@@ -163,6 +163,11 @@ case "$BINARY" in
     append_model_args args
     exec "$BINARY" "${args[@]}"
     ;;
+  hermes)
+    args=( chat -q "$PROMPT" --yolo )
+    append_model_args args
+    exec "$BINARY" "${args[@]}"
+    ;;
   *)
   echo "[coding_agent_invoke] Unknown binary '$BINARY' — trying generic -p" >&2
     args=( -p "$PROMPT" )

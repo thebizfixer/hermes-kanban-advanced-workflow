@@ -57,6 +57,7 @@ PRODUCT_REGISTRY: dict[str, tuple[str, tuple[str, ...], tuple[str, ...]]] = {
     "grok": ("Grok CLI", ("grok",), ("agent",)),
     "aider": ("Aider", ("aider",), ()),
     "gemini": ("Gemini CLI", ("gemini",), ()),
+    "hermes": ("Hermes Agent", ("hermes",), ()),
 }
 
 
@@ -155,6 +156,18 @@ ADAPTERS: dict[str, CodingAgentAdapter] = {
             ("gemini-2.5-flash", "gemini-2.5-flash"),
         ),
         extra_smoke_argv=("--yolo", "--output-format", "json"),
+    ),
+    "hermes": CodingAgentAdapter(
+        binary="hermes",
+        display_name="Hermes Agent",
+        invocation="hermes",
+        model_flag="--model",
+        list_models_argv=None,
+        default_models=(
+            (CODING_AGENT_MODEL_AUTO, "Default (profile config)"),
+        ),
+        extra_smoke_argv=("--yolo",),
+        version_signature=r"(?i)hermes\s+agent",
     ),
 }
 
@@ -496,6 +509,9 @@ def _build_headless_argv(
             cmd.extend(adapter.extra_smoke_argv)
     elif adapter.invocation == "gemini":
         cmd.extend(["-p", prompt, *adapter.extra_smoke_argv])
+    elif adapter.invocation == "hermes":
+        cmd.extend(["chat", "-q", prompt])
+        cmd.extend(adapter.extra_smoke_argv)
     else:
         cmd.extend(["-p", prompt])
         if json_output:
@@ -575,7 +591,7 @@ def _interpret_smoke_result(
             except json.JSONDecodeError:
                 pass
     if returncode == 0:
-        if binary in {"aider", "codex", "grok", "gemini"}:
+        if binary in {"aider", "codex", "grok", "gemini", "hermes"}:
             return True
         if (stdout or "").strip():
             return True

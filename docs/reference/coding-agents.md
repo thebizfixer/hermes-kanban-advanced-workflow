@@ -35,6 +35,7 @@ bash hermes-kanban-advanced-workflow/scripts/coding_agent_invoke.sh dispatch "$F
 | `grok` | xAI Grok Build or superagent grok-cli | xAI Grok CLI / `npm i -g grok-dev` | xAI: `grok -p "..."`; superagent: `grok --prompt "..."` | xAI: `--output-format json`; superagent: `--format json` | xAI: `--always-approve`; `GROK_API_KEY` |
 | `aider` | Aider-AI/aider | `pip install aider-install` | `aider --message "..."` | text only | `--yes-always` |
 | `gemini` | google-gemini/gemini-cli | `npm i -g @google/gemini-cli` | `gemini -p "..."` | `--output-format json` | `--yolo` / `--approval-mode=yolo` |
+| `hermes` | Hermes Agent | `curl -fsSL https://hermes-agent.nousresearch.com/install.sh \| bash` | `hermes chat -q "..."` | text only | `--yolo` |
 
 Model flag when not `auto`: `--model <id>` (all supported binaries).
 
@@ -165,6 +166,26 @@ aider --message "say ok" --yes-always --no-git
 ```
 
 Text output only — token attribution uses estimates unless you add a separate metering hook.
+
+## Hermes Agent (`hermes`)
+
+```bash
+hermes chat -q "say ok" --yolo
+```
+
+**Dispatch:**
+
+```bash
+hermes chat -q "$FULL_PROMPT" --yolo
+```
+
+**Model:** `--model <id>` (or `-m <id>`). Use `auto` for the Hermes profile default.
+
+**Auth:** Uses the Hermes profile's own provider config (config.yaml + `.env`) — no separate CLI login. Ensure the worker dispatch profile has a working `model.default` and provider API key.
+
+**Output:** Text only. Token attribution uses estimates (E020 path) unless you add a separate metering hook.
+
+**Permissions:** `--yolo` skips dangerous-command approval prompts for headless operation.
 
 ## Binary name collisions
 

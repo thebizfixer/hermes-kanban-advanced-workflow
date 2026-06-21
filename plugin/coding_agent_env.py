@@ -65,6 +65,11 @@ AUTH_PROFILES: dict[str, CodingAgentAuthProfile] = {
         login_hint="configure provider API keys in .env or aider config",
         notes="Provider-specific; smoke test is authoritative when keys are in config files.",
     ),
+    "hermes": CodingAgentAuthProfile(
+        display_name="Hermes Agent",
+        login_hint="hermes auth add <provider>, or set API keys in .env",
+        notes="Uses Hermes profile config for model/provider auth — no separate CLI login needed.",
+    ),
 }
 
 
