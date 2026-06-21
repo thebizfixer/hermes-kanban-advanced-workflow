@@ -13,6 +13,7 @@
   var React = SDK.React;
   var useState = SDK.hooks.useState;
   var useEffect = SDK.hooks.useEffect;
+  var useRef = SDK.hooks.useRef;
   var Card = SDK.components.Card;
   var CardHeader = SDK.components.CardHeader;
   var CardTitle = SDK.components.CardTitle;
@@ -238,6 +239,7 @@
     var _useState26 = useState(false), notifySaving = _useState26[0], setNotifySaving = _useState26[1];
     var _useState27 = useState([CUSTOM_CODING_AGENT_OPTION]), codingAgentOptions = _useState27[0], setCodingAgentOptions = _useState27[1];
     var _useState28 = useState(false), codingAgentTouched = _useState28[0], setCodingAgentTouched = _useState28[1];
+    var codingAgentTouchedRef = useRef(false);
 
     function resolvedCodingBinary() {
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
@@ -309,6 +311,7 @@
     function onCodingAgentBinaryChange(next) {
       setCodingAgent(next);
       setCodingAgentTouched(true);
+      codingAgentTouchedRef.current = true;
       if (next === "__custom__") {
         setCodingAgentModel("");
         setCodingAgentModelOptions(null);
@@ -325,7 +328,7 @@
       else if (s.default_working_branch) setWorkingBranch(s.default_working_branch);
       if (s.trigger_branch) setTriggerBranch(s.trigger_branch);
       else setTriggerBranch("");
-      if (!codingAgentTouched) {
+      if (!codingAgentTouchedRef.current) {
         if (s.coding_agent) {
           var options = buildCodingAgentOptions(s);
           setCodingAgentOptions(options);
@@ -517,6 +520,7 @@
           if (r.success) {
             setInitialized(true);
             setCodingAgentTouched(false);
+            codingAgentTouchedRef.current = false;
           }
         }
         setBootstrapping(false);
@@ -541,6 +545,7 @@
       apiSave(data).then(saveSucceeded).then(function (r) {
         if (r.output) addLines(r.output);
         setCodingAgentTouched(false);
+        codingAgentTouchedRef.current = false;
         setBootstrapping(false);
         reloadStatus();
       }).catch(function (e) {
@@ -622,6 +627,7 @@
       if (!pendingCodingAgentModel) return;
       setCodingAgentModel(pendingCodingAgentModel);
       setCodingAgentTouched(true);
+      codingAgentTouchedRef.current = true;
       setEditingCodingAgentModel(false);
       setPendingCodingAgentModel(null);
     }
