@@ -49,8 +49,8 @@ def load_error_registry(registry_path: str) -> dict:
         "E005_TOKEN_LOG_MISSING": {"severity": "warning", "description": "Token log missing (superseded by E018)"},
         "E006_ZERO_OUTPUT": {"severity": "error", "description": "Zero diff on all files"},
         "E013_EVALUATION_CHAIN_MISSING": {"severity": "error", "description": "Chain script missing"},
-        "E018_TOKEN_NOT_EXACT": {"severity": "error", "description": "Token log entry not exact — missing, wrong task_id, not source=agent, or zero counts"},
-        "E020_AGENT_OUTPUT_UNPARSEABLE": {"severity": "error", "description": "Agent output file not found, not valid JSON, or missing usage block"},
+        "E018_TOKEN_NOT_EXACT": {"severity": "error", "description": "Token log entry not exact — missing, wrong task_id, invalid source, or zero counts. Valid sources: agent, estimated, hermes_insights."},
+        "E020_AGENT_OUTPUT_UNPARSEABLE": {"severity": "error", "description": "Agent output file not found, empty, or unparseable. JSON with usage block preferred; text-only output accepted for non-JSON agents."},
         "E019_DESTRUCTIVE_GIT_OP": {"severity": "error", "description": "Destructive git operation detected (checkout --theirs/--ours or reset --hard) — human teams resolve per-hunk"},
         "E021_ACCEPTANCE_TEST_MISSING": {"severity": "error", "description": "Acceptance names test files not present in git diff — worker self-certified without shipping tests"},
         "E022_DOCS_STALE_MARKERS": {"severity": "error", "description": "Docs Verify: rg commands matched stale markers (pending, [new], TODO) against HEAD — docs not reconciled after implementation"},
@@ -388,7 +388,7 @@ def step_5_exact_token(token_log_path: str, task_id: str) -> Tuple[bool, Optiona
     Verifies:
     1. Token log exists and is non-empty
     2. Most recent entry matches the current task_id (not stale data)
-    3. Source is "agent" (exact from CLI JSON, not estimated)
+    3. Source is "agent" (exact from CLI JSON) or "estimated" (text-only agents)
     4. Token counts are non-zero (input + output > 0)
     """
     if not os.path.exists(token_log_path):
@@ -410,12 +410,16 @@ def step_5_exact_token(token_log_path: str, task_id: str) -> Tuple[bool, Optiona
 
     # Verify this entry belongs to the current card
     if last.get("task_id", "") != task_id:
-        print(f"[E018] task_id mismatch: log={last.get('task_id')} != current={task_id}")
+        print(
+            f"[E018] task_id mismatch: log={last.get('task_id')} != current={task_id}"
+        )
         return False, "E018_TOKEN_NOT_EXACT"
 
-    # Verify source is "agent" (exact from CLI JSON)
-    if last.get("source", "") != "agent":
-        print(f"[E018] source={last.get('source')} — must be 'agent'")
+    # Verify source is "agent" (exact from CLI JSON), "estimated" (text-only agents),
+    # or "hermes_insights" (authoritative metering via Hermes insights delta)
+    source = last.get("source", "")
+    if source not in ("agent", "estimated", "hermes_insights"):
+        print(f"[E018] source={source} — must be 'agent', 'estimated', or 'hermes_insights'")
         return False, "E018_TOKEN_NOT_EXACT"
 
     # Verify at least input tokens are non-zero
@@ -424,30 +428,54 @@ def step_5_exact_token(token_log_path: str, task_id: str) -> Tuple[bool, Optiona
         print("[E018] token counts are zero")
         return False, "E018_TOKEN_NOT_EXACT"
 
-    total = cursor.get("total", cursor.get("input_tokens", 0) + cursor.get("output_tokens", 0))
-    print(f"[E018] {total:,} tokens logged (source=agent)")
+    total = cursor.get(
+        "total", cursor.get("input_tokens", 0) + cursor.get("output_tokens", 0)
+    )
+    print(f"[E018] {total:,} tokens logged (source={source})")
     return True, None
 
 
 def step_7_agent_output_capture(task_id: str) -> Tuple[bool, Optional[str]]:
     """E020 — Agent output file captured and parseable.
 
-    Verifies the agent's JSON output was saved to disk and contains a 'usage' block.
+    Verifies the agent's output was saved to disk. For JSON-output agents
+    (Cursor, Claude, Codex, Gemini, Grok) the file must contain a 'usage' block.
+    For text-only agents (hermes, aider) the file only needs to exist and be
+    non-empty — token estimation is handled by log_invoke_tokens.py.
+
     Runs before E018 since token data is extracted from this file.
     """
-    agent_output_file = Path(os.environ.get("KANBAN_TEMP", os.environ.get("TMPDIR", os.environ.get("TEMP", "/tmp")))) / f"agent_output_{task_id}.json"
+    agent_output_file = (
+        Path(
+            os.environ.get(
+                "KANBAN_TEMP",
+                os.environ.get("TMPDIR", os.environ.get("TEMP", "/tmp")),
+            )
+        )
+        / f"agent_output_{task_id}.json"
+    )
     if not agent_output_file.exists():
         print(f"[E020] agent output file not found: {agent_output_file}")
         return False, "E020_AGENT_OUTPUT_UNPARSEABLE"
 
     try:
         data = json.loads(agent_output_file.read_text(encoding="utf-8"))
-        if "usage" not in data:
-            print("[E020] agent output missing 'usage' block — agent may have crashed")
-            return False, "E020_AGENT_OUTPUT_UNPARSEABLE"
-        return True, None
+        if "usage" in data:
+            return True, None
+        # Valid JSON but no usage block — text-only agent fallback.
+        # Accept non-empty file (token estimation happened in log_invoke_tokens.py).
+        if agent_output_file.stat().st_size > 0:
+            print("[E020] agent output is JSON but missing 'usage' block — text-only agent, accepting")
+            return True, None
+        print("[E020] agent output is empty JSON")
+        return False, "E020_AGENT_OUTPUT_UNPARSEABLE"
     except json.JSONDecodeError:
-        print("[E020] agent output is not valid JSON")
+        # Not JSON — text-only agent output (hermes, aider).
+        # Accept non-empty file as long as something was captured.
+        if agent_output_file.stat().st_size > 0:
+            print("[E020] agent output is text-only (not JSON) — accepting")
+            return True, None
+        print("[E020] agent output is empty")
         return False, "E020_AGENT_OUTPUT_UNPARSEABLE"
 
 

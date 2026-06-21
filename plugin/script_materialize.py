@@ -20,6 +20,8 @@ HERMES_SCRIPT_NAMES = (
     "kanban_intervention_inc.sh",
     "kanban_git_ops.sh",
     "token_tracker.py",
+    "log_invoke_tokens.py",
+    "hermes_token_meter.py",
     "coding_agent_invoke.sh",
     "worktree_setup.sh",
     "install_pre_push_hook.sh",

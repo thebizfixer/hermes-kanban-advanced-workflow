@@ -8,6 +8,8 @@
 # Env:
 #   KANBAN_CODING_AGENT        (default: agent)
 #   KANBAN_CODING_AGENT_MODEL  (default: auto)
+#   HERMES_KANBAN_PLAN_ID      Plan ID for token attribution
+#   HERMES_KANBAN_TASK         Task ID for token attribution
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,21 +49,86 @@ append_model_args() {
   if model_is_auto; then
     return 0
   fi
-  case "$BINARY" in
-    codex)
-      _out+=(--model "$MODEL")
-      ;;
-    grok)
-      _out+=(--model "$MODEL")
-      ;;
-    aider)
-      _out+=(--model "$MODEL")
-      ;;
-    *)
-      _out+=(--model "$MODEL")
-      ;;
-  esac
+  # All known binaries support --model
+  _out+=(--model "$MODEL")
 }
+
+# ── Unified dispatch: capture, log tokens, output to stdout ────────────
+
+_dispatch_and_log() {
+  # Run the coding agent, capture stdout+stderr to a temp file,
+  # extract tokens via log_invoke_tokens.py (handles JSON + text estimation),
+  # then cat the output to stdout for the worker to capture.
+  local -a agent_args=("$@")
+  local out_file
+  out_file="$(mktemp)"
+
+  local rc=0
+  if run_with_coding_agent_auth_lock "$BINARY" "${agent_args[@]}" >"$out_file" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+
+  # Always attempt token logging — log_invoke_tokens.py handles:
+  #   - JSON with usage block → exact tokens (source=agent)
+  #   - Text-only output → estimated tokens (source=estimated)
+  #   - Empty/unparseable output → no-op (returns 0)
+  HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
+  HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
+    python3 "$SCRIPT_DIR/log_invoke_tokens.py" --output-file "$out_file" 2>/dev/null || true
+
+  # Output captured content to stdout (worker captures this)
+  cat "$out_file"
+  rm -f "$out_file"
+
+  return "$rc"
+}
+
+# ── Hermes-specific dispatch: authoritative token metering ─────────────
+
+_dispatch_hermes_and_meter() {
+  # For the 'hermes' coding agent, tokens are metered via Hermes insights
+  # delta rather than agent self-reporting. Hermes records token usage from
+  # provider response headers — this is authoritative, not estimated.
+  #
+  # Flow: snapshot → dispatch → delta → log authoritative counts
+  local -a agent_args=("$@")
+  local out_file
+  out_file="$(mktemp)"
+
+  # Snapshot current Hermes token state
+  python3 "$SCRIPT_DIR/hermes_token_meter.py" snapshot 2>/dev/null || true
+
+  local rc=0
+  if run_with_coding_agent_auth_lock "$BINARY" "${agent_args[@]}" >"$out_file" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+
+  # Log authoritative token delta from Hermes insights
+  HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
+  HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
+    python3 "$SCRIPT_DIR/hermes_token_meter.py" delta \
+      --plan-id "${HERMES_KANBAN_PLAN_ID:-}" \
+      --task-id "${HERMES_KANBAN_TASK:-}" \
+      --source hermes_insights 2>/dev/null || true
+
+  # Also run log_invoke_tokens.py as fallback (writes estimated entry if
+  # hermes_token_meter.py produced no delta — e.g., insights window rolled)
+  HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
+  HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
+    python3 "$SCRIPT_DIR/log_invoke_tokens.py" --output-file "$out_file" 2>/dev/null || true
+
+  # Output captured content to stdout (worker captures this)
+  cat "$out_file"
+  rm -f "$out_file"
+
+  return "$rc"
+}
+
+# ── Smoke ──────────────────────────────────────────────────────────────
 
 _run_agent() {
   local attempt=1
@@ -105,35 +172,31 @@ if [[ "$MODE" == "smoke" ]] && preflight_cache_fresh "$BINARY" "$REPO_ROOT"; the
   exit $?
 fi
 
+# ── Binary-specific dispatch ───────────────────────────────────────────
+
 case "$BINARY" in
   agent|cursor-agent)
     # Cursor: -p = --print; --output-format requires -p; --trust required in worktrees
     args=( -p "$PROMPT" --output-format json --trust )
     append_model_args args
     if [[ "$MODE" == "dispatch" ]]; then
-      OUT_FILE="$(mktemp)"
-      if run_with_coding_agent_auth_lock "$BINARY" "${args[@]}" >"$OUT_FILE" 2>&1; then
-        HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
-        HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
-          python3 "$SCRIPT_DIR/log_invoke_tokens.py" --output-file "$OUT_FILE" 2>/dev/null || true
-        cat "$OUT_FILE"
-        rm -f "$OUT_FILE"
-        exit 0
-      else
-        rc=$?
-        cat "$OUT_FILE"
-        rm -f "$OUT_FILE"
-        exit "$rc"
-      fi
+      _dispatch_and_log "${args[@]}"
+      exit $?
     fi
     _run_agent
     exit $?
     ;;
+
   claude)
     args=( -p "$PROMPT" --output-format json --dangerously-skip-permissions )
     append_model_args args
+    if [[ "$MODE" == "dispatch" ]]; then
+      _dispatch_and_log "${args[@]}"
+      exit $?
+    fi
     exec "$BINARY" "${args[@]}"
     ;;
+
   codex)
     args=( exec --json -a never )
     if [ "$MODE" = "dispatch" ]; then
@@ -143,35 +206,64 @@ case "$BINARY" in
     fi
     append_model_args args
     args+=( "$PROMPT" )
+    if [[ "$MODE" == "dispatch" ]]; then
+      _dispatch_and_log "${args[@]}"
+      exit $?
+    fi
     exec "$BINARY" "${args[@]}"
     ;;
+
   grok)
     append_grok_headless_args args "$PROMPT"
     append_model_args args
+    if [[ "$MODE" == "dispatch" ]]; then
+      _dispatch_and_log "${args[@]}"
+      exit $?
+    fi
     exec "$BINARY" "${args[@]}"
     ;;
+
   gemini)
     args=( -p "$PROMPT" --yolo --output-format json )
     append_model_args args
+    if [[ "$MODE" == "dispatch" ]]; then
+      _dispatch_and_log "${args[@]}"
+      exit $?
+    fi
     exec "$BINARY" "${args[@]}"
     ;;
+
   aider)
     args=( --message "$PROMPT" --yes-always )
     if [ "$MODE" = "smoke" ]; then
       args+=( --no-git )
     fi
     append_model_args args
+    if [[ "$MODE" == "dispatch" ]]; then
+      _dispatch_and_log "${args[@]}"
+      exit $?
+    fi
     exec "$BINARY" "${args[@]}"
     ;;
+
   hermes)
     args=( chat -q "$PROMPT" --yolo )
     append_model_args args
+    if [[ "$MODE" == "dispatch" ]]; then
+      _dispatch_hermes_and_meter "${args[@]}"
+      exit $?
+    fi
     exec "$BINARY" "${args[@]}"
     ;;
+
   *)
-  echo "[coding_agent_invoke] Unknown binary '$BINARY' — trying generic -p" >&2
+    echo "[coding_agent_invoke] Unknown binary '$BINARY' — trying generic -p" >&2
     args=( -p "$PROMPT" )
     append_model_args args
+    if [[ "$MODE" == "dispatch" ]]; then
+      _dispatch_and_log "${args[@]}"
+      exit $?
+    fi
     exec "$BINARY" "${args[@]}"
     ;;
 esac
