@@ -102,10 +102,13 @@ else
     check_warn "audit_anchors.py not found — skipping anchor shape check"
 fi
 if [[ -x "$ANCHOR_SCRIPT" ]] || [[ -f "$ANCHOR_SCRIPT" ]]; then
-    ANCHOR_JSON=$(python3 "$ANCHOR_SCRIPT" --plan "$PLAN" --json 2>/dev/null || true)
+    ANCHOR_EXIT=0
+    ANCHOR_JSON=$(python3 "$ANCHOR_SCRIPT" --plan "$PLAN" --json 2>/dev/null) || ANCHOR_EXIT=$?
     ANCHOR_FAILS=$(echo "$ANCHOR_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('failures',0))" 2>/dev/null || echo 0)
     ANCHOR_WARNS=$(echo "$ANCHOR_JSON" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('warnings',0))" 2>/dev/null || echo 0)
-    if [[ ${ANCHOR_FAILS:-0} -gt 0 ]]; then
+    if [[ ${ANCHOR_EXIT:-0} -ne 0 && ${ANCHOR_FAILS:-0} -eq 0 ]]; then
+        check_fail "verify_anchors.py exited ${ANCHOR_EXIT} with zero reported failures — runtime error, do not treat as pass"
+    elif [[ ${ANCHOR_FAILS:-0} -gt 0 ]]; then
         check_fail "$ANCHOR_FAILS declared anchor(s) could not be verified against HEAD"
     elif [[ ${ANCHOR_WARNS:-0} -gt 0 ]]; then
         check_warn "$ANCHOR_WARNS stale declared anchor(s) — re-verify line numbers"
@@ -387,6 +390,44 @@ if [[ "${A11Y_FAIL:-0}" -gt 0 ]]; then
     fi
 else
     check_pass "Motion blocks include a11y acceptance when needed"
+fi
+
+# ── 22. Tests: line validation on optimization card blocks ───────────────
+echo "22. Tests: line command-syntax validation"
+SCRIPT_LIB="$SCRIPT_DIR/lib"
+TESTS_INVALID=$(python3 - "$PLAN" "$SCRIPT_LIB" <<'PY' 2>/dev/null
+import json, re, sys
+from pathlib import Path
+
+plan_text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+lib_dir = str(Path(sys.argv[2]))
+if lib_dir not in sys.path:
+    sys.path.insert(0, lib_dir)
+
+from card_body_fidelity import body_tests_valid  # noqa: E402
+
+opt_section = re.split(r'\n## ', plan_text)
+opt_section = [s for s in opt_section if s.startswith("Kanban optimization") or s.startswith("# Kanban optimization")]
+if not opt_section:
+    sys.exit(0)
+
+lines = opt_section[0].splitlines()
+invalid = 0
+for i, ln in enumerate(lines):
+    if ln.strip().startswith("Tests:") and not ln.strip().startswith("Tests: N/A"):
+        tests_raw = ln.strip().split(":", 1)[1].strip()
+        if not body_tests_valid(f"Tests: {tests_raw}\n"):
+            print(f"  Card block Tests: line invalid: {tests_raw[:120]}")
+            invalid += 1
+
+print(invalid)
+PY
+)
+TESTS_INVALID=${TESTS_INVALID:-0}
+if [[ "${TESTS_INVALID:-0}" -gt 0 ]]; then
+    check_fail "$TESTS_INVALID optimization card block(s) have invalid Tests: lines — use valid pytest/shell or 'N/A'"
+else
+    check_pass "All card block Tests: lines pass command-syntax validation"
 fi
 
 # ── Summary ─────────────────────────────────────────────────────────────

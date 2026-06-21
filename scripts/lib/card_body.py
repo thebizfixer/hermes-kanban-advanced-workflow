@@ -39,6 +39,27 @@ def sanitize_tests_command(cmd: str) -> str:
     return _PAREN_SUFFIX_RE.sub("", stripped).strip()
 
 
+_KNOWN_TEST_RUNNERS = frozenset(
+    {
+        "pytest", "python", "python3", "bash", "sh", "./",
+        "npm", "npx", "node", "yarn", "make", "cargo", "go",
+        "pip", "uv", "tox", "mypy", "ruff", "black", "flake8",
+        "eslint", "tsc", "mvn", "gradle", "dotnet", "deno",
+        "just", "pre-commit", "rstest",
+    }
+)
+
+_PROSE_SIGNAL_WORDS = frozenset(
+    {
+        "row", "rows", "operator", "manual", "manually",
+        "verify", "check", "ensure", "confirm", "validate",
+        "and", "then", "after", "before", "finally",
+        "matrix", "merge", "rerun", "re-run", "step",
+        "browser", "smoke", "click", "navigate",
+    }
+)
+
+
 def validate_tests_command_syntax(cmd: str) -> Tuple[bool, Optional[str]]:
     """Return (ok, error_message). N/A and empty are valid."""
     if not cmd or cmd.strip().upper() == "N/A":
@@ -48,9 +69,18 @@ def validate_tests_command_syntax(cmd: str) -> Tuple[bool, Optional[str]]:
     if check.count("(") != check.count(")"):
         return False, "unbalanced parentheses in Tests: line"
     try:
-        shlex.split(check, posix=(os.name != "nt"))
+        tokens = shlex.split(check, posix=(os.name != "nt"))
     except ValueError as exc:
         return False, str(exc)
+    if not tokens:
+        return False, "empty Tests: line after sanitize"
+    first = tokens[0].lower()
+    has_runner = first in _KNOWN_TEST_RUNNERS or "/" in tokens[0]
+    if not has_runner:
+        signal_count = sum(1 for t in tokens if t.lower() in _PROSE_SIGNAL_WORDS)
+        barewords = sum(1 for t in tokens if t.isalpha())
+        if signal_count >= 2 or barewords >= 4:
+            return False, "Tests: line looks like prose — use a valid test command or 'N/A'"
     return True, None
 
 
