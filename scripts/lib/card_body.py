@@ -86,7 +86,7 @@ def parse_card_body(body: str) -> dict:
     in_files_yaml = False
     for line in body.split("\n"):
         stripped = line.strip()
-        if line.startswith("Files:"):
+        if line.startswith("Files:") and not files_line:
             raw = line.replace("Files:", "").strip()
             files_line = [
                 normalize_file_path(f.strip()) for f in raw.split(",") if f.strip()
