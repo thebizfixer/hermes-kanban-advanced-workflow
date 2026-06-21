@@ -225,6 +225,22 @@ def validate_parsed_cards(
                     )
                 )
 
+        card_type = card.get("type") or ""
+        if card_type == "verification-deploy":
+            if not tests_raw or tests_raw.upper() != "N/A":
+                violations.append(
+                    FidelityViolation(
+                        code="V007_DEPLOY_TESTS_NOT_NA",
+                        severity=block_sev,
+                        message=(
+                            f"verification-deploy card Tests: must be 'N/A' — "
+                            "operator smoke/browser steps belong in Acceptance:"
+                        ),
+                        card_key=key,
+                        plan_file=plan_label,
+                    )
+                )
+
         for f in card.get("files") or []:
             norm = normalize_file_path(str(f))
             if not norm:

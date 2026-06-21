@@ -22,14 +22,27 @@ Write implementation plans that decompose cleanly into Kanban task graphs. The q
 
 Plans are gated by policy before decomposition. The orchestrator runs `kanban_card_policy.py` on every card body before dispatch. Cards without `Files:`, `agent -p` block, or `Mode:` are blocked (P001/P002/P003) **except** carve-outs: `Type: orchestrator-handoff`, `Type: verification` / `verification-local`, and `Type: verification-deploy` (test/deploy gates — no `Files:` or agent block). Plans without agent-prompt blocks are rejected at the attestation gate (Step 0c) unless every card is a carve-out type. See `kanban-advanced:kanban-orchestrator` § Step 0c and 0d.
 
-**Verification card template:**
-```
-Type: verification
-Tests: {command}
+**Verification card templates:**
+
+```text
+Type: verification-local
+Tests: pytest tests/test_x.py -q
 Commit: N/A (verification only)
 Mode: read-only
 ```
-No `Files:` line and no ` ```agent` block.
+No `Files:` line and no agent block. Operator steps belong in `Acceptance:` numbered bullets — never in `Tests:`.
+
+```text
+Type: verification-deploy
+Tests: N/A
+Commit: N/A (verification only)
+Mode: read-only
+Acceptance:
+- 1. Deploy to {target}
+- 2. Browser smoke: {checklist}
+- 3. Verify logs at {path}
+```
+Operator deploy/smoke steps go in `Acceptance:` — `Tests:` must be `N/A`. Matrix prose or manual step descriptions in `Tests:` will be blocked at decompose (V007).
 
 ## Plan file format (markdown + preview)
 
