@@ -15,6 +15,7 @@ Tier-gated hardening pass after a sanity check. Work through each tier in order,
 - Deferred bloat (>30% decisions deferred)
 - Missing test strategies
 - Redundant or overlapping changes
+- **Docs cards ordered after implementation.** Documentation workstreams that describe shipped behavior must not dispatch before their referenced implementation cards. Flag when a docs card appears in an earlier wave than the implementation cards it documents — the `verify_optimization.sh` check 14 produces an inverted-graph WARN. The clockwork-v2 anti-pattern (Card 1 docs before Cards 2–5 implementation) produced `EXTRACTION.md` with stale 3.5s poll times, `[new]` tags, and `pending` backend-mode references. Fix during Harden: either reorder docs cards to the final wave, or add `Reconcile against HEAD after wave N` acceptance with an `acceptance-verify` follow-up card.
 
 ### Nice-to-have (fix if time permits)
 - Consolidation opportunities (merge same-file cards)
