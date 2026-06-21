@@ -545,7 +545,9 @@ def sync_project_env(project_root: Path, updates: dict[str, str]) -> None:
         pattern = rf"^{re.escape(key)}=.*$"
         line = f"{key}={val}"
         if re.search(pattern, content, flags=re.MULTILINE):
-            content = re.sub(pattern, line, content, flags=re.MULTILINE)
+            # Use a lambda replacement to avoid interpreting backslashes
+            # (e.g. Windows paths like C:\Users\...) as regex escape sequences.
+            content = re.sub(pattern, lambda _: line, content, flags=re.MULTILINE)
         else:
             if content and not content.endswith("\n"):
                 content += "\n"
