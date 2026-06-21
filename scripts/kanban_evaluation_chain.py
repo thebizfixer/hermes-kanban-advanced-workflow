@@ -21,6 +21,7 @@ import subprocess
 import sys
 import json
 import os
+import shlex
 import hashlib
 import datetime
 import re
@@ -51,6 +52,8 @@ def load_error_registry(registry_path: str) -> dict:
         "E018_TOKEN_NOT_EXACT": {"severity": "error", "description": "Token log entry not exact — missing, wrong task_id, not source=agent, or zero counts"},
         "E020_AGENT_OUTPUT_UNPARSEABLE": {"severity": "error", "description": "Agent output file not found, not valid JSON, or missing usage block"},
         "E019_DESTRUCTIVE_GIT_OP": {"severity": "error", "description": "Destructive git operation detected (checkout --theirs/--ours or reset --hard) — human teams resolve per-hunk"},
+        "E021_ACCEPTANCE_TEST_MISSING": {"severity": "error", "description": "Acceptance names test files not present in git diff — worker self-certified without shipping tests"},
+        "E022_DOCS_STALE_MARKERS": {"severity": "error", "description": "Docs Verify: rg commands matched stale markers (pending, [new], TODO) against HEAD — docs not reconciled after implementation"},
     }
 
 
@@ -523,6 +526,166 @@ def step_6_zero_output(
     return False, "E006_ZERO_OUTPUT"
 
 
+def _extract_acceptance_test_refs(card_body: str) -> list[str]:
+    """Extract test file/case references from Acceptance: lines.
+
+    Scans for patterns like:
+      - `rg 'def test_foo' tests/`
+      - `rg 'test_bar' tests/test_baz.py`
+      - `tests/test_foo.py`
+    Returns list of file paths (relative to workspace root).
+    """
+    refs: list[str] = []
+    in_acceptance = False
+    for line in card_body.split("\n"):
+        stripped = line.strip()
+        if stripped.lower().startswith("acceptance:") or stripped.lower().startswith(
+            "acceptance ("
+        ):
+            in_acceptance = True
+            continue
+        # Check for Verify: lines too (docs cards use these)
+        if re.match(r"^-?\s*(Verify|verify):\s*", stripped):
+            in_acceptance = True
+        if not in_acceptance:
+            continue
+        if stripped and not stripped.startswith("-") and not stripped.startswith("Verify"):
+            # Walk out of Acceptance block on non-list, non-Verify line
+            if not stripped.startswith(("1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.")):
+                in_acceptance = False
+                continue
+        # Extract test file references
+        # Pattern 1: rg 'def test_*' tests/<file>
+        for m in re.finditer(
+            r"(?:rg|grep)\s+['\"].*?test\w*.*?['\"]\s+(tests?/[\w/.\-]+)",
+            stripped,
+        ):
+            refs.append(m.group(1))
+        # Pattern 2: bare test file path
+        for m in re.finditer(r"\b(tests?/[\w/.\-]+test[\w/.\-]*\.(?:py|ts|tsx|js|sh))\b", stripped):
+            refs.append(m.group(1))
+        # Pattern 3: backtick-wrapped test file
+        for m in re.finditer(r"`(tests?/[\w/.\-]+test[\w/.\-]*\.(?:py|ts|tsx|js|sh))`", stripped):
+            refs.append(m.group(1))
+    return list(dict.fromkeys(refs))  # dedup preserving order
+
+
+def step_acceptance_test_coverage(
+    card_body: str, baseline: str, workspace: str
+) -> Tuple[bool, Optional[str]]:
+    """E021 — Assert tests named in Acceptance: actually exist in git diff.
+
+    When an agent's Acceptance block claims new test files/cases were added,
+    verify those files appear in the git diff (added or modified). Prevents
+    workers from self-certifying acceptance without shipping the tests.
+    """
+    refs = _extract_acceptance_test_refs(card_body)
+    if not refs:
+        return True, None
+
+    diff_range = _diff_range(baseline, workspace)
+    result = subprocess.run(
+        ["git", "diff", "--name-only", diff_range],
+        capture_output=True, text=True,
+        encoding="utf-8", errors="replace",
+        cwd=workspace,
+    )
+    changed_files = set(result.stdout.strip().split("\n"))
+
+    missing = [r for r in refs if r not in changed_files]
+    # Also check if the file at least exists (was added in prior commits)
+    for r in missing[:]:
+        full_path = os.path.join(workspace, r)
+        if os.path.exists(full_path):
+            # File exists but wasn't changed in this diff — check if it's in HEAD
+            head_result = subprocess.run(
+                ["git", "ls-tree", "HEAD", "--", r],
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                cwd=workspace,
+            )
+            if head_result.stdout.strip():
+                # File is in HEAD already — might be acceptable if this is an existing test file
+                # being referenced. Only flag if the file has NO test function matching the pattern.
+                # For now, allow files that exist in HEAD (conservative).
+                missing.remove(r)
+
+    if missing:
+        print(f"[E021] Acceptance names test files not in diff: {missing}")
+        return False, "E021_ACCEPTANCE_TEST_MISSING"
+
+    print(f"[E021] {len(refs)} acceptance test ref(s) verified in diff")
+    return True, None
+
+
+def step_docs_head_verify(
+    card_body: str, workspace: str
+) -> Tuple[bool, Optional[str]]:
+    """E022 — Run docs card Verify: grep commands against HEAD.
+
+    For cards with Verify: rg bullets in Acceptance, runs those commands
+    against the current HEAD (not worktree-at-start). Flags stale markers
+    like 'pending', '[new]', 'Current build debt' that indicate docs weren't
+    reconciled after implementation.
+    """
+    verify_commands: list[str] = []
+    for line in card_body.split("\n"):
+        m = re.match(r"^\s*-\s*\d*\.?\s*(?:Verify|verify):\s*rg\s+(.+)$", line.strip(), re.I)
+        if m:
+            verify_commands.append(m.group(1).strip())
+
+    if not verify_commands:
+        return True, None
+
+    stale_signals = ("pending", "[new]", "Current build debt", "TODO", "FIXME", "not yet")
+    found_stale: list[str] = []
+
+    for cmd in verify_commands:
+        # cmd is like: 'def test_foo' tests/ or "'pending' docs/"
+        # Strip all quotes for cross-platform compatibility (shlex handles them
+        # differently on POSIX vs Windows)
+        clean = cmd.replace("'", "").replace('"', "").strip()
+        # Split into rg args: first token is pattern, rest are paths
+        parts = shlex_split_safe(clean)
+        if not parts:
+            continue
+        # Build: rg --no-heading -n <pattern> [paths...]
+        rg_args = ["rg", "--no-heading", "-n"]
+        rg_args.extend(parts)
+        result = subprocess.run(
+            rg_args,
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            cwd=workspace,
+            timeout=60,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            print(f"[E022] Verify: matched — {cmd[:80]}")
+            # Check for stale signal words in matched lines
+            for matched_line in result.stdout.split("\n")[:20]:
+                line_lower = matched_line.lower()
+                for signal in stale_signals:
+                    if signal.lower() in line_lower:
+                        found_stale.append(f"{signal}: {matched_line.strip()[:120]}")
+
+    if found_stale:
+        print(f"[E022] Docs stale markers found: {len(found_stale)}")
+        for s in found_stale[:5]:
+            print(f"  [E022] {s}")
+        return False, "E022_DOCS_STALE_MARKERS"
+
+    print(f"[E022] {len(verify_commands)} Verify: command(s) passed, no stale markers")
+    return True, None
+
+
+def shlex_split_safe(s: str) -> list[str]:
+    """shlex.split that returns empty list on parse failure."""
+    try:
+        return shlex.split(s, posix=(os.name != "nt"))
+    except ValueError:
+        return []
+
+
 def step_excessive_churn(
     estimated_lines: int, baseline: str, workspace: str
 ) -> Tuple[bool, Optional[str]]:
@@ -673,6 +836,8 @@ def run_chain(task_id: str, workspace: str, card_body: str,
                 ),
                 lambda: step_excessive_churn(parsed["estimated_lines"], baseline, workspace),
                 lambda: step_8_no_destructive_git(workspace, workspace),
+                lambda: step_acceptance_test_coverage(card_body, baseline, workspace),
+                lambda: step_docs_head_verify(card_body, workspace),
             ):
                 ok, err = step_fn()
                 passed, reason = _finish_step(ok, err)
@@ -698,6 +863,10 @@ def run_chain(task_id: str, workspace: str, card_body: str,
             ),
         ),
         ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace, parsed.get("files") or [])),
+        (
+            "Acceptance test coverage (E021)",
+            lambda: step_acceptance_test_coverage(card_body, baseline, workspace),
+        ),
         ("Presentation acceptance (E028/E029)", presentation_step),
         ("Commit match", lambda: step_4_commit_match(parsed["commit"], workspace)),
         ("Exact token (E018)", lambda: step_5_exact_token(token_log, task_id)),
@@ -707,6 +876,7 @@ def run_chain(task_id: str, workspace: str, card_body: str,
         ("Excessive churn (E017)", lambda: step_excessive_churn(parsed["estimated_lines"], baseline, workspace)),
         ("Agent output capture (E020)", lambda: step_7_agent_output_capture(task_id)),
         ("No destructive git (E019)", lambda: step_8_no_destructive_git(workspace, workspace)),
+        ("Docs HEAD verify (E022)", lambda: step_docs_head_verify(card_body, workspace)),
     ]
 
     for step_name, step_fn in steps:

@@ -203,6 +203,104 @@ Mode: read-only
             else:
                 os.environ["KANBAN_EVAL_BASELINE"] = prev
 
+    # ── E021: Acceptance test coverage ──
+
+    def test_acceptance_test_coverage_allows_when_test_in_diff(self) -> None:
+        """Card Acceptance names a test file that exists in git diff → ALLOW."""
+        # Create a test file and commit it
+        test_path = os.path.join(self.repo, "tests", "test_new_feature.py")
+        os.makedirs(os.path.dirname(test_path), exist_ok=True)
+        with open(test_path, "w", encoding="utf-8") as f:
+            f.write("def test_feature(): pass\n")
+        _git(self.repo, "add", "tests/test_new_feature.py")
+        _git(self.repo, "commit", "-m", "feat: add new feature")
+
+        card_body = """Type: code
+Files: src/foo.py
+Tests: pytest tests/
+Acceptance:
+- 1. rg 'def test_feature' tests/test_new_feature.py — assert test exists
+- 2. tests/test_new_feature.py has def test_feature"""
+        ok, err = chain.step_acceptance_test_coverage(
+            card_body, "HEAD~1", self.repo
+        )
+        self.assertTrue(ok, err)
+        self.assertIsNone(err)
+
+    def test_acceptance_test_coverage_denies_missing_test(self) -> None:
+        """Card Acceptance names a test file not in the diff → DENY."""
+        card_body = """Type: code
+Files: src/foo.py
+Tests: pytest tests/
+Acceptance:
+- 1. rg 'def test_missing' tests/test_missing.py — new test file
+- 2. tests/test_missing.py must exist"""
+        ok, err = chain.step_acceptance_test_coverage(
+            card_body, "HEAD~1", self.repo
+        )
+        self.assertFalse(ok)
+        self.assertEqual(err, "E021_ACCEPTANCE_TEST_MISSING")
+
+    def test_acceptance_test_coverage_no_refs_is_noop(self) -> None:
+        """Card without Acceptance test refs → ALLOW (no-op)."""
+        card_body = """Type: code
+Files: src/foo.py
+Tests: pytest
+Commit: feat: no tests mentioned"""
+        ok, err = chain.step_acceptance_test_coverage(
+            card_body, "HEAD~1", self.repo
+        )
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+
+    # ── E022: Docs HEAD verify ──
+
+    def test_docs_head_verify_allows_clean_verify(self) -> None:
+        """Docs card Verify: rg matches clean content, no stale markers → ALLOW."""
+        docs_path = os.path.join(self.repo, "docs", "feature.md")
+        os.makedirs(os.path.dirname(docs_path), exist_ok=True)
+        with open(docs_path, "w", encoding="utf-8") as f:
+            f.write("# Feature\nShipped and working.\n")
+        _git(self.repo, "add", "docs/feature.md")
+        _git(self.repo, "commit", "-m", "docs: feature shipped")
+
+        card_body = """Type: docs
+Files: docs/feature.md
+Mode: modify-only
+Tests: N/A
+Acceptance:
+- Verify: rg 'Shipped' docs/feature.md"""
+        ok, err = chain.step_docs_head_verify(card_body, self.repo)
+        self.assertTrue(ok, err)
+        self.assertIsNone(err)
+
+    def test_docs_head_verify_denies_stale_markers(self) -> None:
+        """Docs card Verify: rg matches 'pending' → DENY."""
+        docs_path = os.path.join(self.repo, "docs", "stale.md")
+        os.makedirs(os.path.dirname(docs_path), exist_ok=True)
+        with open(docs_path, "w", encoding="utf-8") as f:
+            f.write("# Pending Work\npending backend-mode-aware-endpoints\n")
+        _git(self.repo, "add", "docs/stale.md")
+        _git(self.repo, "commit", "-m", "docs: stale reference still present")
+
+        card_body = """Type: docs
+Files: docs/stale.md
+Tests: N/A
+Acceptance:
+- Verify: rg 'pending' docs/stale.md"""
+        ok, err = chain.step_docs_head_verify(card_body, self.repo)
+        self.assertFalse(ok)
+        self.assertEqual(err, "E022_DOCS_STALE_MARKERS")
+
+    def test_docs_head_verify_no_verify_lines_is_noop(self) -> None:
+        """Card without Verify: lines → ALLOW (no-op)."""
+        card_body = """Type: docs
+Files: docs/foo.md
+Tests: N/A"""
+        ok, err = chain.step_docs_head_verify(card_body, self.repo)
+        self.assertTrue(ok)
+        self.assertIsNone(err)
+
 
 if __name__ == "__main__":
     unittest.main()
