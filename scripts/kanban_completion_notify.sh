@@ -81,4 +81,24 @@ MSG="${MSG}
 Board archived. Review postmortem when back."
 
 echo "$MSG"
+
+# Resolve deliver for gateway routing (same as lifecycle)
+DELIVER="local"
+if [[ -x "$SCRIPT_DIR/lib/resolve_notify_deliver.sh" ]]; then
+  DELIVER="$(bash "$SCRIPT_DIR/lib/resolve_notify_deliver.sh" "$REPO_ROOT" 2>/dev/null || echo "local")"
+fi
+
+# Explicit gateway delivery for walk-away completion (non-intervention)
+if [[ "$DELIVER" != "local" ]]; then
+  # Use Hermes send_message (referenced in kanban-notify skill) for direct delivery
+  # Graceful fallback if subcommand or flags differ in this Hermes build
+  if command -v hermes >/dev/null 2>&1; then
+    hermes send_message "$MSG" --deliver "$DELIVER" 2>&1 || \
+    hermes send_message "$MSG" 2>&1 || \
+    echo "[kanban_completion_notify] Note: delivery attempted via resolved channel $DELIVER (check gateway)"
+  else
+    echo "[kanban_completion_notify] Hermes CLI not found for direct send (resolved deliver: $DELIVER)"
+  fi
+fi
+
 date -u +"%Y-%m-%dT%H:%M:%SZ" >"$SENTINEL"

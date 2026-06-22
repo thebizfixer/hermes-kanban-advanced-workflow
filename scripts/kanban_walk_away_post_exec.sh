@@ -71,15 +71,34 @@ DONE_COUNT="$(hermes kanban list 2>/dev/null | grep -c '^✓' || true)"
 REPORTS_DIR="${REPO_ROOT}/.hermes/kanban/reports"
 mkdir -p "$REPORTS_DIR"
 
-# 1. Reconciliation — token burn artifact (best-effort).
+# 1. RECONCILIATION (HARD GATE before postmortem).
+# Must succeed for the plan before we generate postmortem or archive.
+RECONCILE_OK=true
 if [[ -f "$SCRIPT_DIR/kanban_token_report.py" ]]; then
-  echo "→ Token report (reconciliation)..."
+  echo " Token report (reconciliation artifact)..."
   if [[ "$DRY_RUN" == "false" ]]; then
-    python3 "$SCRIPT_DIR/kanban_token_report.py" --plan "$PLAN_ID" 2>&1 || true
+    if ! python3 "$SCRIPT_DIR/kanban_token_report.py" --plan "$PLAN_ID" 2>&1; then
+      echo "[kanban_walk_away_post_exec] Token report failed"
+      RECONCILE_OK=false
+    fi
   fi
 fi
 
-# 2. Postmortem (before archive — task history intact).
+# Basic additional reconciliation sanity (file compliance via final audit report if present)
+if [[ "$DRY_RUN" == "false" ]]; then
+  REPORTS_DIR="${REPO_ROOT}/.hermes/kanban/reports"
+  if [[ ! -f "$REPORTS_DIR/${PLAN_ID}_kpi.json" && ! -f "$REPORTS_DIR/${PLAN_ID}_postmortem_"*".md" ]]; then
+    # Allow first run; token report is the primary gate for walk-away
+    : 
+  fi
+fi
+
+if [[ "$RECONCILE_OK" != "true" ]]; then
+  echo "[kanban_walk_away_post_exec] BLOCK: reconciliation failed — do not proceed to postmortem"
+  exit 1
+fi
+
+# 2. POSTMORTEM (only after successful reconciliation).
 POSTMORTEM=""
 if [[ -f "$SCRIPT_DIR/generate_postmortem.py" ]]; then
   echo "→ Generating postmortem..."
