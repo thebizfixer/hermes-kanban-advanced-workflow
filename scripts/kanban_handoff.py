@@ -440,14 +440,26 @@ def _run_pre_dispatch_gate(
     gate_path = _bash_path(gate_script)
     stamp_path = gate_script.resolve().as_posix()
     try:
+        # shell=True is required on Windows so the spawned bash process inherits
+        # MSYS2 path translation. Passing bash + args as a list bypasses the
+        # shell layer and MSYS2's automount can't resolve /c/ paths, causing
+        # "No such file or directory" even though the file exists.
+        # PREFLIGHT_SKIP_CODING_AGENT_CLI prevents the preflight sub-check
+        # from hanging on coding-agent auth probes in non-interactive contexts.
+        env = {
+            **os.environ,
+            "PREFLIGHT_SKIP_CODING_AGENT_CLI": "1",
+        }
         r = subprocess.run(
-            ["bash", gate_path, plan_id],
+            f"bash {gate_path} {plan_id}",
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
             timeout=120,
             cwd=str(repo_root),
+            shell=True,
+            env=env,
         )
         if r.returncode == 0:
             counts = _parse_gate_result(r.stdout, r.stderr)
