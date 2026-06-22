@@ -23,6 +23,8 @@ hermes kanban-advanced init --project-root . --working-branch <branch-name>
 
 Two steps. Restart Hermes and you're ready. Init creates `kanban-advanced-orchestrator` and `kanban-advanced-worker`, installs plugin SOUL prompts, seeds role-only profile skills, and verifies the result. Replace `<branch-name>` with your integration branch (e.g. `main`). Details: [wiki/bootstrap.md](wiki/bootstrap.md).
 
+> **Verify your installation:** Run the [standard smoke test](test-plan/kanban-standard-smoke-test.plan.md) to validate the full governance pipeline end-to-end. Copy the plan to `.hermes/kanban/plans/`, then decompose and execute. Expected: 5 cards, 8/8 tests passing, governance gates exercised, postmortem generated.
+
 > **Coding-agent auth:** Bootstrap runs an **advisory** smoke test and writes `HOME` + `KANBAN_CODING_AGENT*` to `.env`. It does **not** add API keys or block init on auth failure. You must supply keys in `.env` or run vendor login (`agent login`, `claude login`, …) on the gateway host. **Preflight** blocks decomposition if headless auth still fails. See [coding-agent auth](plugin/data/references/coding-agent-auth.md).
 
 > **Operator provisioning:** Init covers kanban infrastructure only (profiles, overlay, invoke scripts, kanban `.worktreeinclude` paths). Application `.env`, API keys, `.venv/`, and `node_modules/` are **your** responsibility — add to `.worktreeinclude` based on what cards run. See [operator provisioning](plugin/data/references/operator-provisioning.md).
@@ -189,11 +191,12 @@ flowchart LR
 - **[Interaction Model](docs/reference/interaction-model.md)** — trigger phrases, planning/execution/post-execution flow
 - **[Configuration](docs/reference/configuration.md)** — overlay config variables, governance profile (`policy_profile`), dashboard settings UI
 - **[Dashboard](dashboard/API.md)** — settings tab API reference (branches, governance profile, coding agent, profiles, max turns)
-- **[Error Codes](docs/reference/error-codes.md)** — full 37-code registry with recovery
+- **[Error Codes](docs/reference/error-codes.md)** — full 49-code registry with recovery (E001–E029 plus P, A, G, PR codes)
 - **[KPIs](docs/reference/kpis.md)** — success rate, token burn, failure-mode distribution
 - **[Personas](docs/reference/personas.md)** — orchestrator/worker roles, worker lifecycle
 - **[Governance Scripts](docs/reference/scripts.md)** — evaluation chain, attestation, card policy, recovery
 - **[Coding Agents](docs/reference/coding-agents.md)** — supported headless CLIs, dashboard vs worktree smoke, `coding_agent_invoke.sh`
+- **[Smoke Test Plan](test-plan/kanban-standard-smoke-test.plan.md)** — end-to-end validation plan (5 cards, governance gates, postmortem)
 - **[Limitations](docs/reference/limitations.md)** — what the plugin can't automate
 - **[Operator provisioning](plugin/data/references/operator-provisioning.md)** — `.env`, worktrees, deps beyond bootstrap (agent SSOT)
 

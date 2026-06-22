@@ -127,6 +127,7 @@ See [[bootstrap#coding-agent-auth-during-bootstrap-limitations]], [[troubleshoot
 3. Re-run **Bootstrap** or `hermes kanban-advanced init` if Tier 2 failed; read verification lines in output ([[bootstrap#verify-on-disk-after-bootstrap]]).
 4. **Tier 3** if init succeeded but execute/preflight fails — usually `.env`, `HOME`, or coding CLI auth.
 5. If still stuck: [[troubleshooting]] + `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")`.
+6. **Run the end-to-end smoke test** — copy [the standard smoke test plan](../test-plan/kanban-standard-smoke-test.plan.md) to `.hermes/kanban/plans/`, decompose, and execute. Validates the full governance pipeline (evaluation chain E001–E023, escalation ladder with 5-loop cap, token metering, postmortem generation). Expected: 5 cards, 8/8 tests passing, postmortem artifacts.
 
 ---
 
@@ -154,4 +155,5 @@ Reference detail: [`docs/reference/scripts.md`](../docs/reference/scripts.md) (g
 - [[governance]] § Plugin integrity — when to run `governance_integrity.sh` before a plan
 - [PLATFORM_NOTES.md](../PLATFORM_NOTES.md) — Windows / WSL / macOS / Linux paths and limits
 - [coding agents](../docs/reference/coding-agents.md) — supported CLI binaries and auth
+- [Smoke test plan](../test-plan/kanban-standard-smoke-test.plan.md) — end-to-end governance validation
 - `AGENTS.md` — agent question router
