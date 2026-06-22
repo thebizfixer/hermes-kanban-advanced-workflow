@@ -4,12 +4,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# Platform-native path separator — colon on Linux, semicolon on Windows.
+_PY_SEP="$("python3" -c "import os; print(os.pathsep)" 2>/dev/null || echo ':')"
 
 resolve_plan_file() {
   local repo_root="${1:?repo_root}"
   local plan_id="${2:?plan_id}"
   local hint="${3:-}"
-  PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" python3 -c "
+  PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+${_PY_SEP}${PYTHONPATH}}" python3 -c "
 import sys
 from plan_paths import resolve_plan_file
 from pathlib import Path
@@ -27,7 +29,7 @@ ensure_canonical_plan() {
   local repo_root="${1:?repo_root}"
   local plan_id="${2:?plan_id}"
   local hint="${3:-}"
-  PYTHONPATH="${SCRIPT_DIR}:${PYTHONPATH:-}" python3 -c "
+  PYTHONPATH="${SCRIPT_DIR}${PYTHONPATH:+${_PY_SEP}${PYTHONPATH}}" python3 -c "
 import sys
 from plan_paths import ensure_canonical_plan
 from pathlib import Path

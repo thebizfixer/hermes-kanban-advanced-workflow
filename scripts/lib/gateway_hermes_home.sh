@@ -14,9 +14,11 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hermes_home.sh
 source "$_LIB_DIR/hermes_home.sh"
 _PLUGIN_ROOT="$(cd "$_LIB_DIR/../.." && pwd)"
+# Platform-native path separator — colon on Linux, semicolon on Windows.
+_PY_SEP="$("python3" -c "import os; print(os.pathsep)" 2>/dev/null || echo ':')"
 
 _resolve_gateway_hermes_home() {
-  PYTHONPATH="${_PLUGIN_ROOT}${PYTHONPATH:+:$PYTHONPATH}" python3 - "$HERMES_HOME" <<'PY'
+  PYTHONPATH="${_PLUGIN_ROOT}${PYTHONPATH:+${_PY_SEP}${PYTHONPATH}}" python3 - "$HERMES_HOME" <<'PY'
 import sys
 from plugin.hermes_gateway_home import resolve_gateway_hermes_home
 print(resolve_gateway_hermes_home(sys.argv[1]))
@@ -28,7 +30,7 @@ if [[ -z "${KANBAN_GATEWAY_HERMES_HOME:-}" ]]; then
 fi
 
 kanban_is_profile_scoped_hermes_home() {
-  PYTHONPATH="${_PLUGIN_ROOT}${PYTHONPATH:+:$PYTHONPATH}" python3 - "$HERMES_HOME" <<'PY'
+  PYTHONPATH="${_PLUGIN_ROOT}${PYTHONPATH:+${_PY_SEP}${PYTHONPATH}}" python3 - "$HERMES_HOME" <<'PY'
 import sys
 from plugin.hermes_gateway_home import is_profile_scoped_hermes_home
 raise SystemExit(0 if is_profile_scoped_hermes_home(sys.argv[1]) else 1)

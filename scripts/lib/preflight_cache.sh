@@ -16,7 +16,9 @@ preflight_cache_fresh() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local repo="${repo_root:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-  PYTHONPATH="${repo}:${PYTHONPATH:-}" python3 - "$repo" "$binary" <<'PY'
+  # Platform-native path separator — colon on Linux, semicolon on Windows.
+  local py_sep; py_sep="$("python3" -c "import os; print(os.pathsep)" 2>/dev/null || echo ':')"
+  PYTHONPATH="${repo}${PYTHONPATH:+${py_sep}${PYTHONPATH}}" python3 - "$repo" "$binary" <<'PY'
 import sys
 from pathlib import Path
 

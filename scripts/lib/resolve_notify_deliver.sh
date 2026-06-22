@@ -11,11 +11,14 @@ HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 
 BUNDLE_ROOT="$(_resolve_kanban_bundle_root "$REPO_ROOT" 2>/dev/null || true)"
 PY_PATH="$SCRIPT_DIR"
+# Use platform-native path separator (colon on Linux, semicolon on Windows).
+# Git Bash runs a native Windows Python, which expects semicolons.
+PY_SEP="$("python3" -c "import os; print(os.pathsep)" 2>/dev/null || echo ':')"
 if [ -n "$BUNDLE_ROOT" ] && [ -d "$BUNDLE_ROOT/plugin" ]; then
-  PY_PATH="${BUNDLE_ROOT}:${PY_PATH}"
+  PY_PATH="${BUNDLE_ROOT}${PY_SEP}${PY_PATH}"
 fi
 
-PYTHONPATH="${PY_PATH}${PYTHONPATH:+:$PYTHONPATH}" python3 - "$REPO_ROOT" "$HERMES_HOME" <<'PY'
+PYTHONPATH="${PY_PATH}${PYTHONPATH:+${PY_SEP}${PYTHONPATH}}" python3 - "$REPO_ROOT" "$HERMES_HOME" <<'PY'
 import sys
 from pathlib import Path
 
