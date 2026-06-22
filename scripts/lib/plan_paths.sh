@@ -6,6 +6,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Platform-native path separator — colon on Linux, semicolon on Windows.
 _PY_SEP="$("python3" -c "import os; print(os.pathsep)" 2>/dev/null || echo ':')"
+# On Windows (Git Bash), pwd returns /c/Users/... format which native
+# Windows Python can't resolve. Convert paths to native format.
+if [ "$_PY_SEP" = ";" ] && command -v cygpath >/dev/null 2>&1; then
+  SCRIPT_DIR="$(cygpath -w "$SCRIPT_DIR")"
+  BUNDLE_ROOT="$(cygpath -w "$BUNDLE_ROOT")"
+fi
 
 resolve_plan_file() {
   local repo_root="${1:?repo_root}"

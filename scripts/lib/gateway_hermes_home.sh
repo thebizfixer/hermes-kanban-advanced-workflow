@@ -14,6 +14,12 @@ _LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=hermes_home.sh
 source "$_LIB_DIR/hermes_home.sh"
 _PLUGIN_ROOT="$(cd "$_LIB_DIR/../.." && pwd)"
+# On Windows (Git Bash), pwd returns /c/Users/... format which native Windows
+# Python can't resolve. Convert to C:\Users\... via cygpath when available.
+# On Linux/macOS cygpath doesn't exist — the path is already native.
+if command -v cygpath >/dev/null 2>&1; then
+  _PLUGIN_ROOT="$(cygpath -w "$_PLUGIN_ROOT")"
+fi
 # Platform-native path separator — colon on Linux, semicolon on Windows.
 _PY_SEP="$("python3" -c "import os; print(os.pathsep)" 2>/dev/null || echo ':')"
 
