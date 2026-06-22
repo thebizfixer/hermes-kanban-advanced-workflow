@@ -44,7 +44,11 @@ NO_BUNDLED_SKILLS_TEXT = (
 )
 
 # Files safe to copy from the default profile when bootstrapping dispatch profiles.
-_PROFILE_CONFIG_FILES = ("config.yaml", ".env")
+# .env is included because Hermes profiles do NOT inherit env vars from the
+# main $HERMES_HOME/.env — each profile needs its own copy. The reconciliation
+# step re-syncs these on every bootstrap (not just at creation), so operator
+# key updates propagate to dispatch profiles on Update Plugin / re-init.
+_PROFILE_CONFIG_FILES = ("config.yaml", ".env", "auth.json")
 
 # plugin/data/prompts/*.md → profiles/<name>/SOUL.md
 _PROFILE_SOUL_PROMPTS_BY_ROLE: dict[str, str] = {
@@ -466,6 +470,14 @@ def reconcile_dispatch_profiles(
         log=log,
     ):
         return False
+
+    # Sync config.yaml, .env, and auth.json from the default profile on every
+    # bootstrap. Hermes profiles do NOT inherit env vars — each profile needs
+    # its own .env with current API keys. This ensures operator key updates
+    # propagate to dispatch profiles on Update Plugin / re-init.
+    for profile_name in (worker_profile, orchestrator_profile):
+        _copy_profile_config_from_default(hermes_home, profile_name)
+    log("   OK Synced config.yaml + .env + auth.json from default profile")
 
     env = _home_env(hermes_home)
     prompts_src = _prompts_src_from_skills(skills_src)
