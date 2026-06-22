@@ -145,15 +145,15 @@ def delta(
 
     if total_delta == 0:
         print(
-            "[token_meter] No token delta detected — dispatch may not have "
-            "produced measurable token activity (or insights window rolled)"
+            "[token_meter] WARNING: No token delta detected — dispatch may not have "
+            "produced measurable token activity (or insights window rolled). "
+            "Logging zero-delta entry for audit trail."
         )
-        return 0
 
     plan_id = plan_id or os.environ.get("HERMES_KANBAN_PLAN_ID", "")
     task_id = task_id or os.environ.get("HERMES_KANBAN_TASK", "")
 
-    # Log the authoritative delta
+    # Log even zero-delta so we have an audit trail (proves metering ran)
     log_token_run(
         plan_id=plan_id,
         task_id=task_id,
@@ -163,7 +163,7 @@ def delta(
         cursor_cache_write_tokens=0,
         cursor_model=os.environ.get("KANBAN_CODING_AGENT_MODEL", ""),
         source=source,
-        status="completed",
+        status="completed" if total_delta > 0 else "no_delta",
         extra={
             "metering_method": "hermes_insights_delta",
             "before_total": before.get("total_tokens", 0),
@@ -171,6 +171,9 @@ def delta(
             "new_sessions": new_sessions,
         },
     )
+
+    if total_delta == 0:
+        return 0
 
     print(
         f"[token_meter] Delta: {total_delta:,} total tokens "

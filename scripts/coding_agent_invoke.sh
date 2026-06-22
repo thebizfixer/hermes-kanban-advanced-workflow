@@ -97,8 +97,8 @@ _dispatch_hermes_and_meter() {
   local out_file
   out_file="$(mktemp)"
 
-  # Snapshot current Hermes token state
-  python3 "$SCRIPT_DIR/hermes_token_meter.py" snapshot 2>/dev/null || true
+  # Snapshot current Hermes token state (errors go to stderr for debugging)
+  python3 "$SCRIPT_DIR/hermes_token_meter.py" snapshot || true
 
   local rc=0
   if run_with_coding_agent_auth_lock "$BINARY" "${agent_args[@]}" >"$out_file" 2>&1; then
@@ -107,19 +107,27 @@ _dispatch_hermes_and_meter() {
     rc=$?
   fi
 
-  # Log authoritative token delta from Hermes insights
+  # Log authoritative token delta from Hermes insights.
+  # Remove 2>/dev/null so errors are visible in worker output — critical for
+  # diagnosing why token metering might fail. Keep || true so a metering
+  # failure doesn't block the card from completing.
+  local meter_rc=0
   HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
   HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
     python3 "$SCRIPT_DIR/hermes_token_meter.py" delta \
       --plan-id "${HERMES_KANBAN_PLAN_ID:-}" \
       --task-id "${HERMES_KANBAN_TASK:-}" \
-      --source hermes_insights 2>/dev/null || true
+      --source hermes_insights || meter_rc=$?
 
-  # Also run log_invoke_tokens.py as fallback (writes estimated entry if
-  # hermes_token_meter.py produced no delta — e.g., insights window rolled)
-  HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
-  HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
-    python3 "$SCRIPT_DIR/log_invoke_tokens.py" --output-file "$out_file" 2>/dev/null || true
+  # Only run log_invoke_tokens.py as fallback if hermes_token_meter.py failed
+  # (exit code != 0). When hermes_token_meter succeeds it always writes an
+  # entry — even for zero delta — so a fallback estimated entry would be a
+  # duplicate.
+  if [ "$meter_rc" -ne 0 ]; then
+    HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
+    HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
+      python3 "$SCRIPT_DIR/log_invoke_tokens.py" --output-file "$out_file" || true
+  fi
 
   # Output captured content to stdout (worker captures this)
   cat "$out_file"
