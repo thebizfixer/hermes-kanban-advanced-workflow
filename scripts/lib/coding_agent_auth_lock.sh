@@ -37,8 +37,9 @@ run_with_coding_agent_auth_lock() {
     return 2
   fi
   if ! command -v flock >/dev/null 2>&1; then
-    echo "[coding_agent_auth_lock] flock not found — required on gateway host (use WSL/Linux)" >&2
-    return 127
+    echo "[coding_agent_auth_lock] flock not found — running without lock (install flock on gateway host for safety)" >&2
+    "$@"
+    return $?
   fi
   local lockfile wait
   lockfile="$(ensure_coding_agent_auth_lock_dir)"

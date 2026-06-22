@@ -255,10 +255,13 @@ case "$BINARY" in
     ;;
 
   hermes)
-    # --ignore-rules prevents the child Hermes from loading kanban-worker
-    # skills, which would otherwise instruct it to dispatch via this same
-    # script — causing infinite recursive dispatch loops.
-    args=( chat -q "$PROMPT" --yolo --ignore-rules )
+    # KANBAN_CODING_AGENT_CHILD=1 tells the kanban-worker skill (if loaded)
+    # that this is a coding-agent child session — it should complete the task
+    # directly, NOT re-dispatch via coding_agent_invoke.sh (recursion guard).
+    # This replaces the nuclear --ignore-rules approach which stripped ALL
+    # project context and made the agent useless on Windows.
+    export KANBAN_CODING_AGENT_CHILD=1
+    args=( chat -q "$PROMPT" --yolo )
     append_model_args args
     if [[ "$MODE" == "dispatch" ]]; then
       _dispatch_hermes_and_meter "${args[@]}"
