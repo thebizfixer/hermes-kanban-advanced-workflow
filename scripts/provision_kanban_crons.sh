@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 # provision_kanban_crons.sh — Per-plan Hermes cron lifecycle for wave progression.
+# IMPORTANT GOVERNANCE NOTE (hardened after bypass incidents):
+# --remove for a specific PLAN_ID removes ONLY the wave crons (auto-unblock, board-keeper, lifecycle if present for that plan).
+# It MUST NEVER modify .hermes/kanban-overrides/kanban-config.yaml.
+# notify_lifecycle and walk_away_mode are operator-controlled settings and survive plan cleanup.
+# Direct editing of the config or broad cron removal outside this script is a process violation.
 #
 # Usage:
 #   bash scripts/provision_kanban_crons.sh --create [--plan-id ID] [--dry-run] [--json]
@@ -252,6 +257,9 @@ case "$ACTION" in
     fi
     ;;
   remove)
+    # CLEANUP CONTRACT: This block removes only wave crons for the plan.
+    # It does NOT touch notify_lifecycle in the overlay config.
+    # See header GOVERNANCE NOTE.
     stored_auto="" stored_keeper="" stored_lifecycle=""
     if [[ -n "$PLAN_ID" ]]; then
       while IFS= read -r line; do

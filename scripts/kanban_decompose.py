@@ -75,7 +75,7 @@ def parse_args():
     p.add_argument(
         "--provision-crons",
         action="store_true",
-        help="Create wave crons (manual orchestrator decomposition without handoff)",
+        help="Create wave crons (manual orchestrator decomposition without handoff) — DEPRECATED outside handoff.py",
     )
     p.add_argument("--json", action="store_true", help="Machine-readable JSON output")
     p.add_argument("--archive-prior", action="store_true",
@@ -86,10 +86,30 @@ def parse_args():
                    help="Pause after every N cards (default: 5)")
     p.add_argument("--pause-ms", type=int, default=3000,
                    help="Pause duration in millis (default: 3000)")
+    p.add_argument("--from-handoff", action="store_true",
+                   help="Internal: only set by kanban_handoff.py. Direct use is a governance violation.")
 
     args = p.parse_args()
     if not args.plan and not args.cards_yaml:
         p.error("Either --plan or --cards-yaml is required")
+
+    # Hard governance guard: direct decompose is forbidden except in explicit recovery/debug.
+    # Future users / agents must go through kanban_handoff.py which creates the single
+    # Type: orchestrator-handoff card. This prevents duplicate roots, duplicate gates,
+    # manual ROOT bypasses, and incorrect cron/notify handling.
+    if not args.from_handoff and not args.dry_run:
+        # Allow only if the caller is clearly the orchestrator in a controlled recovery
+        # (we still warn loudly). In normal operation this should never be reached.
+        print("ERROR: kanban_decompose.py was invoked directly (no --from-handoff).", file=sys.stderr)
+        print("This is a governance violation.", file=sys.stderr)
+        print("The only supported path is: python kanban_handoff.py --plan <plan.md>", file=sys.stderr)
+        print("Direct decompose bypasses handoff card, idempotency, cron provisioning in the", file=sys.stderr)
+        print("correct session, Type: orchestrator-handoff marker, and board-clean checks.", file=sys.stderr)
+        print("It is the root cause of duplicate cards, duplicate roots/gates, and config drift.", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("If you are debugging, re-run via handoff.py or use --dry-run.", file=sys.stderr)
+        sys.exit(9)  # New exit code for "direct decompose bypass"
+
     return args
 
 # ── Plan parser ────────────────────────────────────────────────────────────

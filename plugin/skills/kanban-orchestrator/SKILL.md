@@ -39,6 +39,16 @@ card by its title `Decompose: <plan_id>` and the body marker `Type: orchestrator
 Such a card is **SOP-only** — there is intentionally **no `agent -p` block**. Do NOT
 treat it as a coding task and do NOT look for an agent block (no E014 no-op).
 
+**GOVERNANCE HARD RULE (bypass detection):** 
+If you are given a card or ROOT whose title starts with "Decompose:" OR whose body contains "Decompose: <plan>" 
+**but it does NOT carry both `Type: orchestrator-handoff` AND evidence that it was created by kanban_handoff.py 
+(e.g. stamped `handoff_source`, `from-handoff`, or the exact runbook format produced by the script), 
+this is an invalid bypass (manual ROOT, direct decompose.py call, or ad-hoc creation).
+**Action:** Immediately block the card. Do NOT decompose. Post a comment explaining the violation.
+Direct the operator (or the calling agent) to use ONLY `python .../kanban_handoff.py --plan <file>`.
+Record the incident for the postmortem. This rule exists precisely to prevent duplicate roots/gates, 
+config drift on notify_lifecycle, and loss of cron provisioning discipline.
+
 ### Fast-path (follow this, not the full Standard process below)
 
 **Load ONLY this skill at entry. Do NOT load `kanban-worker` during decomposition —

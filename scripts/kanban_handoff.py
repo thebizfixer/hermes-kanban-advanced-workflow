@@ -811,7 +811,7 @@ bash {bundle}/scripts/provision_kanban_crons.sh --check
 
 Substitute `<gate_id>` from Step 2:
 ```bash
-python3 {bundle}/scripts/kanban_decompose.py {decompose_source} --gate-id <gate_id> --no-crons
+python3 {bundle}/scripts/kanban_decompose.py {decompose_source} --from-handoff --gate-id <gate_id> --no-crons
 ```
 {source_note} — block-on-create; never `--triage`, never `--parent` on create. Crons already provisioned.
 
