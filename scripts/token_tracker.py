@@ -23,10 +23,21 @@ from typing import Any
 
 
 def _token_log_path() -> Path:
-    """Resolve token log path from env or default."""
+    """Resolve token log path from env or default.
+
+    Priority:
+    1. KANBAN_TOKEN_LOG env var
+    2. Project-relative .hermes/kanban/tokens.jsonl (when running from a project with .hermes/)
+    3. $HERMES_HOME/kanban/tokens.jsonl
+    """
     env = os.environ.get("KANBAN_TOKEN_LOG", "")
     if env:
         return Path(env)
+    # Check for project-relative path (same directory as postmortem reports)
+    cwd = Path.cwd()
+    project_log = cwd / ".hermes" / "kanban" / "tokens.jsonl"
+    if project_log.parent.parent.exists():  # .hermes/ exists
+        return project_log
     hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
     return Path(hermes_home) / "kanban" / "tokens.jsonl"
 

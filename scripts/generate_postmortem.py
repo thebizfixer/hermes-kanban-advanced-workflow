@@ -1699,6 +1699,22 @@ def main(argv: list[str] | None = None) -> int:
         for entry in read_jsonl(token_path)
         if str(entry.get("plan_id") or "").strip() == plan_id
     ]
+    # Also read from $HERMES_HOME/kanban/tokens.jsonl as secondary source
+    # (orchestrator checkpoints pre-v5.5.2 wrote there; merge both)
+    hermes_token_path = Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))) / "kanban" / "tokens.jsonl"
+    if hermes_token_path.exists() and hermes_token_path.resolve() != token_path.resolve():
+        hermes_entries = [
+            entry
+            for entry in read_jsonl(hermes_token_path)
+            if str(entry.get("plan_id") or "").strip() == plan_id
+        ]
+        # Deduplicate by task_id + timestamp
+        seen = {(e.get("task_id"), e.get("timestamp")) for e in token_entries}
+        for entry in hermes_entries:
+            key = (entry.get("task_id"), entry.get("timestamp"))
+            if key not in seen:
+                token_entries.append(entry)
+                seen.add(key)
     intervention_count = read_intervention_count(interventions_path)
     intervention_log = [
         entry

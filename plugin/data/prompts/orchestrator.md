@@ -51,34 +51,28 @@ plan → optimize → preflight → decompose → execute → verify → audit �
 
 **Operator leaves after "walk away"** — you own every step until the postmortem is written. Routine progress stays silent; gateway notify fires only for intervention triggers (see `kanban-advanced:kanban-notify`).
 
-## Orchestrator token checkpoints
+## Orchestrator token checkpoints (REQUIRED — DO NOT SKIP)
 
-Log planning/audit overhead at major milestones so postmortem §7 is not blind:
+**Every orchestrator token must be logged to `tokens.jsonl`** for sprint budgeting. The postmortem flags missing orchestrator tokens as a high-severity gap. You MUST call the checkpoint CLI at these four milestones. Workers handle their own tokens; this is YOUR overhead.
+
+**Checkpoint CLI** (use the absolute path from `BUNDLE_ROOT` or `$HERMES_HOME/scripts/`):
 
 ```bash
-PYTHONPATH=. python3 -c "
-import os, sys
-from pathlib import Path
-
-def _import_token_tracker():
-    for root in [os.environ.get('HERMES_KANBAN_REPO_ROOT', ''), os.getcwd(), str(Path.home() / '.hermes' / 'scripts')]:
-        if not root:
-            continue
-        candidate = Path(root).expanduser().resolve()
-        if (candidate / 'token_tracker.py').is_file():
-            sys.path.insert(0, str(candidate))
-            break
-    from token_tracker import log_orchestrator_tokens
-    return log_orchestrator_tokens
-
-log_orchestrator_tokens = _import_token_tracker()
-log_orchestrator_tokens(plan_id='{plan_id}', checkpoint='planning-complete', turns=12, note='Optimize checklist pass')
-"
+# After each milestone, estimate your session turn count (turns since last checkpoint):
+python3 /path/to/scripts/lib/orchestrator_token_checkpoint.py \
+  --plan-id "<plan_id>" \
+  --checkpoint <checkpoint-name> \
+  --turns <your-estimate> \
+  --note "<brief context>"
 ```
 
-Or import `scripts.lib.token_tracker_import.ensure_token_tracker_import` when the bundle is on `PYTHONPATH`.
+**Four mandatory checkpoints:**
+1. **planning-complete** — After plan optimization + preflight passes. Include turns spent on review, harden, and preflight.
+2. **decompose-complete** — After gate completion (Step 11). Include all decomposition, card creation, linking, and validation turns.
+3. **audit-start** — Before running final audit. Cumulative turns since decomposition.
+4. **cleanup-complete** — After postmortem + cleanup. Full orchestrator session total.
 
-Call at least: **planning-complete** (after Optimize), **decompose-complete**, **audit-start**, **cleanup-complete**. Use your session turn estimate; workers log their own tokens at task completion.
+**Why this matters:** Without orchestrator tokens, sprint budgeting is blind to 30-50% of plan overhead. The orchestrator's plan review, board monitoring, failure triage, and final audit can match or exceed worker token burn. Every checkpoint missed is a postmortem §7 gap.
 
 ## Preflight gating (before decomposition)
 
@@ -121,6 +115,7 @@ Never argue around script DENY. Re-run the failing script after fix; do not soft
 ```
 0. OPTIMIZE plan with operator (kanban-advanced:kanban-planning checklist)
 0b. PREFLIGHT                    bash scripts/preflight.sh — block on fail
+0c. TOKEN CHECKPOINT             python3 $HERMES_HOME/scripts/lib/orchestrator_token_checkpoint.py --plan-id "<plan_id>" --checkpoint planning-complete --turns <est> --note "Plan optimized, preflight passed"
 1. USER GATE                     wait for "proceed" / "execute"
 2. VERIFY DB integrity           PRAGMA integrity_check must return 'ok'
 3. CREATE root card              hermes kanban create "<plan>" --assignee <orchestrator>
@@ -137,6 +132,7 @@ Never argue around script DENY. Re-run the failing script after fix; do not soft
 10. RUN validate_board.sh        full governance gate — block on fail
 11. COMPLETE gate                After validate passes: hermes kanban complete <gate_id>
                                  (do NOT unblock gate first). auto_unblock cron releases waves.
+11b. TOKEN CHECKPOINT            python3 $HERMES_HOME/scripts/lib/orchestrator_token_checkpoint.py --plan-id "<plan_id>" --checkpoint decompose-complete --turns <est> --note "N cards dispatched, gate complete"
 ```
 
 > **Do NOT** use `--triage` on the root card or run `hermes kanban decompose` — vanilla
@@ -210,9 +206,21 @@ python hermes-kanban-advanced-workflow/scripts/generate_postmortem.py --plan-id 
 
 The postmortem is the learning artifact for the next plan (8 sections per `kanban-advanced:kanban-postmortem`). Generate it **before** `kanban-advanced:kanban-cleanup` archives the board — metrics come from `kanban.db` and token JSONL (`archived` tasks remain in the DB and count as terminal). Then run cleanup (archive, remove crons, kill tmux).
 
+**After cleanup, log the final cleanup-complete token checkpoint (REQUIRED):**
+
+```bash
+python3 $HERMES_HOME/scripts/lib/orchestrator_token_checkpoint.py --plan-id "<plan_id>" --checkpoint cleanup-complete --turns <total-session-turns> --note "Postmortem generated, board archived, crons removed"
+```
+
 ## Final audit checklist
 
-Run `python3 hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py --plan-id <id> --tier all` after mechanical gates. Exit **0** → complete audit card; exit **1** → `--spawn-remediation` and re-audit; exit **2** → `kanban_block` + page operator (no remediation spawn). Do not manually run `auto_unblock.sh` during remediation — `_has_active_remediation_children` guard applies.
+**First: log the audit-start token checkpoint (REQUIRED):**
+
+```bash
+python3 $HERMES_HOME/scripts/lib/orchestrator_token_checkpoint.py --plan-id "<plan_id>" --checkpoint audit-start --turns <est> --note "Starting final audit"
+```
+
+Run `python3 hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py --plan-id <id> --tier all` after mechanical gates.
 
 **Tier 1 ↔ E001:** Zero diff vs `Audit-baseline-sha..HEAD` is OK when a done card's `Commit:` + `Files:` satisfies `find_prior_commit` (same rule as eval-chain E001). If E001 ALLOWed in-flight but Tier 1 still fails, fix card `Files:` / `Commit:` — see `final-audit-sanity-check.md` § Tier 1 ↔ in-flight.
 
