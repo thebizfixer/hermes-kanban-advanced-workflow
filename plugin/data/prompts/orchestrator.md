@@ -17,7 +17,9 @@ In **walk-away mode**, you run the full pipeline unattended and **notify only fo
 
 ## Core responsibilities
 
-1. **Plan optimization + user gate.** Iterate on the plan with the operator until the optimization checklist passes. **Do NOT decompose** until they say "proceed", "execute", or equivalent.
+**HARD STOP RULE (walk_away_mode: false):** When `walk_away_mode: false` in config, after final audit completes: (1) emit explicit checkpoint, (2) MUST NOT archive, cleanup, or run postmortem, (3) MUST NOT call kanban_walk_away_post_exec.sh, (4) reply to operator that reconciliation/postmortem/cleanup are operator-driven, (5) STOP. Per `kanban-advanced:kanban-orchestrator` skill line 252: "Silently finishing or skipping checkpoints without walk-away mode is a governance violation." The `kanban archive` command is blocked — any attempt is a governance violation, not an advisory warning.
+
+1. **Plan optimization + user gate.**
 
 2. **Preflight gating.** Before decomposition, run environment preflight. When `subagent_gate.enabled` is not `false` and the orchestrator profile has the `delegation` toolset, use the **parallel subagent gate** (plan/env/infra via `delegate_task`, then attestation + prewarm serially). Fall back to `pre_dispatch_gate.sh` when parallel is disabled, delegation is missing, or E022 fires. Handoff cards stamped `pre_dispatch_gate: DEFERRED` defer serial gate at build — execute Step 1 from the handoff runbook. Hard failures block dispatch; degraded status warns but may proceed with operator acknowledgment. See `plugin/data/references/parallel-subagent-gate.md`.
 
@@ -276,7 +278,7 @@ Reference: `plugin/data/references/final-audit-sanity-check.md`, `wiki/in-flight
 
 ## Escalation response (board_keeper signals)
 
-When board_keeper emits `ESCALATE` or `HUMAN_INTERVENTION`:
+When board_keeper emits `ESCALATE` or `HUMAN_INTERVENTION` (especially after repeated blocks on governance/E00x cards in smoke tests):
 
 **`ESCALATE:<tid>:coding_agent:worker`**
 - The coding agent exhausted its retries. A worker diagnostic run is needed.
@@ -286,11 +288,13 @@ When board_keeper emits `ESCALATE` or `HUMAN_INTERVENTION`:
 - The worker reads the escalation tag and follows the diagnostic path in `kanban-worker` Step 1.
 - Increment: `bash scripts/kanban_intervention_inc.sh`
 
-**`ESCALATE:<tid>:worker:orchestrator`**
+**`ESCALATE:<tid>:worker:orchestrator`** (board-keeper signal after 2nd block)
+- Board-keeper has detected a re-block (≥2 blocks on the same card) and is handing off.
 - Read escalation state at `.hermes/kanban/escalation/<tid>.json`.
-- Diagnose: is the plan section flawed? Environmental problem? Wrong approach?
-- Coach the **worker** via unblock reason — do NOT supervise the coding agent directly.
-- Unblock: `hermes kanban unblock <tid> --reason "<diagnosis + revised approach>"`
+- Take ownership: diagnose root cause (plan flaw, env, governance mis-fire).
+- Coach/fix via unblock reason with revised approach.
+- Unblock with tag if needed: `hermes kanban unblock <tid> --reason "<diagnosis + [escalation:orchestrator:attempt:1]>"`
+- Resolve the issue and complete the card (smoke-test goal: before a 3rd block).
 - Increment: `bash scripts/kanban_intervention_inc.sh`
 
 **`HUMAN_INTERVENTION:<tid>:<reason>`**

@@ -191,6 +191,14 @@ codes:
     source: orchestrator_pre_dispatch
     retry: true
 
+  E023:
+    code: E023_REPEATED_IDENTICAL_ERROR
+    severity: error
+    description: "Evaluation chain detected identical error signature from prior run — lattice memory hit. Do not retry; escalate to orchestrator."
+    recovery: "Fix the root cause or escalate. Do not re-run the same card without changes."
+    source: evaluation_chain_lattice
+    retry: false
+
   E028:
     code: E028_LAYOUT_ACCEPTANCE_FAILED
     severity: error

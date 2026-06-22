@@ -54,6 +54,7 @@ def load_error_registry(registry_path: str) -> dict:
         "E019_DESTRUCTIVE_GIT_OP": {"severity": "error", "description": "Destructive git operation detected (checkout --theirs/--ours or reset --hard) — human teams resolve per-hunk"},
         "E021_ACCEPTANCE_TEST_MISSING": {"severity": "error", "description": "Acceptance names test files not present in git diff — worker self-certified without shipping tests"},
         "E022_DOCS_STALE_MARKERS": {"severity": "error", "description": "Docs Verify: rg commands matched stale markers (pending, [new], TODO) against HEAD — docs not reconciled after implementation"},
+        "E023_REPEATED_IDENTICAL_ERROR": {"severity": "error", "description": "Identical error from prior run — lattice memory hit. Escalate, do not retry."},
     }
 
 
@@ -118,6 +119,34 @@ def compute_attractor_hash(files: List[str], tests_cmd: str, workspace: str) -> 
             hasher.update(b"UNREADABLE")
     hasher.update(tests_cmd.encode())
     return hasher.hexdigest()[:16]
+
+
+def compute_workspace_hash(workspace: str) -> str:
+    """Hash of git tree for workspace state detection."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD:."],
+            capture_output=True, text=True, cwd=workspace, timeout=5
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()[:12]
+    except Exception:
+        pass
+    return "unknown"
+
+
+def _resolve_project_root(workspace: str) -> str:
+    """Walk up from workspace to find project root (has .hermes/kanban-overrides/kanban-config.yaml)."""
+    d = os.path.abspath(workspace)
+    for _ in range(10):
+        cfg = os.path.join(d, ".hermes", "kanban-overrides", "kanban-config.yaml")
+        if os.path.isfile(cfg):
+            return d
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return ""
 
 
 def find_attractor(memory: dict, files: List[str], tests_cmd: str, workspace: str) -> Optional[dict]:
@@ -423,14 +452,23 @@ def step_5_exact_token(token_log_path: str, task_id: str) -> Tuple[bool, Optiona
         return False, "E018_TOKEN_NOT_EXACT"
 
     # Verify at least input tokens are non-zero
-    cursor = last.get("cursor", {})
-    if cursor.get("input_tokens", 0) == 0 and cursor.get("output_tokens", 0) == 0:
-        print("[E018] token counts are zero")
+    # For hermes_insights: read from 'agent' or 'hermes' section
+    # For agent/estimated: read from 'cursor' section
+    total = 0
+    if source == "hermes_insights":
+        agent_section = last.get("agent", last.get("hermes", {}))
+        total = agent_section.get("total", 0)
+        if total == 0:
+            cursor = last.get("cursor", {})
+            total = cursor.get("total", cursor.get("input_tokens", 0) + cursor.get("output_tokens", 0))
+    else:
+        cursor = last.get("cursor", {})
+        total = cursor.get("total", cursor.get("input_tokens", 0) + cursor.get("output_tokens", 0))
+
+    if total == 0:
+        print("[E018] token counts are zero across all sections")
         return False, "E018_TOKEN_NOT_EXACT"
 
-    total = cursor.get(
-        "total", cursor.get("input_tokens", 0) + cursor.get("output_tokens", 0)
-    )
     print(f"[E018] {total:,} tokens logged (source={source})")
     return True, None
 
@@ -822,6 +860,11 @@ def run_chain(task_id: str, workspace: str, card_body: str,
         return True, "verification_deploy attested"
 
     if is_verification_only(parsed, card_body):
+        # Resolve main project root for test execution (worktree may have stale HEAD)
+        config_root = _resolve_project_root(workspace)
+        if config_root and os.path.isdir(config_root):
+            print(f"[chain] Verification: using project root {config_root} (not worktree)")
+            workspace = config_root
         if not parsed.get("tests") and "Acceptance:" not in card_body:
             return False, "verification_only: Tests: or Acceptance: required"
         print("[chain] Verification-only card — running tests + destructive-git checks only")
@@ -852,6 +895,18 @@ def run_chain(task_id: str, workspace: str, card_body: str,
         attractor = find_attractor(memory, parsed["files"], parsed["tests"], workspace)
         if attractor:
             print(f"[chain] Attractor match — {attractor['attractor_hash']} (skipping steps 1,3,4)")
+            # Verification cards with attractor: only test pass + destructive git
+            if is_verification_only(parsed, card_body):
+                print("[chain] Verification-only with attractor — tests + E019 only")
+                for step_name, step_fn in (
+                    ("Test pass", lambda: step_3_tests_pass(parsed["tests"], workspace, parsed.get("files") or [])),
+                    ("No destructive git (E019)", lambda: step_8_no_destructive_git(workspace, workspace)),
+                ):
+                    ok, err = step_fn()
+                    passed, reason = _finish_step(ok, err)
+                    if not passed:
+                        return False, reason or err or "verification check failed"
+                return True, "All checks passed (verification_only + attractor)"
             # Still run steps 2 (unlisted changes), 5 (exact token), 6 (zero-output), churn, 7 (agent output capture)
             advisory_notes: list[str] = []
             for step_fn in (
@@ -876,6 +931,17 @@ def run_chain(task_id: str, workspace: str, card_body: str,
             if advisory_notes:
                 return True, "; ".join(advisory_notes)
             return True, "All checks passed (attractor fast-path)"
+
+    # Check error attractors: if this exact files+tests combo DENY'd before, short-circuit
+    if lattice_memory_path and not disable_attractor:
+        error_entries = memory.get("error_entries", [])
+        current_hash = compute_attractor_hash(parsed["files"], parsed["tests"], workspace)
+        recent_deny = [e for e in error_entries if e["attractor_hash"] == current_hash and e["outcome"] == "DENY"]
+        if recent_deny:
+            last = recent_deny[-1]
+            print(f"[chain] Error attractor match — same signature DENY'd before: {last['error_code']}")
+            print(f"[chain] Short-circuiting: escalate instead of re-running cold path")
+            return False, f"E023_REPEATED_IDENTICAL_ERROR: {last['error_code']} — {last['error_reason']} (escalate, do not retry)"
 
     # Cold path: run all steps
     steps = [
@@ -921,6 +987,27 @@ def run_chain(task_id: str, workspace: str, card_body: str,
                 print(f"DENY+NOTIFY ({reason})")
             else:
                 print(f"DENY ({reason})")
+            # Write error attractor so repeated same-error blocks skip cold-path
+            if lattice_memory_path:
+                try:
+                    error_entry = {
+                        "attractor_hash": compute_attractor_hash(parsed["files"], parsed["tests"], workspace),
+                        "files": parsed["files"],
+                        "tests": parsed["tests"],
+                        "outcome": "DENY",
+                        "error_code": error_code,
+                        "error_reason": reason,
+                        "workspace_hash": compute_workspace_hash(workspace),
+                        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                    }
+                    memory.setdefault("error_entries", [])
+                    existing = [e for e in memory["error_entries"] if e["attractor_hash"] != error_entry["attractor_hash"]]
+                    existing.append(error_entry)
+                    memory["error_entries"] = existing[-50:]
+                    with open(lattice_memory_path, "w", encoding="utf-8") as f:
+                        json.dump(memory, f, indent=2, default=str)
+                except Exception:
+                    pass  # Non-fatal
             return False, reason
         print("ALLOW")
 

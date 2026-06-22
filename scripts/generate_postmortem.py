@@ -27,6 +27,39 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# === NEUTRAL (driven by coding_agent_binary from config) ===
+import os
+from pathlib import Path as _P
+
+def _get_coding_agent_binary():
+    for base in (_P.cwd(), _P.home()):
+        cfg = base / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
+        if cfg.exists():
+            try:
+                with open(cfg, encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip().startswith("coding_agent_binary:"):
+                            val = line.split(":", 1)[1].strip().strip("\"'")
+                            if val: return val
+            except: pass
+    return os.environ.get("KANBAN_CODING_AGENT") or "hermes"
+
+def _get_agent_label():
+    b = _get_coding_agent_binary().lower()
+    if "hermes" in b: return "hermes agent"
+    if "cursor" in b: return "cursor agent"
+    return _get_coding_agent_binary() + " agent"
+
+def _agent_total(entry):
+    ag = entry.get("agent") or {}
+    if ag.get("total") is not None: return int(ag["total"])
+    binary = _get_coding_agent_binary()
+    sec = "hermes" if "hermes" in binary.lower() else "cursor"
+    s = entry.get(sec) or {}
+    if s.get("total") is not None: return int(s["total"])
+    return int((s.get("input_tokens") or 0) + (s.get("output_tokens") or 0) + (s.get("cache_read_tokens") or 0) + (s.get("cache_write_tokens") or 0) or entry.get("estimated_total_tokens") or 0)
+
+
 
 SECTION_TITLES = (
     "Execution Summary",
@@ -161,7 +194,7 @@ def _task_id_from_token(entry: dict[str, Any]) -> str:
     )
 
 
-def _cursor_total(entry: dict[str, Any]) -> int:
+def _agent_total(entry: dict[str, Any]) -> int:
     cursor = entry.get("cursor") or {}
     if isinstance(cursor, dict):
         total = cursor.get("total")
@@ -188,6 +221,34 @@ def _hermes_total(entry: dict[str, Any]) -> int:
             + (hermes.get("output_tokens") or 0)
         )
     return 0
+
+
+def _classify_token_waste(entries: list[dict[str, Any]], total_tokens: int) -> dict[str, int]:
+    """Classify token spend as necessary vs waste.
+    
+    Heuristic: first entry per unique (task_id, tests) = necessary;
+    subsequent entries with same key = waste (re-loop).
+    Orchestrator checkpoints = always necessary.
+    """
+    necessary = 0
+    waste = 0
+    seen: set[tuple[str, str]] = set()
+    
+    for entry in sorted(entries, key=lambda e: e.get("timestamp", "")):
+        tid = entry.get("task_id", "")
+        tests = entry.get("tests_cmd", entry.get("tests", ""))
+        source = entry.get("source", "")
+        key = (tid, tests)
+        
+        if source == "orchestrator":
+            necessary += _hermes_total(entry)
+        elif key in seen:
+            waste += _agent_total(entry) + _hermes_total(entry)
+        else:
+            necessary += _agent_total(entry) + _hermes_total(entry)
+            seen.add(key)
+    
+    return {"necessary": necessary, "waste": waste}
 
 
 def _duration_seconds(entry: dict[str, Any]) -> float:
@@ -677,13 +738,13 @@ def _pitfalls_from_data(
             "run mid-run reconciliation before resuming dispatch."
         )
 
-    totals = [_cursor_total(entry) for entry in token_entries]
+    totals = [_agent_total(entry) for entry in token_entries]
     if totals:
         avg = statistics.mean(totals)
         hot = [
             _task_id_from_token(entry)
             for entry in token_entries
-            if _cursor_total(entry) > avg * 2
+            if _agent_total(entry) > avg * 2
         ]
         if hot:
             pitfalls.append(
@@ -822,7 +883,7 @@ def build_report(
     intervention_rate = (intervention_count / total_tasks * 100.0) if total_tasks else 0.0
     duration_hours = _wall_clock_hours(tasks)
 
-    cursor_total = sum(_cursor_total(entry) for entry in plan_tokens)
+    agent_total = sum(_agent_total(entry) for entry in plan_tokens)
     hermes_total = sum(_hermes_total(entry) for entry in plan_tokens)
     cache_read = sum(
         int((entry.get("cursor") or {}).get("cache_read_tokens") or 0)
@@ -833,7 +894,7 @@ def build_report(
         for entry in plan_tokens
     )
     avg_task_tokens = (
-        statistics.mean([_cursor_total(entry) for entry in plan_tokens])
+        statistics.mean([_agent_total(entry) for entry in plan_tokens])
         if plan_tokens
         else 0.0
     )
@@ -917,7 +978,7 @@ def build_report(
             model = cursor.get("model") if isinstance(cursor, dict) else entry.get("model")
             lines.append(
                 f"| `{_task_id_from_token(entry)}` | {model or '—'} | "
-                f"{format_tokens(_cursor_total(entry))} | "
+                f"{format_tokens(_agent_total(entry))} | "
                 f"{_duration_seconds(entry):.0f}s | {entry.get('status', '—')} |"
             )
         lines.append("")
@@ -1034,6 +1095,7 @@ def build_report(
         lines.append(f"- {item}")
     lines.append("")
 
+    label = _get_agent_label()
     # 7. Token Economics
     orchestrator_entries = [e for e in plan_tokens if e.get("source") == "orchestrator"]
     worker_entries = [e for e in plan_tokens if e.get("source") != "orchestrator"]
@@ -1042,11 +1104,11 @@ def build_report(
         [
             "## 7. Token Economics",
             "",
-            f"- **Cursor tokens (logged):** {format_tokens(cursor_total)} ({cursor_total:,})",
+            f"- **{_get_agent_label()} tokens (logged):** {format_tokens(agent_total)} ({agent_total:,})",
             f"- **Hermes worker tokens (logged):** {format_tokens(hermes_total)} ({hermes_total:,})",
             f"- **Orchestrator tokens (logged):** {format_tokens(orchestrator_total_tokens)} ({orchestrator_total_tokens:,})",
-            f"- **Combined (logged):** {format_tokens(cursor_total + hermes_total + orchestrator_total_tokens)}",
-            f"- **Per-task average (Cursor):** {format_tokens(int(avg_task_tokens))}",
+            f"- **Combined (logged):** {format_tokens(agent_total + hermes_total + orchestrator_total_tokens)}",
+            f"- **Per-task average:** {format_tokens(int(avg_task_tokens))}",
         ]
     )
     if orchestrator_entries:
@@ -1060,7 +1122,7 @@ def build_report(
         hot_tasks = [
             _task_id_from_token(entry)
             for entry in plan_tokens
-            if _cursor_total(entry) > avg_task_tokens * 2
+            if _agent_total(entry) > avg_task_tokens * 2
         ]
         if hot_tasks:
             lines.append(
@@ -1068,6 +1130,23 @@ def build_report(
                 + ", ".join(f"`{task_id}`" for task_id in sorted(set(hot_tasks)))
             )
     lines.append("")
+
+    # Waste breakdown
+    if plan_tokens:
+        classification = _classify_token_waste(plan_tokens, agent_total + hermes_total + orchestrator_total_tokens)
+        n = classification["necessary"]
+        w = classification["waste"]
+        total_combined = n + w
+        if total_combined > 0:
+            ratio = w / total_combined * 100
+            lines.extend([
+                "- **Necessary spend:** " + format_tokens(n) + f" (first executions + checkpoints)",
+                "- **Waste (re-loops):** " + format_tokens(w) + f" (repeated identical attempts)",
+                f"- **Waste ratio:** {ratio:.1f}% (target: <20%)",
+                "",
+            ])
+        else:
+            lines.append("- **Waste breakdown unavailable** — no token entries to classify")
 
     # 8. Learning Summary
     lines.extend(
@@ -1091,9 +1170,9 @@ def build_report(
         )
     else:
         lines.append("- No dominant failure mode detected — preserve current card-body and monitoring patterns.")
-    if cursor_total:
+    if agent_total:
         lines.append(
-            f"- Logged Cursor spend: **{format_tokens(cursor_total)}** tokens; "
+            f"- Logged Cursor spend: **{format_tokens(agent_total)}** tokens; "
             "feed into plan optimization line-budget and card split decisions."
         )
     lines.append(
@@ -1265,7 +1344,7 @@ def build_kpi_json(
         if _reblock_count(task) >= 3
     ]
 
-    cursor_total = sum(_cursor_total(entry) for entry in plan_tokens)
+    agent_total = sum(_agent_total(entry) for entry in plan_tokens)
     cache_read = sum(int((entry.get("cursor") or {}).get("cache_read_tokens") or 0) for entry in plan_tokens)
     cache_input = sum(int((entry.get("cursor") or {}).get("input_tokens") or 0) for entry in plan_tokens)
     cache_ratio = (cache_read / cache_input) if cache_input else 0.0
@@ -1344,7 +1423,7 @@ def build_kpi_json(
         "failed": failed,
         "wall_clock_hours": duration_hours,
         "token_totals": {
-            "cursor": cursor_total,
+            "cursor": agent_total,
             "cache_read": cache_read,
             "cache_input": cache_input,
             "cache_ratio": round(cache_ratio, 4),

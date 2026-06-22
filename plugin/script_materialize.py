@@ -14,6 +14,7 @@ MANIFEST_FILENAME = ".materialize-manifest.json"
 HERMES_SCRIPT_NAMES = (
     "auto_unblock.sh",
     "board_keeper.sh",
+    "kanban_escalation_tracker.sh",
     "kanban_lifecycle_notify.sh",
     "kanban_completion_notify.sh",
     "kanban_walk_away_post_exec.sh",

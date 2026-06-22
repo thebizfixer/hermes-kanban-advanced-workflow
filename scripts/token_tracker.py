@@ -2,10 +2,10 @@
 """
 Token tracker for kanban workers. Append one JSONL line per agent run.
 
-Convenience wrapper (preferred for workers):
+Convenience wrapper (preferred for workers - fully neutral to coding_agent_binary):
     import sys; sys.path.insert(0, "/path/to/repo")
     from scripts.token_tracker import log_from_env
-    log_from_env(plan_id="my-plan", turns=3, cursor_input_tokens=12000, ...)
+    log_from_env(plan_id="my-plan", turns=3, agent_input_tokens or via neutral "agent" section, ...)
 
 Direct call:
     from scripts.token_tracker import log_token_run
@@ -20,6 +20,52 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+def get_coding_agent_binary() -> str:
+    """Return the configured coding_agent_binary from project kanban-config.
+
+    Priority:
+    1. .hermes/kanban-overrides/kanban-config.yaml (project cwd first)
+    2. $KANBAN_CODING_AGENT or $KANBAN_CODING_AGENT_BINARY env
+    3. "hermes" (neutral default for this setup)
+    """
+    candidates = [
+        Path.cwd() / ".hermes" / "kanban-overrides" / "kanban-config.yaml",
+        Path.home() / ".hermes" / "kanban-overrides" / "kanban-config.yaml",
+    ]
+    for cfg in candidates:
+        if cfg.exists():
+            try:
+                with open(cfg, encoding="utf-8") as f:
+                    for line in f:
+                        if line.strip().startswith("coding_agent_binary:"):
+                            val = line.split(":", 1)[1].strip().strip("\"'")
+                            if val:
+                                return val
+            except Exception:
+                pass
+    return (
+        os.environ.get("KANBAN_CODING_AGENT")
+        or os.environ.get("KANBAN_CODING_AGENT_BINARY")
+        or "hermes"
+    )
+
+
+def get_agent_label(binary: str | None = None) -> str:
+    b = (binary or get_coding_agent_binary()).lower()
+    if "hermes" in b:
+        return "hermes agent"
+    if "cursor" in b:
+        return "cursor agent"
+    return f"{binary or 'agent'} agent"
+
+
+def get_agent_section(binary: str | None = None) -> str:
+    """Return the legacy token bucket key ('hermes' or 'cursor') for the binary."""
+    b = (binary or get_coding_agent_binary()).lower()
+    if "hermes" in b:
+        return "hermes"
+    return "cursor"
 
 
 def _token_log_path() -> Path:
@@ -62,6 +108,17 @@ def log_token_run(
 ) -> None:
     """Append one token record to the JSONL log."""
     estimate_total = hermes_total or (hermes_turns * 3000 if hermes_turns else 0)
+
+    agent_binary = (
+        os.environ.get("KANBAN_CODING_AGENT")
+        or os.environ.get("KANBAN_CODING_AGENT_BINARY")
+        or "hermes"
+    )
+    agent_total = (
+        cursor_input_tokens + cursor_output_tokens +
+        cursor_cache_read_tokens + cursor_cache_write_tokens
+    ) or estimate_total
+
     record = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "plan_id": plan_id,
@@ -70,6 +127,11 @@ def log_token_run(
         "status": status,
         "source": source,
         "duration_seconds": duration_seconds,
+        "agent": {
+            "binary": get_coding_agent_binary(),
+            "model": cursor_model or hermes_model,
+            "total": agent_total,
+        },
         "cursor": {
             "model": cursor_model,
             "input_tokens": cursor_input_tokens,
@@ -110,7 +172,7 @@ def log_from_env(
 ) -> str:
     """Convenience wrapper that reads task context from environment variables.
 
-    Called by workers at task completion. All Cursor token fields come
+    Called by workers at task completion. Token fields for the configured coding_agent_binary come
     from parsing the agent's JSON stdout (usage.inputTokens etc.).
     """
     task_id = os.environ.get("HERMES_KANBAN_TASK", "")

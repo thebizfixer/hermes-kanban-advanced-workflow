@@ -122,3 +122,11 @@ Load **`plugin/data/references/final-audit-sanity-check.md`** first for any post
 | Tier 2 false positive | T2 | `final_audit_overrides` in overlay (`wiki/configuration.md`) |
 | check **13** FAIL | T2 | Close/archive remediation children; `validate_board.sh` |
 | Premature audit promote | T2 | Do not run `auto_unblock` manually — `_has_active_remediation_children` |
+
+## Walk-away mode: false — Hard Stop
+
+When `walk_away_mode: false` in config:
+- After final audit: checkpoint + STOP
+- Do NOT archive, cleanup, or run postmortem
+- These actions are operator-driven via default profile
+- Silently finishing or skipping checkpoints without walk-away mode is a governance violation (orchestrator skill line 252)

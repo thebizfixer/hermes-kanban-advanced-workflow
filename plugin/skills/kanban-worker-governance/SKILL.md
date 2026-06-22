@@ -58,6 +58,7 @@ Canonical: `plugin/data/registry/error-codes.yaml`. **Tier:** T1=self-serve BB |
 | E019 | error | T1 | Per-hunk merge — no `--theirs`/`reset --hard` |
 | E020 | error | T1 | `coding_agent_invoke.sh dispatch` with JSON capture |
 | E021 | error | T1 | `worktree_setup.sh` — not raw `git worktree add` |
+| E023 | error | T2 | Same error signature as prior run — escalate, do not retry |
 
 ## kanban_recover.py (retryable E only)
 

@@ -66,7 +66,10 @@ _startup_guard() {
 }
 _startup_guard
 
-REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+REPO_ROOT="${REPO_ROOT:-$PWD}"
+if [ -z "$REPO_ROOT" ] || [ ! -d "$REPO_ROOT" ]; then
+  REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+fi
 if ! _load_branch_config "$REPO_ROOT"; then
     exit 1
 fi
@@ -194,23 +197,73 @@ done
 [ $SALVAGE_COUNT -eq 0 ] && echo "(no salvageable cards)"
 
 # ── 2b. Escalation triage (all blocked cards) ───────────────────────────
+# Detects repeated blocks, error signatures, and enforces 5-loop conversation cap.
+# Two triggers: (1) 5+ identical-error loops → immediate escalation,
+# (2) 2+ re-blocks on governance cards → force worker:attempt:2 escalation.
 
 echo ""
 echo "--- Escalation triage ---"
 ESCALATION_COUNT=0
 for tid in $BLOCKED_IDS; do
-    REASON=$(hermes kanban show "$tid" 2>/dev/null | grep -iE 'block|reason|summary' | head -1 || true)
-    TRACKER_OUT=$(bash "$SCRIPT_DIR/kanban_escalation_tracker.sh" \
-        --task-id "$tid" \
-        --block-reason "$REASON" \
-        --config "$CONFIG_FILE" \
-        --repo-root "$REPO_ROOT" 2>/dev/null || true)
-    case "$TRACKER_OUT" in
-        ESCALATE:*|HUMAN_INTERVENTION:*)
-            echo "$TRACKER_OUT"
-            ((ESCALATION_COUNT++)) || true
-            ;;
-    esac
+    SHOW=$(hermes kanban show "$tid" 2>/dev/null)
+    REASON=$(echo "$SHOW" | grep -iE 'block|reason|summary' | head -1 || true)
+    # Count prior "blocked" events for this card (re-block detection)
+    BLOCK_COUNT=$(echo "$SHOW" | grep -c 'blocked {' || echo 0)
+
+    # Extract error signatures from block events
+    ERROR_SIGS=$(echo "$SHOW" | grep -oP 'E\d{3}[^\s,)]*' | sort -u | tr '\n' '|' || true)
+    ERROR_SIGS="${ERROR_SIGS%|}"
+
+    # Count identical-error repetitions
+    if [ -n "$ERROR_SIGS" ]; then
+        SAME_ERROR_COUNT=0
+        for sig in $(echo "$ERROR_SIGS" | tr '|' ' '); do
+            COUNT=$(echo "$SHOW" | grep -c "$sig" || echo 0)
+            [ "$COUNT" -gt "$SAME_ERROR_COUNT" ] && SAME_ERROR_COUNT=$COUNT
+        done
+    else
+        SAME_ERROR_COUNT=0
+    fi
+
+    FORCE_ESCALATE=false
+    ESCALATION_REASON=""
+
+    # Trigger 1: 5+ loops on identical error (conversation cap)
+    if [ "$SAME_ERROR_COUNT" -ge 5 ]; then
+        FORCE_ESCALATE=true
+        ESCALATION_REASON="[escalation:worker:attempt:5] conversation cap: $SAME_ERROR_COUNT identical blocks ($ERROR_SIGS)"
+        echo "  Board-keeper: conversation cap hit for $tid — $SAME_ERROR_COUNT identical $ERROR_SIGS blocks"
+    # Trigger 2: 2+ re-blocks on E00x governance issues, force the worker:2 tag
+    elif [ "$BLOCK_COUNT" -ge 2 ] && echo "$REASON" | grep -qiE 'E00|block'; then
+        FORCE_ESCALATE=true
+        ESCALATION_REASON="[escalation:worker:attempt:2] re-block #$BLOCK_COUNT ($ERROR_SIGS)"
+        echo "  Board-keeper: re-block #$BLOCK_COUNT detected for $tid — forcing escalation"
+    fi
+
+    if [ "$FORCE_ESCALATE" = true ]; then
+        TRACKER_OUT=$(bash "$SCRIPT_DIR/kanban_escalation_tracker.sh" \
+            --task-id "$tid" \
+            --block-reason "$ESCALATION_REASON" \
+            --config "$CONFIG_FILE" \
+            --repo-root "$REPO_ROOT" 2>/dev/null || true)
+        case "$TRACKER_OUT" in
+            ESCALATE:*)
+                echo "$TRACKER_OUT"
+                ((ESCALATION_COUNT++)) || true
+                if echo "$TRACKER_OUT" | grep -q ':orchestrator'; then
+                    hermes kanban comment "$tid" \
+                        "Board-keeper escalation: $ESCALATION_REASON. Orchestrator to resolve." \
+                        2>/dev/null || true
+                    hermes kanban unblock "$tid" --reason "$TRACKER_OUT" 2>/dev/null || true
+                    echo "  → unblocked with orchestrator escalation tag"
+                fi
+                ;;
+            HUMAN_INTERVENTION:*)
+                echo "$TRACKER_OUT"
+                ((ESCALATION_COUNT++)) || true
+                ;;
+        esac
+    fi
 done
 [ "$ESCALATION_COUNT" -eq 0 ] && echo "(no escalation signals this tick)"
 

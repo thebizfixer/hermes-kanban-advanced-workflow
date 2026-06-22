@@ -30,12 +30,21 @@ def normalize_file_path(path: str) -> str:
 
 
 def sanitize_tests_command(cmd: str) -> str:
-    """Strip trailing parenthetical prose from Tests: — logistics only, not intent change."""
+    """Strip trailing parenthetical prose from Tests: — logistics only, not intent change.
+    
+    Also handles common quoting artifacts from markdown rendering:
+    - \" → " 
+    - \' → '
+    """
     if not cmd:
         return cmd
     stripped = cmd.strip()
     if stripped.upper() == "N/A":
         return stripped
+    
+    # Fix common markdown escaping artifacts
+    stripped = stripped.replace('\\"', '"').replace("\\'", "'")
+    
     return _PAREN_SUFFIX_RE.sub("", stripped).strip()
 
 
@@ -203,13 +212,30 @@ def is_verification_deploy(parsed: dict, body: str | None = None) -> bool:
 
 
 def is_verification_only(parsed: dict, body: str | None = None) -> bool:
-    """True when card is a test-only verification gate (no coding-agent dispatch)."""
+    """True when card is a test-only verification gate (no coding-agent dispatch).
+    
+    Detection order:
+    1. Explicit Type: verification-local + Mode: read-only + no agent block → True
+    2. verification-deploy → False (separate path)
+    3. Legacy: commit=N/A + read-only + no files + "verification only" in body → True
+    4. No files + read-only + Type: verification → True
+    """
     if is_verification_deploy(parsed, body):
         return False
     text = body if body is not None else parsed.get("body", "")
     card_type = (parsed.get("type") or "").strip().lower()
+    
+    # Explicit verification-local: any combination that declares read-only
+    # and has no coding-agent dispatch (no Files + no agent block)
     if card_type in ("verification", "verification-local"):
-        return True
+        if (parsed.get("mode") or "").lower() == "read-only":
+            if not parsed.get("agent_block"):
+                return True
+        # Also catch: tests-only with no scope declaration
+        if not parsed.get("files") and not parsed.get("agent_block"):
+            return True
+    
+    # Legacy: commit=N/A style
     commit = parsed.get("commit") or ""
     if commit and _VERIFICATION_COMMIT_RE.search(commit):
         return True

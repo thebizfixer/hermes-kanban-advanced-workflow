@@ -20,7 +20,13 @@ source "$SCRIPT_DIR/lib/hermes_home.sh"
 
 TASK_ID=""
 BLOCK_REASON=""
-REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+REPO_ROOT="${REPO_ROOT:-$PWD}"
+if [ -z "$REPO_ROOT" ] || [ ! -d "$REPO_ROOT" ]; then
+  REPO_ROOT="${REPO_ROOT:-$PWD}"
+  if [ -z "$REPO_ROOT" ] || [ ! -d "$REPO_ROOT" ]; then
+    REPO_ROOT="$(cd \"$SCRIPT_DIR/../..\" && pwd)"
+  fi
+fi
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -98,11 +104,19 @@ def is_catastrophic(reason: str) -> bool:
         "auth_failure", "missing_profile", "manual_judgment", "memory_budget",
         "ci_red_after_push", "credential", "unreachable", "infrastructure",
         "e007", "e008", "e011", "e012", "e013", "p001",
+        "conversation cap",           # 5-loop cap
+        "repeated_identical_error",   # error attractor triggered
     )
     return any(m in r for m in markers)
 
 max_at_level = thresholds.get(level, max_coding)
 path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+# Smoke-test / demo: escalate to orchestrator after 2nd worker block (re-block)
+# If reason contains attempt:2 at worker, or reblock_count >=2, force escalate
+if level == "worker" and (attempt >= 2 or "re-block" in (block_reason or "").lower() or "reblock" in (block_reason or "").lower()):
+    print(f"ESCALATE:{task_id}:worker:orchestrator")
+    sys.exit(0)
 
 if attempt < max_at_level:
   print(f"RETRY:{task_id}:{level}:{attempt}")

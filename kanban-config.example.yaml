@@ -104,6 +104,13 @@ walk_away_mode: false
 # ---------------------------------------------------------------------------
 # Escalation thresholds (cron / board_keeper escalation chain)
 # ---------------------------------------------------------------------------
+
+# For kanban-standard-smoke-test demo (to hit board-keeper -> orchestrator after 2nd block):
+# escalation_max_attempts:
+#   coding_agent: 3
+#   worker: 2
+#   orchestrator: 1
+
 escalation_max_attempts:
   coding_agent: 3
   worker: 3

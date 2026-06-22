@@ -20,6 +20,20 @@ from __future__ import annotations
 import argparse
 import json
 import os
+
+import os
+from pathlib import Path as _P
+def _get_coding_agent_binary():
+    for base in (_P.cwd(), _P.home()):
+        cfg = base / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
+        if cfg.exists():
+            try:
+                for line in open(cfg):
+                    if "coding_agent_binary:" in line:
+                        v = line.split(":", 1)[1].strip().replace('"', '').replace("'", '')
+                        if v: return v
+            except: pass
+    return os.environ.get("KANBAN_CODING_AGENT") or "hermes"
 import subprocess
 import sys
 import tempfile
@@ -154,6 +168,7 @@ def delta(
     task_id = task_id or os.environ.get("HERMES_KANBAN_TASK", "")
 
     # Log even zero-delta so we have an audit trail (proves metering ran)
+    binary = _get_coding_agent_binary()
     log_token_run(
         plan_id=plan_id,
         task_id=task_id,
@@ -162,9 +177,12 @@ def delta(
         cursor_cache_read_tokens=0,
         cursor_cache_write_tokens=0,
         cursor_model=os.environ.get("KANBAN_CODING_AGENT_MODEL", ""),
+        # Also populate hermes bucket for neutrality when config is hermes
+        hermes_total=inp_delta + out_delta if "hermes" in binary.lower() else 0,
         source=source,
         status="completed" if total_delta > 0 else "no_delta",
         extra={
+            "coding_agent_binary": binary,
             "metering_method": "hermes_insights_delta",
             "before_total": before.get("total_tokens", 0),
             "after_total": after["total_tokens"],

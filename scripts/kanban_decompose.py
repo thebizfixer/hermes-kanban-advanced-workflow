@@ -538,11 +538,30 @@ def main():
         _normalize_card_assignee(card, worker_profile, orchestrator_profile)
 
     plan_id = parsed.get("plan_id", "")
+
+    # Capture wave baseline SHA before card generation (used by stamps + root card)
+    head_sha = ""
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            cwd=str(Path.cwd()),
+            timeout=10,
+        )
+        if r.returncode == 0:
+            head_sha = r.stdout.strip()
+    except Exception:
+        pass
+
     stamp_all_impl_cards(
         all_cards,
         plan_id=plan_id,
         plan_file_rel=plan_file_rel,
         plan_path=args.plan if args.plan else None,
+        wave_baseline=head_sha,
     )
 
     if args.plan:
@@ -635,26 +654,11 @@ def main():
         "ordinal_parent": None,
         "workspace": None,
         "branch": None,
-        "body": f"plan_id: {parsed.get('plan_id', 'unknown')}\nRoot card for {len(impl_cards)} implementation cards.",
+        "body": f"plan_id: {parsed.get('plan_id', 'unknown')}\nWave-baseline: {head_sha}\nRoot card for {len(impl_cards)} implementation cards.\nCard total: {len(impl_cards)} (code-gen) + 1 gate + 1 audit + 1 root = {len(impl_cards) + 3}",
         "agent_body": None,
     }
 
     # Auto-generate audit card
-    head_sha = ""
-    try:
-        r = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            cwd=str(Path.cwd()),
-            timeout=10,
-        )
-        if r.returncode == 0:
-            head_sha = r.stdout.strip()
-    except Exception:
-        pass
     baseline_line = f"Audit-baseline-sha: {head_sha}\n" if head_sha else ""
     audit_card = {
         "key": "audit",

@@ -298,7 +298,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_
 | 8 | Agent output JSON captured | E020 |
 | 9 | No destructive git ops in reflog (governance artifact resets skipped) | E019 |
 
-**Verification path (`Type: verification` / `verification-local`):** runs steps 3 + 9 only — no coding-agent dispatch, no diff/token checks. Use `Tests:` + `Commit: N/A`; no `Files:` or agent blocks (`validate_board.sh` enforces at decomposition).
+**Verification path (`Type: verification` / `verification-local`):** runs steps 3 + 9 only — no coding-agent dispatch, no diff/token checks. Use `Tests:` + `Commit: N/A`; no `Files:` or agent blocks (`validate_board.sh` enforces at decomposition). The eval chain resolves the main project root for test execution (not the worktree), ensuring committed state is tested. Verification cards with attractor cache hits skip all steps except tests + destructive-git (E019).
 
 **Verification-deploy (`Type: verification-deploy` or `Deploy:` line):** orchestrator-only assignee; no worker dispatch. Requires card-attestation JSON (`.hermes/kanban/card-attestations/{plan_id}-{card_key}.json`) before archive. See **Card attestation** above and `frontend-neutrality.md`.
 
@@ -370,6 +370,10 @@ flowchart LR
 
 Postmortem writes `{plan_id}_kpi.json` + appends `kpi_history.jsonl`. Cross-plan patterns land in `.hermes/kanban/memory/_global.json` via `scripts/lib/cross_plan_memory.py`.
 
+### Hard-stop rule (walk_away_mode: false)
+
+When `walk_away_mode: false` in `.hermes/kanban-overrides/kanban-config.yaml`, the orchestrator MUST NOT archive, cleanup, or run postmortem after final audit. These actions are operator-driven via the default profile. Silently finishing or skipping checkpoints without walk-away mode is a governance violation. The `kanban_walk_away_post_exec.sh` script enforces this by refusing to run (exit 2) when walk-away is not enabled. Only the operator may archive and reconcile.
+
 See also: [`docs/explanation/why-kanban-advanced.md`](../docs/explanation/why-kanban-advanced.md) § Completeness loop.
 
 ### Board keeper (proactive salvage)
@@ -397,7 +401,9 @@ bash hermes-kanban-advanced-workflow/scripts/board_keeper.sh
 
 ## Lattice memory
 
-After a successful evaluation chain run, the (task_id, files, tests) tuple is cached. Attractor fast-path re-runs steps 2, E018, E020, 6, E017, E019 — skipping 1, 3, 4. Verification cards use a separate short path.
+After a successful evaluation chain run, the (task_id, files, tests) tuple is cached. Attractor fast-path re-runs steps 2, E018, E020, 6, E017, E019 — skipping 1, 3, 4. Verification cards use a separate short path (tests + E019 only).
+
+**Error attractors (E023):** When a code card fails the cold path, the error signature (files + tests hash) is written to lattice memory. On the next run, if the same signature appears again, the eval chain short-circuits with `E023_REPEATED_IDENTICAL_ERROR` — telling the worker to escalate rather than re-loop. This prevents the 5–12 reblock thrash pattern observed in smoke-test runs. The board-keeper's 5-loop conversation cap provides a second line of defense: after 5 identical error blocks, the card is force-escalated to the orchestrator.
 
 ## Recovery
 

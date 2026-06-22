@@ -122,7 +122,8 @@ def stamp_impl_card(
     *,
     plan_id: str,
     plan_file_rel: str = "",
-    acceptance_matrix: dict[str, Any] | None = None,
+    acceptance_matrix: dict[str, list[str]] | None = None,
+    wave_baseline: str = "",
 ) -> None:
     """Mutate card body with decomposition auto-stamps (idempotent)."""
     if card.get("type") not in ("code-gen", "verification", "manual"):
@@ -163,6 +164,13 @@ def stamp_impl_card(
         stamps.append("Acceptance-checklist:")
         stamps.extend(f"- {item}" if not item.startswith("-") else item for item in checklist)
 
+    # Wave baseline for verification cards (tracks the commit SHA at decompose time)
+    if wave_baseline and card.get("type") == "verification":
+        if "Baseline:" not in body:
+            stamps.append(f"Baseline: {wave_baseline}")
+        if "Wave-baseline:" not in body:
+            stamps.append(f"Wave-baseline: {wave_baseline}")
+
     if not stamps:
         return
     card["body"] = "\n".join(stamps) + "\n\n" + body
@@ -174,6 +182,7 @@ def stamp_all_impl_cards(
     plan_id: str,
     plan_file_rel: str = "",
     plan_path: str | Path | None = None,
+    wave_baseline: str = "",
 ) -> None:
     matrix = load_acceptance_matrix(plan_path)
     for card in cards:
@@ -184,4 +193,5 @@ def stamp_all_impl_cards(
             plan_id=plan_id,
             plan_file_rel=plan_file_rel,
             acceptance_matrix=matrix,
+            wave_baseline=wave_baseline,
         )

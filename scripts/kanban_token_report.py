@@ -16,6 +16,30 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
+# Neutral config-driven reporting (respects coding_agent_binary in kanban-config)
+def _get_coding_agent_binary():
+    for base in (Path.cwd(), Path.home()):
+        cfg = base / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
+        if cfg.exists():
+            try:
+                with open(cfg, encoding="utf-8") as f:
+                    for line in f:
+                        if "coding_agent_binary:" in line:
+                            val = line.split(":", 1)[1].strip().strip("\"'")
+                            if val:
+                                return val
+            except Exception:
+                pass
+    return os.environ.get("KANBAN_CODING_AGENT") or os.environ.get("KANBAN_CODING_AGENT_BINARY") or "hermes"
+
+def _get_agent_label():
+    b = _get_coding_agent_binary().lower()
+    if "hermes" in b:
+        return "hermes agent"
+    if "cursor" in b:
+        return "cursor agent"
+    return f"{_get_coding_agent_binary()} agent"
+
 
 def _token_log_path() -> Path:
     env = os.environ.get("KANBAN_TOKEN_LOG", "")
@@ -54,8 +78,28 @@ def report_plan(plan_id: str, entries: list[dict]):
         return
 
     total_tasks = len(plan_entries)
-    total_cursor = sum((e.get("cursor", {}) or {}).get("total", 0) for e in plan_entries)
-    total_cursor_cache = sum((e.get("cursor", {}) or {}).get("cache_read_tokens", 0) for e in plan_entries)
+
+    # Neutral: use config + prefer "agent" section
+    binary = _get_coding_agent_binary()
+    label = _get_agent_label()
+
+    def _agent_total(e):
+        ag = e.get("agent") or {}
+        if ag.get("total") is not None:
+            return int(ag.get("total", 0))
+        sec = "hermes" if "hermes" in binary.lower() else "cursor"
+        s = e.get(sec, {}) or {}
+        return int(s.get("total", 0) or 0)
+
+    def _agent_model(e):
+        ag = e.get("agent") or {}
+        if ag.get("model"):
+            return ag["model"]
+        sec = "hermes" if "hermes" in binary.lower() else "cursor"
+        return (e.get(sec, {}) or {}).get("model", "unknown")
+
+    total = sum(_agent_total(e) for e in plan_entries)
+    total_cache = sum(((e.get("agent", {}) or {}).get("cache_read_tokens", 0) or 0) for e in plan_entries)
 
     print(f"Token Usage Report — Plan: {plan_id}")
     print(f"{'='*60}")
@@ -63,9 +107,9 @@ def report_plan(plan_id: str, entries: list[dict]):
     print()
     print(f"{'Source':<30} {'Tokens':>12} {'Cache':>10}")
     print("-" * 52)
-    print(f"{'Cursor agent':<30} {format_tokens(total_cursor):>12} {format_tokens(total_cursor_cache):>10}")
+    print(f"{label:<30} {format_tokens(total):>12} {format_tokens(total_cache):>10}")
     print("-" * 52)
-    print(f"{'TOTAL':<30} {format_tokens(total_cursor):>12}")
+    print(f"{'TOTAL':<30} {format_tokens(total):>12}")
     print()
 
     if plan_entries:
@@ -74,8 +118,8 @@ def report_plan(plan_id: str, entries: list[dict]):
         print("-" * 60)
         for e in sorted(plan_entries, key=lambda x: x.get("task_id", "")):
             tid = e.get("task_id", "unknown")
-            model = e.get("cursor", {}).get("model", "unknown")
-            tokens = e.get("cursor", {}).get("total", 0)
+            model = _agent_model(e)
+            tokens = _agent_total(e)
             status = e.get("status", "unknown")
             print(f"{tid:<20} {model:<20} {format_tokens(tokens):>10} {status:>10}")
 
@@ -85,8 +129,10 @@ def report_task(task_id: str, entries: list[dict]):
     if not matches:
         print(f"No token data found for task '{task_id}'")
         return
+    binary = _get_coding_agent_binary()
+    sec = "hermes" if "hermes" in binary.lower() else "cursor"
     for e in matches:
-        c = e.get("cursor", {}) or {}
+        c = e.get("agent") or e.get(sec, {}) or {}
         print(f"Task: {task_id}")
         print(f"  Plan:      {e.get('plan_id', 'unknown')}")
         print(f"  Model:     {c.get('model', 'unknown')}")

@@ -16,6 +16,17 @@ source "$SCRIPT_DIR/lib/kanban_config.sh"
 PLAN_ID=""
 DRY_RUN=false
 
+# ── Hard-stop guard: only run when walk_away_mode is true ──
+CONFIG_FILE="$(_resolve_kanban_config_file "$REPO_ROOT" 2>/dev/null || echo "")"
+if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+  WALK_AWAY=$(grep -E '^\s*walk_away_mode:\s*true' "$CONFIG_FILE" 2>/dev/null || true)
+  if [ -z "$WALK_AWAY" ]; then
+    echo "[hard-stop] walk_away_mode is not true — refusing to run post-exec actions"
+    echo "[hard-stop] Reconciliation, postmortem, and cleanup are operator-driven."
+    exit 2
+  fi
+fi
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --plan-id) PLAN_ID="${2:-}"; shift 2 ;;
