@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 
@@ -168,6 +169,54 @@ def _coerce_max_turns(value: object, default: int = 180) -> int:
         return max(1, int(value))  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return default
+
+
+def _apply_max_turns_to_profiles(
+    profiles: list[str],
+    target: int,
+    hermes_bin: str,
+    env: dict[str, str] | None,
+    run: Callable[..., subprocess.CompletedProcess],
+    project_root: Path,
+    output: list[str],
+) -> None:
+    """Set agent.max_turns on multiple profiles with read-back verification."""
+    for profile in profiles:
+        raw = _profile_config_show(profile)
+        current = _max_turns_from_config_show(raw)
+        if current >= target:
+            output.append(f"   OK {profile}: max_turns = {current}")
+            continue
+        try:
+            run(
+                [hermes_bin, "-p", profile, "config", "set",
+                 "agent.max_turns", str(target)],
+                env=env,
+            )
+        except subprocess.CalledProcessError as e:
+            output.append(
+                f"   X {profile}: Failed to set max_turns (exit {e.returncode}): "
+                f"{e.stderr.strip()[:200] if e.stderr else 'no output'}. "
+                f"Run: hermes -p {profile} config set agent.max_turns {target}"
+            )
+            continue
+        except subprocess.TimeoutExpired:
+            output.append(
+                f"   !  {profile}: Timed out setting max_turns — run: hermes -p "
+                f"{profile} config set agent.max_turns {target}"
+            )
+            continue
+        # Verify the write took effect
+        raw = _profile_config_show(profile)
+        new_turns = _max_turns_from_config_show(raw)
+        if new_turns == target:
+            output.append(f"   OK max_turns set to {target} on {profile}")
+        else:
+            output.append(
+                f"   X {profile}: max_turns write verification failed: config still "
+                f"shows {new_turns} (expected {target}). "
+                f"Run: hermes -p {profile} config set agent.max_turns {target}"
+            )
 
 
 def _dashboard_action_failure(
@@ -1098,38 +1147,15 @@ def _execute_init(body: dict, output: list[str]) -> dict:
         }
 
     # Max turns — must run AFTER reconciliation so the sync doesn't overwrite it
-    current_turns = _get_max_turns(project_root)
-    if current_turns >= max_turns:
-        output.append(f"   OK {orchestrator_profile}: max_turns = {current_turns}")
-    else:
-        try:
-            _run_checked(
-                [HERMES_BIN, "-p", orchestrator_profile, "config", "set",
-                 "agent.max_turns", str(max_turns)],
-                env=init_env,
-            )
-        except subprocess.CalledProcessError as e:
-            output.append(
-                f"   X Failed to set max_turns (exit {e.returncode}): "
-                f"{e.stderr.strip()[:200] if e.stderr else 'no output'}. "
-                f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
-            )
-        except subprocess.TimeoutExpired:
-            output.append(
-                f"   !  Timed out setting max_turns — run: hermes -p "
-                f"{orchestrator_profile} config set agent.max_turns {max_turns}"
-            )
-        else:
-            # Verify the write took effect
-            new_turns = _get_max_turns(project_root)
-            if new_turns == max_turns:
-                output.append(f"   OK max_turns set to {max_turns}")
-            else:
-                output.append(
-                    f"   X max_turns write verification failed: config still "
-                    f"shows {new_turns} (expected {max_turns}). "
-                    f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
-                )
+    _apply_max_turns_to_profiles(
+        ["default", worker_profile, orchestrator_profile],
+        max_turns,
+        HERMES_BIN,
+        init_env,
+        _run_checked,
+        project_root,
+        output,
+    )
 
     output.extend(materialize_hermes_scripts(plugin_root / "scripts", hermes_home / "scripts"))
     output.extend(ensure_worktreeinclude(project_root, hermes_home))
@@ -1315,37 +1341,15 @@ def _execute_save(body: dict, output: list[str]) -> dict:
     )
 
     # Max turns — must run AFTER reconciliation so the sync doesn't overwrite it
-    current_turns = _get_max_turns(project_root)
-    _, orchestrator_profile, _ = resolve_dispatch_profiles(config)
-    if current_turns < max_turns:
-        try:
-            _run_checked(
-                [HERMES_BIN, "-p", orchestrator_profile, "config", "set",
-                 "agent.max_turns", str(max_turns)],
-                env=_hermes_subprocess_env(hermes_home),
-            )
-        except subprocess.CalledProcessError as e:
-            output.append(
-                f"   X Failed to set max_turns (exit {e.returncode}): "
-                f"{e.stderr.strip()[:200] if e.stderr else 'no output'}. "
-                f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
-            )
-        except subprocess.TimeoutExpired:
-            output.append(
-                f"   !  Timed out setting max_turns — run: hermes -p "
-                f"{orchestrator_profile} config set agent.max_turns {max_turns}"
-            )
-        else:
-            # Verify the write took effect
-            new_turns = _get_max_turns(project_root)
-            if new_turns == max_turns:
-                output.append(f"   OK max_turns set to {max_turns}")
-            else:
-                output.append(
-                    f"   X max_turns write verification failed: config still "
-                    f"shows {new_turns} (expected {max_turns}). "
-                    f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
-                )
+    _apply_max_turns_to_profiles(
+        ["default", worker_profile, orchestrator_profile],
+        max_turns,
+        HERMES_BIN,
+        _hermes_subprocess_env(hermes_home),
+        _run_checked,
+        project_root,
+        output,
+    )
 
     if notify_lifecycle and (lifecycle_toggle_changed or "notify_deliver" in body):
         plan_id = _read_lifecycle_plan_id(project_root)
