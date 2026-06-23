@@ -601,6 +601,60 @@ See `plugin/data/registry/error-codes.yaml` for all 49 codes with severity, reco
 6. **VPS / remote setup?** — The dashboard uses relative URLs when not on localhost. Ensure your reverse proxy routes `/api/plugins/kanban-advanced/` → `127.0.0.1:18900`.
 7. **Windows?** — The server uses `psutil` for process detection. Ensure `psutil` is installed: `pip install psutil`. Without it, the server stays alive indefinitely (fail-open).
 
+### Dashboard config changes don't stick / revert after save
+
+**Symptom:** After Save or Bootstrap, `agent.max_turns`, model config, or profile settings revert to old values. The dashboard output shows "OK max_turns set to {value}" but `hermes config show` shows the old value.
+
+**Root cause (v0.17.0):** `reconcile_dispatch_profiles()` was copying `config.yaml` from the **default** profile to worker/orchestrator on every init/save, overwriting any values just set by the dashboard. Separately, max\_turns was set **before** reconciliation, so the sync undid it.
+
+**Fix (shipped in `main`):**
+1. Max\_turns config set moved to **after** reconciliation in both init and save handlers
+2. `config.yaml` removed from `_PROFILE_CONFIG_FILES` — only `.env` and `auth.json` are synced from default profile. Each dispatch profile manages its own `config.yaml` through the dashboard
+3. `_apply_max_turns_to_profiles()` targets all three profiles (default, worker, orchestrator) using `==` (not `>=`), allowing both increase and decrease
+
+**Verify:** After saving from the dashboard, check all three profiles directly:
+
+```bash
+hermes -p default config show | grep "Max turns"
+hermes -p kanban-advanced-worker config show | grep "Max turns"
+hermes -p kanban-advanced-orchestrator config show | grep "Max turns"
+```
+
+If values still don't stick, the sidecar may be running stale code — restart it.
+
+### Sidecar server restart kills gateway (Windows)
+
+**Symptom:** After manually killing the dashboard sidecar server (`taskkill /F /IM python.exe`), the Hermes gateway also disconnects.
+
+**Root cause:** `taskkill /F /IM python.exe` kills ALL Python processes, including the gateway's Python process. Use PID-targeted kill instead:
+
+```bash
+# WRONG — kills gateway too
+taskkill /F /IM python.exe
+
+# CORRECT — kills only the sidecar
+curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.load(sys.stdin)['pid'])"
+# Then: taskkill /PID <pid> /F
+```
+
+**Auto-recovery:** The keepalive cron (`kanban-dashboard-keepalive`) restarts the sidecar within 60 seconds if it crashes. Check with `hermes cron list | grep kanban-dashboard-keepalive`. If missing, run `hermes kanban-advanced init` to recreate it. The keepalive cron runs inside the gateway — the gateway must be running for auto-recovery.
+
+### Dashboard badges show stale model/probe data
+
+**Symptom:** After changing a profile's model or coding agent binary, the badge still shows the old reachability state.
+
+**How it works:**
+- Model probe results are cached for 180s (`_TTL_MODEL_PROBE`). Cache key: `model_reachable:{profile}`.
+- When you click Apply on a profile, `_invalidate_profile_probe_cache(profile)` clears the cache.
+- When you click Save (main form), `_invalidate_status_cache()` clears ALL caches.
+- The dashboard then calls `GET /status?probe=1` to re-probe — badge shows "checking (model)…" during probe.
+- Badge transitions: "saving…" → "checking (model · effort)…" → "reachable (model)" or "auth/model failed".
+
+**If badges stay stale:** 
+1. Check the probe is completing: `curl "http://127.0.0.1:18900/api/plugins/kanban-advanced/status?probe=1"` — look for `model_reachable: true/false` on each profile
+2. If probe times out (60s+), the coding-agent smoke test may be hanging — check `scripts/check_coding_agent_cli.py`
+3. Cache TTL is 180s — waiting 3 minutes without any action will naturally expire the cache and trigger a fresh probe on next status refresh
+
 ## Still stuck?
 
 - **Hermes Agent issues:** See [[external-references]] → Hermes Agent docs

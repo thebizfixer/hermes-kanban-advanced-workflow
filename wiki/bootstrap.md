@@ -171,6 +171,18 @@ OK kanban-advanced-worker: 3 skills seeded [...] (/path/to/.hermes/profiles/kanb
 OK Profiles verified: kanban-advanced-worker, kanban-advanced-orchestrator (role skills only)
 ```
 
+### 4. Profile config files synced from default
+
+Reconciliation copies these files from the **default** profile to each dispatch profile on every bootstrap:
+
+| File | Synced? | Rationale |
+|------|---------|-----------|
+| `.env` | ✅ Yes | API keys and environment variables must propagate to dispatch profiles |
+| `auth.json` | ✅ Yes | OAuth credentials must propagate |
+| `config.yaml` | ❌ **Not synced** | Each profile manages its own model config, max\_turns, and settings through the dashboard or `hermes config set`. Syncing would overwrite dashboard changes. |
+
+> **Changed in v0.17.0:** `config.yaml` was previously synced from default, causing dashboard config changes (model, max\_turns, reasoning\_effort) to revert on every save/init. See [[troubleshooting#Dashboard config changes don't stick / revert after save]].
+
 ---
 
 ## Two skill locations (do not confuse)

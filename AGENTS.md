@@ -98,6 +98,18 @@ Do **not** assume bootstrap copied `.env` into worktrees — the plugin never ad
 
 The server self-manages: starts at init, watchdog thread self-terminates when the Hermes dashboard process disappears, keepalive cron provides crash recovery. The frontend detects localhost vs remote and routes API calls accordingly.
 
+## When dashboard config changes revert / don't stick
+
+See `wiki/troubleshooting.md` § Dashboard config changes don't stick / revert after save. Summary:
+
+- Max\_turns, model config, or profile settings revert because `reconcile_dispatch_profiles()` was overwriting `config.yaml` from the default profile. This is fixed — `config.yaml` is no longer synced (only `.env` + `auth.json`).
+- Max\_turns applies to all three profiles (default, worker, orchestrator). Check with: `hermes -p <profile> config show | grep "Max turns"`.
+- If values still don't stick, restart the sidecar — it may have stale code.
+
+## When the gateway disconnects after restarting the sidecar (Windows)
+
+See `wiki/troubleshooting.md` § Sidecar server restart kills gateway. Do NOT use `taskkill /F /IM python.exe` — it kills the gateway too. Use PID-targeted kill. The keepalive cron auto-restarts the sidecar within 60s if it crashes.
+
 ## Key commands
 
 - `hermes kanban-advanced init` — bootstrap project (dispatch profiles, config, cron script files — not cron jobs; **advisory** coding-agent smoke only)
