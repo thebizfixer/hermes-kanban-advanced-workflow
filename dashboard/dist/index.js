@@ -692,8 +692,9 @@
       setSelectedModel(null);
       setSavingProfile(profileName);
       apiPutProfile(profileName, body).then(function () {
-        setSavingProfile(null);
-        reloadStatus();
+        reloadStatus().then(function () {
+          setSavingProfile(null);
+        });
       }).catch(function (e) {
         setSavingProfile(null);
         addLines(["ERROR updating profile: " + e.message], "line-err");
