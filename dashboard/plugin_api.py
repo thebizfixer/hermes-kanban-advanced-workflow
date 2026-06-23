@@ -1032,40 +1032,6 @@ def _execute_init(body: dict, output: list[str]) -> dict:
             log=output.append,
         )
 
-    # Max turns
-    current_turns = _get_max_turns(project_root)
-    if current_turns >= max_turns:
-        output.append(f"   OK {orchestrator_profile}: max_turns = {current_turns}")
-    else:
-        try:
-            _run_checked(
-                [HERMES_BIN, "-p", orchestrator_profile, "config", "set",
-                 "agent.max_turns", str(max_turns)],
-                env=init_env,
-            )
-        except subprocess.CalledProcessError as e:
-            output.append(
-                f"   X Failed to set max_turns (exit {e.returncode}): "
-                f"{e.stderr.strip()[:200] if e.stderr else 'no output'}. "
-                f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
-            )
-        except subprocess.TimeoutExpired:
-            output.append(
-                f"   !  Timed out setting max_turns — run: hermes -p "
-                f"{orchestrator_profile} config set agent.max_turns {max_turns}"
-            )
-        else:
-            # Verify the write took effect
-            new_turns = _get_max_turns(project_root)
-            if new_turns == max_turns:
-                output.append(f"   OK max_turns set to {max_turns}")
-            else:
-                output.append(
-                    f"   X max_turns write verification failed: config still "
-                    f"shows {new_turns} (expected {max_turns}). "
-                    f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
-                )
-
     # Coding agent binary + model (+ smoke when binary is on PATH)
     _append_coding_agent_cli_log(
         output, coding_agent, coding_agent_model, probe=True
@@ -1130,6 +1096,40 @@ def _execute_init(body: dict, output: list[str]) -> dict:
             "output": output,
             "error": "Profile reconciliation/verification failed",
         }
+
+    # Max turns — must run AFTER reconciliation so the sync doesn't overwrite it
+    current_turns = _get_max_turns(project_root)
+    if current_turns >= max_turns:
+        output.append(f"   OK {orchestrator_profile}: max_turns = {current_turns}")
+    else:
+        try:
+            _run_checked(
+                [HERMES_BIN, "-p", orchestrator_profile, "config", "set",
+                 "agent.max_turns", str(max_turns)],
+                env=init_env,
+            )
+        except subprocess.CalledProcessError as e:
+            output.append(
+                f"   X Failed to set max_turns (exit {e.returncode}): "
+                f"{e.stderr.strip()[:200] if e.stderr else 'no output'}. "
+                f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
+            )
+        except subprocess.TimeoutExpired:
+            output.append(
+                f"   !  Timed out setting max_turns — run: hermes -p "
+                f"{orchestrator_profile} config set agent.max_turns {max_turns}"
+            )
+        else:
+            # Verify the write took effect
+            new_turns = _get_max_turns(project_root)
+            if new_turns == max_turns:
+                output.append(f"   OK max_turns set to {max_turns}")
+            else:
+                output.append(
+                    f"   X max_turns write verification failed: config still "
+                    f"shows {new_turns} (expected {max_turns}). "
+                    f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
+                )
 
     output.extend(materialize_hermes_scripts(plugin_root / "scripts", hermes_home / "scripts"))
     output.extend(ensure_worktreeinclude(project_root, hermes_home))
@@ -1288,6 +1288,33 @@ def _execute_save(body: dict, output: list[str]) -> dict:
         output.append("   !  Could not resolve HOME — set HOME= in .env for gateway workers")
     output.append("   OK Saved .env")
 
+    skills_src = resolve_plugin_skills_src(DEFAULT_PLUGIN_NAME)
+    skills_dst = hermes_home / "skills" / "kanban-advanced"
+    data_refs = plugin_root / "plugin" / "data" / "references"
+    skill_count, skill_warnings = materialize_skills_with_preservation(
+        skills_src,
+        skills_dst,
+        materialize_skill_dir=materialize_skill_dir,
+        bundle_data_references=data_refs,
+        log=output.append,
+    )
+    if skill_count:
+        output.append(f"   OK {skill_count} skills -> {skills_dst}")
+    output.extend(skill_warnings)
+
+    worker_profile, orchestrator_profile = dispatch_profile_names(config)
+    reconcile_dispatch_profiles(
+        _run,
+        HERMES_BIN,
+        hermes_home,
+        skills_src,
+        worker_profile,
+        orchestrator_profile,
+        force=True,
+        log=output.append,
+    )
+
+    # Max turns — must run AFTER reconciliation so the sync doesn't overwrite it
     current_turns = _get_max_turns(project_root)
     _, orchestrator_profile, _ = resolve_dispatch_profiles(config)
     if current_turns < max_turns:
@@ -1319,32 +1346,6 @@ def _execute_save(body: dict, output: list[str]) -> dict:
                     f"shows {new_turns} (expected {max_turns}). "
                     f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
                 )
-
-    skills_src = resolve_plugin_skills_src(DEFAULT_PLUGIN_NAME)
-    skills_dst = hermes_home / "skills" / "kanban-advanced"
-    data_refs = plugin_root / "plugin" / "data" / "references"
-    skill_count, skill_warnings = materialize_skills_with_preservation(
-        skills_src,
-        skills_dst,
-        materialize_skill_dir=materialize_skill_dir,
-        bundle_data_references=data_refs,
-        log=output.append,
-    )
-    if skill_count:
-        output.append(f"   OK {skill_count} skills -> {skills_dst}")
-    output.extend(skill_warnings)
-
-    worker_profile, orchestrator_profile = dispatch_profile_names(config)
-    reconcile_dispatch_profiles(
-        _run,
-        HERMES_BIN,
-        hermes_home,
-        skills_src,
-        worker_profile,
-        orchestrator_profile,
-        force=True,
-        log=output.append,
-    )
 
     if notify_lifecycle and (lifecycle_toggle_changed or "notify_deliver" in body):
         plan_id = _read_lifecycle_plan_id(project_root)
