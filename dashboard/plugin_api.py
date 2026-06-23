@@ -1356,6 +1356,15 @@ def _execute_init(body: dict, output: list[str]) -> dict:
         output.append("   !  Gateway not running")
 
     output.append("OK kanban-advanced is ready!")
+
+    # Submit profile probes to background executor so badges resolve
+    # without waiting for frontend staggered-probe JS to load
+    for profile in _dispatch_profile_list(project_root):
+        if profile not in _inflight_probes:
+            _inflight_probes.add(profile)
+            _probe_executor.submit(_run_probe, profile)
+            output.append(f"   ... model probe queued for {profile}")
+
     _invalidate_status_cache()
     return {"success": True, "output": output}
 
