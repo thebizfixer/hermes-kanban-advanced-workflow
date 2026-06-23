@@ -456,7 +456,26 @@
         setStatusProbing(false);
         var msg = e.message || "API unreachable";
         if (msg === "Failed to fetch" || msg.indexOf("NetworkError") >= 0) {
-          msg = "Dashboard server not running on port " + (window.__KA_DASHBOARD_PORT__ || "18900") + ". Start it: python3 scripts/dashboard_server.py";
+          // Sidecar may be starting — poll health until it's up (keepalive cron restarts within 60s)
+          setStatus({ error: "Sidecar server starting… (auto-recovery in progress)" });
+          var attempts = 0;
+          var healthInterval = setInterval(function () {
+            attempts++;
+            fetch("http://127.0.0.1:" + (window.__KA_DASHBOARD_PORT__ || "18900") + "/health")
+              .then(function (r) {
+                if (r.ok) {
+                  clearInterval(healthInterval);
+                  loadStatus();  // retry full load
+                }
+              })
+              .catch(function () {});
+            if (attempts >= 30) {  // 60s max
+              clearInterval(healthInterval);
+              msg = "Dashboard server not running on port " + (window.__KA_DASHBOARD_PORT__ || "18900") + ". Start it: python3 scripts/dashboard_server.py";
+              setStatus({ error: msg });
+            }
+          }, 2000);
+          return;
         }
         setStatus({ error: msg });
       });
