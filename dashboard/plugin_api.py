@@ -98,6 +98,7 @@ _status_cache: dict[str, tuple[float, object]] = {}
 _status_cache_lock = Lock()
 _TTL_GIT_BEHIND = 300.0
 _TTL_MODEL_PROBE = 180.0
+_PROBE_CIRCUIT_COOLDOWN = 600.0  # stale cache TTL while waiting for probe results
 
 # ── Model probe background executor ──
 _probe_executor = ThreadPoolExecutor(max_workers=1)  # sequential via single worker

@@ -241,6 +241,7 @@
     var _useState15 = useState(""), modelQuery = _useState15[0], setModelQuery = _useState15[1];
     var _useState16 = useState(false), pluginUpdating = _useState16[0], setPluginUpdating = _useState16[1];
     var _useState17 = useState(false), statusProbing = _useState17[0], setStatusProbing = _useState17[1];
+    var _useState17b = useState(false), probesPending = _useState17b[0], setProbesPending = _useState17b[1];
     var _useState18 = useState(false), editingCodingAgentModel = _useState18[0], setEditingCodingAgentModel = _useState18[1];
     var _useState19 = useState(null), codingAgentModelOptions = _useState19[0], setCodingAgentModelOptions = _useState19[1];
     var _useState20 = useState(""), codingAgentModelQuery = _useState20[0], setCodingAgentModelQuery = _useState20[1];
@@ -432,6 +433,47 @@
         setTimeout(function () {
           apiFetch("/api/plugins/kanban-advanced/coding-agent/probe", { method: "POST" });
         }, staggerDelay);
+
+        // Start polling for probe results after all probes have been submitted.
+        // Probes run in a background ThreadPoolExecutor — poll /status until
+        // results come back so dashboard badges update.
+        var probeStaggerTotal = staggerDelay + 2000;
+        setTimeout(function () {
+          setProbesPending(true);
+          var pollAttempts = 0;
+          var maxPollAttempts = 15; // 30 seconds max
+          var pollInterval = setInterval(function () {
+            pollAttempts++;
+            apiStatus().then(function (fresh) {
+              var allProbed = true;
+              var freshProfiles = fresh.profiles || {};
+              Object.keys(freshProfiles).forEach(function (k) {
+                var pinfo = freshProfiles[k];
+                if (pinfo && pinfo.exists && pinfo.has_model && pinfo.model_reachable == null) {
+                  allProbed = false;
+                }
+              });
+              var cli = fresh.coding_agent_cli || {};
+              if (cli.on_path && cli.model_reachable == null) {
+                allProbed = false;
+              }
+              if (allProbed || pollAttempts >= maxPollAttempts) {
+                clearInterval(pollInterval);
+                setProbesPending(false);
+              }
+              setStatus(function (prev) {
+                var complete = mergeStatusFields(prev, fresh);
+                writeSessionStatus(complete, { probed: allProbed });
+                return complete;
+              });
+            }).catch(function () {
+              if (pollAttempts >= maxPollAttempts) {
+                clearInterval(pollInterval);
+                setProbesPending(false);
+              }
+            });
+          }, 2000);
+        }, probeStaggerTotal);
 
         if (needGitFetch) {
           return apiStatus("git_fetch=1").then(function (gitStatus) {
@@ -802,7 +844,7 @@
         dotColor = "#eab308";
         labelText = "auth/model failed (" + model + ")";
         labelColor = "#eab308";
-      } else if (statusProbing) {
+      } else if (statusProbing || probesPending) {
         dotColor = "#94a3b8";
         labelText = "checking (" + model + ")";
         labelColor = "#94a3b8";
@@ -850,7 +892,7 @@
           ? ("model unreachable — " + detail + " (" + modelLabel + effort + ")")
           : ("model unreachable (" + modelLabel + effort + ")");
         labelColor = "#eab308";
-      } else if (statusProbing) {
+      } else if (statusProbing || probesPending) {
         dotColor = "#94a3b8";
         labelText = "checking (" + modelLabel + effort + ")";
         labelColor = "#94a3b8";
