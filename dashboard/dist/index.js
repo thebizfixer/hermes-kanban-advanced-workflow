@@ -537,10 +537,6 @@
           addLines(r.output);
           if (r.success) {
             setInitialized(true);
-            setCodingAgentTouched(false);
-            codingAgentTouchedRef.current = false;
-            setMaxTurnsTouched(false);
-            maxTurnsTouchedRef.current = false;
           }
         }
         setBootstrapping(false);
@@ -564,10 +560,6 @@
       addLines(["=== Saving settings ===", "Working branch: " + data.working_branch, "Trigger branch: " + formatTriggerBranch(data.trigger_branch), "Governance profile: " + data.policy_profile, "Coding agent: " + data.coding_agent_binary + " (" + data.coding_agent_model + ")", "Max turns: " + data.max_turns, ""]);
       apiSave(data).then(saveSucceeded).then(function (r) {
         if (r.output) addLines(r.output);
-        setCodingAgentTouched(false);
-        codingAgentTouchedRef.current = false;
-        setMaxTurnsTouched(false);
-        maxTurnsTouchedRef.current = false;
         setBootstrapping(false);
         reloadStatus();
       }).catch(function (e) {
