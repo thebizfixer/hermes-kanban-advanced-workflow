@@ -102,6 +102,9 @@ _TTL_MODEL_PROBE = 180.0
 # ── Model probe background executor ──
 _probe_executor = ThreadPoolExecutor(max_workers=1)  # sequential via single worker
 _inflight_probes: set[str] = set()
+_probe_failures: dict[str, int] = {}
+_PROBE_CIRCUIT_BREAKER_THRESHOLD = 3
+_PROBE_CIRCUIT_COOLDOWN = 300  # 5 minutes
 
 
 def _cache_get(key: str, ttl: float):
@@ -289,11 +292,25 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
     failed with a known cause, or (None, detail) when timed out or ambiguous.
     This checks **Hermes profile provider auth**, not the coding-agent CLI.
     No --yolo flag is needed; "say ok" never triggers tool calls.
+
+    Two-stage probe: liveness (config show, 3s) then readiness (chat, 8s).
     """
     if not profile:
         return None, "missing profile"
+
+    # Stage 1 — Liveness: is hermes/profile responsive at all?
     try:
-        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=20)
+        r = _run([HERMES_BIN, "-p", profile, "config", "show"], timeout=3)
+        if r.returncode != 0:
+            return False, "profile config unreachable"
+    except subprocess.TimeoutExpired:
+        return None, "hermes unresponsive (3s pre-check)"
+    except Exception:
+        return None, "inconclusive"
+
+    # Stage 2 — Readiness: can the LLM respond?
+    try:
+        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=8)
         out = (r.stdout + r.stderr).lower()
         if r.returncode == 0:
             return True, ""
@@ -304,19 +321,62 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
         # Non-zero exit with no diagnostic keywords — treat as unknown (yellow).
         return None, "inconclusive"
     except subprocess.TimeoutExpired:
-        return None, "timed out"
+        return None, "timed out (8s)"
     except Exception:
         return None, "inconclusive"
 
 
+def _should_skip_probe(profile: str) -> bool:
+    """Circuit breaker: skip probing if model has failed N times consecutively.
+    
+    After _PROBE_CIRCUIT_BREAKER_THRESHOLD consecutive timeouts, the circuit
+    opens. It stays open until _PROBE_CIRCUIT_COOLDOWN seconds have passed
+    since the last cached probe result. A successful probe resets the counter.
+    """
+    failures = _probe_failures.get(profile, 0)
+    if failures < _PROBE_CIRCUIT_BREAKER_THRESHOLD:
+        return False
+    # Check if cooldown has elapsed via cache age
+    cached = _cache_get(f"model_reachable:{profile}", _PROBE_CIRCUIT_COOLDOWN)
+    if cached is not None:
+        return True  # circuit still open
+    # Cooldown expired — reset and allow probe
+    _probe_failures[profile] = 0
+    return False
+
+
 def _run_probe(profile: str) -> None:
-    """Run in ThreadPoolExecutor. Probes model reachability, updates cache."""
+    """Run in ThreadPoolExecutor. Probes model reachability, updates cache.
+    
+    Circuit breaker: skips probe after N consecutive timeouts (5-min cooldown).
+    Grace period: preserves recent successful result on transient timeout.
+    """
+    # Circuit breaker — skip probe if model has been failing repeatedly
+    if _should_skip_probe(profile):
+        _inflight_probes.discard(profile)
+        return
+
     reachable, detail = _check_model_reachable(profile)
+
+    # Grace period: don't overwrite a recent successful probe with a timeout
+    if reachable is None and detail == "timed out":
+        cached = _cache_get(f"model_reachable:{profile}", 600.0)  # 10 min grace
+        if cached is not None:
+            if isinstance(cached, dict) and cached.get("reachable") is True:
+                _inflight_probes.discard(profile)
+                return  # keep the green badge
+
     _cache_set(
         f"model_reachable:{profile}",
         {"reachable": reachable, "detail": detail},
     )
     _inflight_probes.discard(profile)
+
+    # Circuit breaker tracking (after cache update so cooldown starts from now)
+    if reachable is None and "timed out" in (detail or ""):
+        _probe_failures[profile] = _probe_failures.get(profile, 0) + 1
+    elif reachable is True:
+        _probe_failures[profile] = 0  # success resets counter
 
 
 @router.post("/profiles/{profile_name}/probe", status_code=202)
