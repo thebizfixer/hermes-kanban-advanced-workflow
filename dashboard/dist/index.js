@@ -223,6 +223,8 @@
     var _useState4b = useState(""), codingAgentModel = _useState4b[0], setCodingAgentModel = _useState4b[1];
     var _useState5 = useState(""), customAgent = _useState5[0], setCustomAgent = _useState5[1];
     var _useState6 = useState(180), maxTurns = _useState6[0], setMaxTurns = _useState6[1];
+    var _useState6c = useState(false), maxTurnsTouched = _useState6c[0], setMaxTurnsTouched = _useState6c[1];
+    var maxTurnsTouchedRef = useRef(false);
     var _useState6b = useState("balanced"), policyProfile = _useState6b[0], setPolicyProfile = _useState6b[1];
     var _useState7 = useState([]), consoleLines = _useState7[0], setConsoleLines = _useState7[1];
     var _useState8 = useState(false), bootstrapping = _useState8[0], setBootstrapping = _useState8[1];
@@ -350,7 +352,7 @@
         if (s.coding_agent_model) setCodingAgentModel(s.coding_agent_model);
         else setCodingAgentModel("");
       }
-      if (s.max_turns) setMaxTurns(s.max_turns);
+      if (s.max_turns && !maxTurnsTouchedRef.current) setMaxTurns(s.max_turns);
       if (s.policy_profile) setPolicyProfile(s.policy_profile);
       if (typeof s.notify_lifecycle === "boolean") {
         setNotifyLifecycle(s.notify_lifecycle);
@@ -534,6 +536,8 @@
             setInitialized(true);
             setCodingAgentTouched(false);
             codingAgentTouchedRef.current = false;
+            setMaxTurnsTouched(false);
+            maxTurnsTouchedRef.current = false;
           }
         }
         setBootstrapping(false);
@@ -559,6 +563,8 @@
         if (r.output) addLines(r.output);
         setCodingAgentTouched(false);
         codingAgentTouchedRef.current = false;
+        setMaxTurnsTouched(false);
+        maxTurnsTouchedRef.current = false;
         setBootstrapping(false);
         reloadStatus();
       }).catch(function (e) {
@@ -1046,7 +1052,7 @@
               ),
               React.createElement("div", { className: "space-y-1.5" },
                 React.createElement(Label, { className: "text-xs" }, "Max turns"),
-                React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); }, min: 90, max: 500, className: "h-9" }),
+                React.createElement(Input, { type: "number", value: maxTurns, onChange: function (e) { setMaxTurns(e.target.value); setMaxTurnsTouched(true); maxTurnsTouchedRef.current = true; }, min: 90, max: 500, className: "h-9" }),
                 React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Recommended 180 for plan decomposition. Default is 90.")
               )
             )
