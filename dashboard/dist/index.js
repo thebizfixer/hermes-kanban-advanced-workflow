@@ -277,6 +277,9 @@
     function codingAgentModelDisplay() {
       if (!codingAgentModel) return "(select a model)";
       if (codingAgentModel === "auto") {
+        if (codingAgentModelOptions && codingAgentModelOptions._autoLabel) {
+          return codingAgentModelOptions._autoLabel;
+        }
         if (codingAgentModelOptions && codingAgentModelOptions.models && codingAgentModelOptions.models.length > 0) {
           return codingAgentModelOptions.models[0].label || "auto (profile config)";
         }
@@ -636,11 +639,16 @@
       setCodingAgentModelQuery("");
       setEditingCodingAgentModel(true);
       if (binary === "hermes") {
-        // Hermes: use sidecar endpoint for profile-aware model labels
-        apiCodingAgentModels("hermes").then(function (opts) {
-          setCodingAgentModelOptions(opts);
-        }).catch(function () {
-          setCodingAgentModelOptions({ error: true, models: [{ id: "auto", label: "Auto (profile config)" }] });
+        // Hermes: merge sidecar (profile-aware auto label) + dashboard (full catalog)
+        var sidecarPromise = apiCodingAgentModels("hermes").catch(function () { return null; });
+        var catalogPromise = apiFetch("/api/model/options").catch(function () { return null; });
+        Promise.all([sidecarPromise, catalogPromise]).then(function (_a) {
+          var sidecar = _a[0], catalog = _a[1];
+          var autoLabel = (sidecar && sidecar.models && sidecar.models[0] && sidecar.models[0].label) || "Auto (profile config)";
+          var result = catalog && catalog.providers
+            ? { providers: catalog.providers, source: "catalog", _autoLabel: autoLabel }
+            : (sidecar || { error: true, models: [{ id: "auto", label: autoLabel }] });
+          setCodingAgentModelOptions(result);
         });
       } else {
         apiCodingAgentModels(binary).then(function (opts) {
