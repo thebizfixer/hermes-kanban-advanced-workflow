@@ -136,6 +136,22 @@ def _run(
     )
 
 
+def _run_checked(
+    cmd: list[str], timeout: int = 30, cwd: str | None = None, env: dict | None = None
+) -> subprocess.CompletedProcess:
+    """Like _run() but raises CalledProcessError on non-zero exit.
+    
+    Use for commands that MUST succeed (config writes, profile operations).
+    The caller catches CalledProcessError for error reporting.
+    """
+    r = _run(cmd, timeout=timeout, cwd=cwd, env=env)
+    if r.returncode != 0:
+        raise subprocess.CalledProcessError(
+            r.returncode, cmd, output=r.stdout, stderr=r.stderr
+        )
+    return r
+
+
 def _coerce_max_turns(value: object, default: int = 180) -> int:
     """Normalize dashboard max_turns (JSON may send number or string)."""
     if value is None or isinstance(value, bool):
@@ -991,7 +1007,14 @@ def _execute_init(body: dict, output: list[str]) -> dict:
                     _run, HERMES_BIN, profile, env=init_env
                 )
                 if copied:
-                    output.append(f"   OK {profile} configured")
+                    # Verify the write took effect — dict return doesn't guarantee persistence
+                    profiles_after = _check_profiles(project_root)
+                    if profiles_after[profile]["has_model"]:
+                        output.append(f"   OK {profile} configured")
+                    else:
+                        output.append(
+                            f"   X {profile}: copy reported success but profile still lacks model config"
+                        )
                 else:
                     output.append(f"   !  Skipped: active profile has no model in config.yaml")
             except Exception as e:
@@ -1015,16 +1038,33 @@ def _execute_init(body: dict, output: list[str]) -> dict:
         output.append(f"   OK {orchestrator_profile}: max_turns = {current_turns}")
     else:
         try:
-            _run(
-                [HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)],
+            _run_checked(
+                [HERMES_BIN, "-p", orchestrator_profile, "config", "set",
+                 "agent.max_turns", str(max_turns)],
                 env=init_env,
             )
-            output.append(f"   OK max_turns set to {max_turns}")
+        except subprocess.CalledProcessError as e:
+            output.append(
+                f"   X Failed to set max_turns (exit {e.returncode}): "
+                f"{e.stderr.strip()[:200] if e.stderr else 'no output'}. "
+                f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
+            )
         except subprocess.TimeoutExpired:
             output.append(
-                f"   !  Timed out setting max_turns — run: hermes -p {orchestrator_profile} "
-                f"config set agent.max_turns {max_turns}"
+                f"   !  Timed out setting max_turns — run: hermes -p "
+                f"{orchestrator_profile} config set agent.max_turns {max_turns}"
             )
+        else:
+            # Verify the write took effect
+            new_turns = _get_max_turns(project_root)
+            if new_turns == max_turns:
+                output.append(f"   OK max_turns set to {max_turns}")
+            else:
+                output.append(
+                    f"   X max_turns write verification failed: config still "
+                    f"shows {new_turns} (expected {max_turns}). "
+                    f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
+                )
 
     # Coding agent binary + model (+ smoke when binary is on PATH)
     _append_coding_agent_cli_log(
@@ -1252,16 +1292,33 @@ def _execute_save(body: dict, output: list[str]) -> dict:
     _, orchestrator_profile, _ = resolve_dispatch_profiles(config)
     if current_turns < max_turns:
         try:
-            _run(
-                [HERMES_BIN, "-p", orchestrator_profile, "config", "set", "agent.max_turns", str(max_turns)],
+            _run_checked(
+                [HERMES_BIN, "-p", orchestrator_profile, "config", "set",
+                 "agent.max_turns", str(max_turns)],
                 env=_hermes_subprocess_env(hermes_home),
             )
-            output.append(f"   OK max_turns set to {max_turns}")
+        except subprocess.CalledProcessError as e:
+            output.append(
+                f"   X Failed to set max_turns (exit {e.returncode}): "
+                f"{e.stderr.strip()[:200] if e.stderr else 'no output'}. "
+                f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
+            )
         except subprocess.TimeoutExpired:
             output.append(
-                f"   !  Timed out setting max_turns — run: hermes -p {orchestrator_profile} "
-                f"config set agent.max_turns {max_turns}"
+                f"   !  Timed out setting max_turns — run: hermes -p "
+                f"{orchestrator_profile} config set agent.max_turns {max_turns}"
             )
+        else:
+            # Verify the write took effect
+            new_turns = _get_max_turns(project_root)
+            if new_turns == max_turns:
+                output.append(f"   OK max_turns set to {max_turns}")
+            else:
+                output.append(
+                    f"   X max_turns write verification failed: config still "
+                    f"shows {new_turns} (expected {max_turns}). "
+                    f"Run: hermes -p {orchestrator_profile} config set agent.max_turns {max_turns}"
+                )
 
     skills_src = resolve_plugin_skills_src(DEFAULT_PLUGIN_NAME)
     skills_dst = hermes_home / "skills" / "kanban-advanced"

@@ -250,6 +250,16 @@
     var _useState27 = useState([CUSTOM_CODING_AGENT_OPTION]), codingAgentOptions = _useState27[0], setCodingAgentOptions = _useState27[1];
     var _useState28 = useState(false), codingAgentTouched = _useState28[0], setCodingAgentTouched = _useState28[1];
     var codingAgentTouchedRef = useRef(false);
+    var _useState29 = useState(false), workingBranchTouched = _useState29[0], setWorkingBranchTouched = _useState29[1];
+    var workingBranchTouchedRef = useRef(false);
+    var _useState30 = useState(false), triggerBranchTouched = _useState30[0], setTriggerBranchTouched = _useState30[1];
+    var triggerBranchTouchedRef = useRef(false);
+    var _useState31 = useState(false), policyTouched = _useState31[0], setPolicyTouched = _useState31[1];
+    var policyTouchedRef = useRef(false);
+    var _useState32 = useState(false), notifyTouched = _useState32[0], setNotifyTouched = _useState32[1];
+    var notifyTouchedRef = useRef(false);
+    var _useState33 = useState(false), walkawayTouched = _useState33[0], setWalkawayTouched = _useState33[1];
+    var walkawayTouchedRef = useRef(false);
 
     function resolvedCodingBinary() {
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
@@ -338,10 +348,14 @@
     function applyStatusToForm(s) {
       if (!s || s.error) return;
       if (s.config_exists) setInitialized(true);
-      if (s.working_branch) setWorkingBranch(s.working_branch);
-      else if (s.default_working_branch) setWorkingBranch(s.default_working_branch);
-      if (s.trigger_branch) setTriggerBranch(s.trigger_branch);
-      else setTriggerBranch("");
+      if (!workingBranchTouchedRef.current) {
+        if (s.working_branch) setWorkingBranch(s.working_branch);
+        else if (s.default_working_branch) setWorkingBranch(s.default_working_branch);
+      }
+      if (!triggerBranchTouchedRef.current) {
+        if (s.trigger_branch) setTriggerBranch(s.trigger_branch);
+        else setTriggerBranch("");
+      }
       if (!codingAgentTouchedRef.current) {
         if (s.coding_agent) {
           var options = buildCodingAgentOptions(s);
@@ -356,20 +370,26 @@
         else setCodingAgentModel("");
       }
       if (s.max_turns && !maxTurnsTouchedRef.current) setMaxTurns(s.max_turns);
-      if (s.policy_profile) setPolicyProfile(s.policy_profile);
-      if (typeof s.notify_lifecycle === "boolean") {
-        setNotifyLifecycle(s.notify_lifecycle);
-      } else if (s.notify_lifecycle != null) {
-        setNotifyLifecycle(String(s.notify_lifecycle).toLowerCase() === "true" || s.notify_lifecycle === true);
+      if (!policyTouchedRef.current) {
+        if (s.policy_profile) setPolicyProfile(s.policy_profile);
       }
-      if (typeof s.walk_away_mode === "boolean") {
-        setWalkAwayMode(s.walk_away_mode);
-      } else if (s.walk_away_mode != null) {
-        setWalkAwayMode(String(s.walk_away_mode).toLowerCase() === "true" || s.walk_away_mode === true);
-      } else if (typeof s.notify_on_complete === "boolean") {
-        setWalkAwayMode(s.notify_on_complete);
-      } else if (s.notify_on_complete != null) {
-        setWalkAwayMode(String(s.notify_on_complete).toLowerCase() === "true" || s.notify_on_complete === true);
+      if (!notifyTouchedRef.current) {
+        if (typeof s.notify_lifecycle === "boolean") {
+          setNotifyLifecycle(s.notify_lifecycle);
+        } else if (s.notify_lifecycle != null) {
+          setNotifyLifecycle(String(s.notify_lifecycle).toLowerCase() === "true" || s.notify_lifecycle === true);
+        }
+      }
+      if (!walkawayTouchedRef.current) {
+        if (typeof s.walk_away_mode === "boolean") {
+          setWalkAwayMode(s.walk_away_mode);
+        } else if (s.walk_away_mode != null) {
+          setWalkAwayMode(String(s.walk_away_mode).toLowerCase() === "true" || s.walk_away_mode === true);
+        } else if (typeof s.notify_on_complete === "boolean") {
+          setWalkAwayMode(s.notify_on_complete);
+        } else if (s.notify_on_complete != null) {
+          setWalkAwayMode(String(s.notify_on_complete).toLowerCase() === "true" || s.notify_on_complete === true);
+        }
       }
     }
 
@@ -388,7 +408,7 @@
       return apiStatus().then(function (s) {
         var merged = cached && cached.data ? mergeStatusFields(cached.data, s) : s;
         setStatus(merged);
-        applyStatusToForm(merged);
+        if (!opts.skipApply) applyStatusToForm(merged);
         writeSessionStatus(merged, {
           keepProbedAt: sessionGreen ? cached.probedAt : 0,
           keepProbeGreen: sessionGreen
@@ -400,7 +420,7 @@
           return apiStatus("probe=1&git_fetch=1").then(function (full) {
             var complete = mergeStatusFields(merged, full);
             setStatus(complete);
-            applyStatusToForm(complete);
+            if (!opts.skipApply) applyStatusToForm(complete);
             writeSessionStatus(complete, { probed: true });
             setStatusProbing(false);
             return complete;
@@ -414,7 +434,7 @@
           return apiStatus("git_fetch=1").then(function (gitStatus) {
             var complete = mergeStatusFields(merged, gitStatus);
             setStatus(complete);
-            applyStatusToForm(complete);
+            if (!opts.skipApply) applyStatusToForm(complete);
             writeSessionStatus(complete, {
               keepProbedAt: sessionGreen && cached ? cached.probedAt : 0,
               keepProbeGreen: sessionGreen
@@ -439,9 +459,10 @@
       });
     }
 
-    function reloadStatus() {
+    function reloadStatus(opts) {
       invalidateSessionStatus();
-      return loadStatus({ skipCache: true, forceFull: true });
+      opts = opts || {};
+      return loadStatus({ skipCache: true, forceFull: true, skipApply: opts.skipApply });
     }
 
     useEffect(function () { loadStatus(); }, []);
@@ -479,7 +500,7 @@
       var data = getFormData();
       data.notify_lifecycle = next;
       apiSave(data).then(saveSucceeded).then(function () {
-        reloadStatus();
+        reloadStatus({ skipApply: true });
       }).catch(function (e) {
         setNotifyLifecycle(!next);
         addLines(["ERROR: " + e.message], "line-err");
@@ -495,7 +516,7 @@
       var data = getFormData();
       data.walk_away_mode = next;
       apiSave(data).then(saveSucceeded).then(function () {
-        reloadStatus();
+        reloadStatus({ skipApply: true });
       }).catch(function (e) {
         setWalkAwayMode(!next);
         addLines(["ERROR: " + e.message], "line-err");
@@ -968,7 +989,7 @@
                     notifyLifecycle ? "bg-primary" : "bg-muted",
                     (notifySaving || bootstrapping) ? "opacity-60 cursor-not-allowed" : ""
                   ),
-                  onClick: function () { persistNotifyLifecycle(!notifyLifecycle); }
+                  onClick: function () { setNotifyTouched(true); notifyTouchedRef.current = true; persistNotifyLifecycle(!notifyLifecycle); }
                 },
                   React.createElement("span", {
                     className: cn(
@@ -1006,7 +1027,7 @@
                     walkAwayMode ? "bg-primary" : "bg-muted",
                     (notifySaving || bootstrapping) ? "opacity-60 cursor-not-allowed" : ""
                   ),
-                  onClick: function () { persistWalkAwayMode(!walkAwayMode); }
+                  onClick: function () { setWalkawayTouched(true); walkawayTouchedRef.current = true; persistWalkAwayMode(!walkAwayMode); }
                 },
                   React.createElement("span", {
                     className: cn(
@@ -1030,12 +1051,12 @@
             React.createElement(CardContent, { className: "space-y-4" },
               React.createElement("div", { className: "space-y-1.5" },
                 React.createElement(Label, { className: "text-xs" }, "Working branch"),
-                React.createElement(Input, { value: workingBranch, onChange: function (e) { setWorkingBranch(e.target.value); }, placeholder: "main", className: "h-9" }),
+                React.createElement(Input, { value: workingBranch, onChange: function (e) { setWorkingBranch(e.target.value); setWorkingBranchTouched(true); workingBranchTouchedRef.current = true; }, placeholder: "main", className: "h-9" }),
                 React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "Integration branch for worktree commits. Defaults to your git checkout / origin default.")
               ),
               React.createElement("div", { className: "space-y-1.5" },
                 React.createElement(Label, { className: "text-xs" }, "Trigger branch"),
-                React.createElement(Input, { value: triggerBranch, onChange: function (e) { setTriggerBranch(e.target.value); }, placeholder: "Optional", className: "h-9" }),
+                React.createElement(Input, { value: triggerBranch, onChange: function (e) { setTriggerBranch(e.target.value); setTriggerBranchTouched(true); triggerBranchTouchedRef.current = true; }, placeholder: "Optional", className: "h-9" }),
                 React.createElement("p", { className: "text-[11px] text-muted-foreground" }, "The protected branch agents should NOT push to. Optional.")
               )
             )
@@ -1051,7 +1072,7 @@
                 React.createElement(Label, { className: "text-xs" }, "Governance profile"),
                 React.createElement("select", {
                   value: policyProfile,
-                  onChange: function (e) { setPolicyProfile(e.target.value); },
+                  onChange: function (e) { setPolicyProfile(e.target.value); setPolicyTouched(true); policyTouchedRef.current = true; },
                   className: "flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 },
                   POLICY_PROFILES.map(function (p) {
