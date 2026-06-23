@@ -683,12 +683,15 @@
       if (!Object.keys(body).length) return;
 
       // Close modal immediately — save happens in background
+      var newModelName = selectedModel ? selectedModel.model : null;
       setEditingProfile(null);
       setSelectedModel(null);
       setSavingProfile(profileName);
       apiPutProfile(profileName, body).then(function () {
-        setSavingProfile(null);
-        reloadStatus();
+        setSavingProfile("checking:" + profileName + "|" + (newModelName || ""));
+        reloadStatus().then(function () {
+          setSavingProfile(null);
+        });
       }).catch(function (e) {
         setSavingProfile(null);
         addLines(["ERROR updating profile: " + e.message], "line-err");
@@ -734,6 +737,11 @@
     function profileBadge(info, profileName) {
       if (savingProfile === profileName) {
         return React.createElement("span", { style: { fontSize: "12px", color: "#a78bfa" } }, "saving…");
+      }
+      if (savingProfile && savingProfile.indexOf("checking:" + profileName) === 0) {
+        var parts = savingProfile.split("|");
+        var checkingModel = parts[1] || (info && info.model) || "?";
+        return React.createElement("span", { style: { fontSize: "12px", color: "#a78bfa" } }, "checking (" + checkingModel + ")…");
       }
       var inConfig = info && info.exists && info.has_model;
       var effort = profileEffortSuffix(info);
