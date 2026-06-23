@@ -419,22 +419,19 @@
         });
         setLoading(false);
 
-        // Submit probes serially via per-profile endpoint (executor queue)
-        // with staggered delays to avoid flooding the gateway
-        if (needProbe) {
-          var profiles = Object.keys(merged.profiles || {});
-          var delay = 0;
-          profiles.forEach(function (p) {
-            setTimeout(function () {
-              apiProbeProfile(p);
-            }, delay);
-            delay += 5000;  // 5s gap between probes
-          });
-          // Also probe coding agent after profiles
+        // Always submit staggered probes on page load — the executor queue
+        // serializes them so they can't flood the gateway
+        var profiles = Object.keys(merged.profiles || {});
+        var staggerDelay = 0;
+        profiles.forEach(function (p) {
           setTimeout(function () {
-            apiFetch("/api/plugins/kanban-advanced/coding-agent/probe", { method: "POST" });
-          }, delay);
-        }
+            apiProbeProfile(p);
+          }, staggerDelay);
+          staggerDelay += 5000;
+        });
+        setTimeout(function () {
+          apiFetch("/api/plugins/kanban-advanced/coding-agent/probe", { method: "POST" });
+        }, staggerDelay);
 
         if (needGitFetch) {
           return apiStatus("git_fetch=1").then(function (gitStatus) {
