@@ -110,6 +110,8 @@ See `wiki/troubleshooting.md` § Dashboard config changes don't stick / revert a
 
 ## When the gateway disconnects after restarting the sidecar (Windows)
 
+> ⚠️ **AGENTS: Never use `taskkill /F /IM python.exe` to restart the sidecar.** It kills the gateway. Always resolve the sidecar PID from `/health` and kill only that PID.
+
 See `wiki/troubleshooting.md` § Sidecar server restart kills gateway. Do NOT use `taskkill /F /IM python.exe` — it kills the gateway too. Use PID-targeted kill. The keepalive cron auto-restarts the sidecar within 60s if it crashes.
 
 ## Key commands

@@ -626,18 +626,28 @@ If values still don't stick, the sidecar may be running stale code — restart i
 
 **Symptom:** After manually killing the dashboard sidecar server (`taskkill /F /IM python.exe`), the Hermes gateway also disconnects.
 
-**Root cause:** `taskkill /F /IM python.exe` kills ALL Python processes, including the gateway's Python process. Use PID-targeted kill instead:
+> ⚠️ **AGENTS: This is the #1 cause of gateway outages during dashboard troubleshooting.** Memorize the safe kill procedure below. If you kill the gateway, the user loses their chat connection, the keepalive cron stops, and the sidecar won't auto-recover. The user will need to restart the gateway manually — this is a severe disruption.
+
+**Root cause:** `taskkill /F /IM python.exe` kills ALL Python processes, including the gateway's Python process. The sidecar and gateway are completely separate — the sidecar runs on port 18900, the gateway on its own port. Use PID-targeted kill:
 
 ```bash
-# WRONG — kills gateway too
+# ❌ WRONG — kills gateway, keepalive cron, and everything Python
 taskkill /F /IM python.exe
 
-# CORRECT — kills only the sidecar
+# ✅ CORRECT — kills only the sidecar
 curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.load(sys.stdin)['pid'])"
 # Then: taskkill /PID <pid> /F
 ```
 
+**Why `taskkill /F /IM python.exe` is especially dangerous on Windows:**
+- The Hermes gateway runs as `python.exe` (same image name as the sidecar)
+- The keepalive cron ticks inside the gateway process — if the gateway dies, the cron dies too
+- `taskkill /F` forces termination without cleanup — no graceful shutdown, no state save
+- Even with `/FI` filters, the image name match is unreliable on Windows
+
 **Auto-recovery:** The keepalive cron (`kanban-dashboard-keepalive`) restarts the sidecar within 60 seconds if it crashes. Check with `hermes cron list | grep kanban-dashboard-keepalive`. If missing, run `hermes kanban-advanced init` to recreate it. The keepalive cron runs inside the gateway — the gateway must be running for auto-recovery.
+
+**If the gateway IS accidentally killed:** The user must restart it manually (`hermes gateway run`) and then restart the sidecar. The keepalive cron will also need to be recreated if `hermes kanban-advanced init` didn't provision it after gateway restart.
 
 ### Dashboard badges show stale model/probe data
 

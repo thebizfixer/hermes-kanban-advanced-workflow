@@ -198,6 +198,16 @@ Self-managing sidecar server that restores dashboard API functionality after Her
 
 Port configurable via `KA_DASHBOARD_PORT` env var (default: 18900). For remote/VPS access, configure a reverse proxy to route `/api/plugins/kanban-advanced/` → `127.0.0.1:18900`.
 
+> ⚠️ **AGENTS: Do NOT use `taskkill /F /IM python.exe` to restart the sidecar.** This kills ALL Python processes on Windows, including the Hermes gateway. The sidecar and gateway are separate processes — kill only the sidecar by its PID. Always resolve the PID first:
+>
+> ```bash
+> # SAFE: kill only the sidecar
+> curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.load(sys.stdin)['pid'])"
+> # Then: taskkill /PID <pid> /F
+> ```
+>
+> If the gateway dies, the keepalive cron stops ticking and the sidecar won't auto-recover. The user will need to restart the gateway manually. **Never risk this.**
+
 ## Decomposition (`kanban_decompose.py`)
 
 ```bash
