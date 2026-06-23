@@ -684,11 +684,12 @@
 
       // Close modal immediately — save happens in background
       var newModelName = selectedModel ? selectedModel.model : null;
+      var newEffort = pendingReasoningEffort !== initialReasoningEffort ? pendingReasoningEffort : null;
       setEditingProfile(null);
       setSelectedModel(null);
       setSavingProfile(profileName);
       apiPutProfile(profileName, body).then(function () {
-        setSavingProfile("checking:" + profileName + "|" + (newModelName || ""));
+        setSavingProfile("checking:" + profileName + "|" + (newModelName || "") + "|" + (newEffort || ""));
         reloadStatus().then(function () {
           setSavingProfile(null);
         });
@@ -741,7 +742,9 @@
       if (savingProfile && savingProfile.indexOf("checking:" + profileName) === 0) {
         var parts = savingProfile.split("|");
         var checkingModel = parts[1] || (info && info.model) || "?";
-        return React.createElement("span", { style: { fontSize: "12px", color: "#a78bfa" } }, "checking (" + checkingModel + ")…");
+        var checkingEffort = parts[2] || "";
+        var label = "checking (" + checkingModel + (checkingEffort ? " · " + checkingEffort : "") + ")…";
+        return React.createElement("span", { style: { fontSize: "12px", color: "#a78bfa" } }, label);
       }
       var inConfig = info && info.exists && info.has_model;
       var effort = profileEffortSuffix(info);
