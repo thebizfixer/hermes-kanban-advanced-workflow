@@ -184,7 +184,7 @@ def _apply_max_turns_to_profiles(
     for profile in profiles:
         raw = _profile_config_show(profile)
         current = _max_turns_from_config_show(raw)
-        if current >= target:
+        if current == target:
             output.append(f"   OK {profile}: max_turns = {current}")
             continue
         try:
