@@ -37,7 +37,7 @@ If you're unsure, start with `/goal` on a small task. Graduate to vanilla kanban
 | Multi-lane governed delivery | This plugin (default **one-shot** kanban cards) |
 | One stubborn outcome lane | Same board + **`--goal`** on 0–2 cards after Harden (see `kanban-advanced:kanban-planning` skill § Goal-card selection) |
 
-Requires Hermes **≥ 0.16.0** (tested on 0.16.0). Goal-mode (`--goal`) **enhances** vanilla Hermes; the evaluation chain still gates every completion.
+Requires Hermes **≥ 0.16.0** (tested on 0.17.0). Goal-mode (`--goal`) **enhances** vanilla Hermes; the evaluation chain still gates every completion.
 
 ## Completeness loop
 

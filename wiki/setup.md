@@ -8,7 +8,7 @@
 
 1. **Confirm Hermes is installed and running:**
    ```bash
-   hermes --version          # ≥ 0.16.0 required
+   hermes --version          # ≥ 0.16.0 required (tested on 0.17.0)
    hermes gateway status     # must be running
    ```
    If not running: `hermes gateway run` (use tmux background for persistence).

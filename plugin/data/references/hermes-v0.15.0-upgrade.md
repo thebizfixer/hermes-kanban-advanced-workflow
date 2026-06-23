@@ -1,6 +1,6 @@
 # Hermes v0.15.x–0.16.x upgrade notes
 
-This bundle requires **Hermes Agent ≥ 0.16.0** (current test target). Goal-mode cards (`--goal` on `hermes kanban create`) require at least 0.15.2 upstream; 0.16.0 is the supported floor for kanban-advanced.
+This bundle requires **Hermes Agent ≥ 0.16.0** (test target: 0.17.0). Goal-mode cards (`--goal` on `hermes kanban create`) require at least 0.15.2 upstream; 0.16.0 is the supported floor for kanban-advanced.
 
 ## Commands
 
