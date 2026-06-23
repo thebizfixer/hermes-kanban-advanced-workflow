@@ -419,21 +419,6 @@
         });
         setLoading(false);
 
-        if (needProbe) {
-          setStatusProbing(true);
-          return apiStatus("probe=1&git_fetch=1").then(function (full) {
-            var complete = mergeStatusFields(merged, full);
-            setStatus(complete);
-            if (!opts.skipApply) applyStatusToForm(complete);
-            writeSessionStatus(complete, { probed: true });
-            setStatusProbing(false);
-            return complete;
-          }).catch(function () {
-            setStatusProbing(false);
-            return merged;
-          });
-        }
-
         if (needGitFetch) {
           return apiStatus("git_fetch=1").then(function (gitStatus) {
             var complete = mergeStatusFields(merged, gitStatus);
