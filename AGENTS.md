@@ -89,6 +89,8 @@ Do **not** assume bootstrap copied `.env` into worktrees — the plugin never ad
 
 ## When the dashboard tab isn't working
 
+> **⚠️ Before any sidecar restart or troubleshooting: load `skill_view('kanban-worker-addendum')`.** It contains the safe restart procedure and common pitfalls. The #1 mistake agents make is `taskkill /F /IM python.exe` which kills the gateway.
+
 **Architecture:** Hermes v0.17.0 blocks non-bundled plugins from auto-importing Python API backends (GHSA-5qr3-c538-wm9j). The dashboard API runs as a standalone sidecar uvicorn server on `127.0.0.1:18900` (`scripts/dashboard_server.py`), started automatically during `hermes kanban-advanced init`. The frontend calls the sidecar directly on localhost or via reverse proxy on remote/VPS.
 
 1. Check the sidecar server: `curl http://127.0.0.1:18900/health` → should return `{"status":"ok"}`.
