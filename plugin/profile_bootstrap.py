@@ -46,9 +46,11 @@ NO_BUNDLED_SKILLS_TEXT = (
 # Files safe to copy from the default profile when bootstrapping dispatch profiles.
 # .env is included because Hermes profiles do NOT inherit env vars from the
 # main $HERMES_HOME/.env — each profile needs its own copy. The reconciliation
-# step re-syncs these on every bootstrap (not just at creation), so operator
-# key updates propagate to dispatch profiles on Update Plugin / re-init.
-_PROFILE_CONFIG_FILES = ("config.yaml", ".env", "auth.json")
+# step re-syncs .env and auth.json on every bootstrap (not just at creation),
+# so operator key updates propagate to dispatch profiles on Update Plugin / re-init.
+# config.yaml is NOT synced — each profile manages its own model/max_turns config
+# through the dashboard or hermes config set.
+_PROFILE_CONFIG_FILES = (".env", "auth.json")
 
 # plugin/data/prompts/*.md → profiles/<name>/SOUL.md
 _PROFILE_SOUL_PROMPTS_BY_ROLE: dict[str, str] = {
