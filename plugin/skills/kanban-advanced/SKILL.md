@@ -100,6 +100,14 @@ python3 scripts/kanban_handoff.py --plan <plan.md>
    alias exists), or `hermes profile use orchestrator` then `hermes chat`. Full
    reference: `plugin/data/references/profile-switching.md`.
 
+## Dashboard / sidecar server
+
+The plugin runs a standalone uvicorn sidecar on `127.0.0.1:18900` (GHSA-5qr3-c538-wm9j workaround). Managed by `scripts/dashboard_server.py` + keepalive cron.
+
+> ⚠️ **On Windows, never use `taskkill /F /IM python.exe` to restart the sidecar.** It kills ALL Python processes including the Hermes gateway. Always use PID-targeted kill: `curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.load(sys.stdin)['pid'])"` then `taskkill /PID <pid> /F`. The keepalive cron (`kanban-dashboard-keepalive`) auto-restarts the sidecar if it crashes — prefer that over manual kills.
+
+Full dashboard troubleshooting: `wiki/troubleshooting.md` § Dashboard tab not loading.
+
 ## Quick reference
 
 | Skill | Purpose |
