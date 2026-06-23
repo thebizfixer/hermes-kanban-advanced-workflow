@@ -585,7 +585,21 @@ kanban-advanced works around several vanilla Hermes behaviors. When something fe
 
 ## Full error code listing
 
-See `plugin/data/registry/error-codes.yaml` for all 37 codes with severity, recovery, and retry flags.
+See `plugin/data/registry/error-codes.yaml` for all 49 codes with severity, recovery, and retry flags.
+
+### Dashboard tab not loading / "Server Not Running"
+
+**Symptom:** Kanban-Advanced dashboard tab shows "Cannot reach API" or "Server Not Running" banner.
+
+**Checks (in order):**
+
+1. **Server started at init?** — `hermes kanban-advanced init` starts the sidecar server automatically. If init was run before this feature existed, re-run init or start manually: `python3 scripts/dashboard_server.py`.
+2. **Server running?** — `curl http://127.0.0.1:18900/health` should return `{"status":"ok"}`. If connection refused, the server is not running.
+3. **Keepalive cron registered?** — `hermes cron list | grep kanban-dashboard-keepalive`. If missing, re-run init.
+4. **Gateway running?** — The keepalive cron ticks inside the gateway. Without the gateway, the server won't auto-recover from crashes. `hermes gateway status`.
+5. **Port conflict?** — Set `KA_DASHBOARD_PORT=18901` and restart: `python3 scripts/dashboard_server.py`.
+6. **VPS / remote setup?** — The dashboard uses relative URLs when not on localhost. Ensure your reverse proxy routes `/api/plugins/kanban-advanced/` → `127.0.0.1:18900`.
+7. **Windows?** — The server uses `psutil` for process detection. Ensure `psutil` is installed: `pip install psutil`. Without it, the server stays alive indefinitely (fail-open).
 
 ## Still stuck?
 

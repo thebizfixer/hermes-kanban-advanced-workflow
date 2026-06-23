@@ -97,12 +97,12 @@ The worker reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from `.en
 7. **Plugin verification tests** (when bootstrap/update looks wrong — optional but recommended after **Update Plugin**):
    ```bash
    python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py
-
-After init, run the [standard smoke test plan](../test-plan/kanban-standard-smoke-test.plan.md) to validate the full governance pipeline end-to-end. Copy the plan to `.hermes/kanban/plans/`, decompose, and execute.
    bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh
    bash hermes-kanban-advanced-workflow/scripts/provision.sh --check
    ```
    Full matrix: [[plugin-verification]].
+
+   After init, run the [standard smoke test plan](../test-plan/kanban-standard-smoke-test.plan.md) to validate the full governance pipeline end-to-end. Copy the plan to `.hermes/kanban/plans/`, decompose, and execute.
 
 8. **Tell the user:** "Setup complete. Create a plan with the orchestrator (`kanban-advanced-orchestrator` profile), then run `hermes kanban-advanced decompose --plan <file>`. See the README for the full lifecycle."
 

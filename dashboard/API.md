@@ -4,6 +4,13 @@ The Kanban-Advanced settings tab registers as a Hermes dashboard tab at `/kanban
 (positioned after the Skills tab). The UI is served from `dashboard/index.html` /
 `dashboard/dist/index.js`; the backend routes live in `dashboard/plugin_api.py`.
 
+> **Architecture note (Hermes ≥ v0.17.0):** Non-bundled plugins cannot auto-import Python
+> API backends (GHSA-5qr3-c538-wm9j). The dashboard API runs as a standalone uvicorn server
+> on `127.0.0.1:18900` (`scripts/dashboard_server.py`), started automatically during
+> `hermes kanban-advanced init`. The frontend detects its environment and calls the sidecar
+> directly (localhost) or via reverse proxy (remote/VPS). See `docs/reference/scripts.md`
+> § Dashboard server for details.
+
 Base path: `/api/plugins/kanban-advanced/`
 
 All endpoints return JSON.

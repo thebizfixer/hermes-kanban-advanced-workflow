@@ -185,9 +185,18 @@ Syncs canonical skill files from `plugin/skills/` to `$HERMES_HOME/skills/kanban
 
 | Top-level | `lib/` |
 |-----------|--------|
-| `auto_unblock.sh`, `board_keeper.sh`, `kanban_lifecycle_notify.sh`, `kanban_completion_notify.sh`, `kanban_walk_away_post_exec.sh`, `kanban_intervention_inc.sh`, `kanban_git_ops.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py`, `gateway_hermes_home.sh`, `auto_unblock_core.sh`, `decompose_stamp.py`, `cross_plan_memory.py`, `plan_parse.py`, `cli_output_parse.py`, `card_body.py`, `presentation_acceptance.py`, `verify_optimization_presentation.py`, … |
+| `auto_unblock.sh`, `board_keeper.sh`, `kanban_lifecycle_notify.sh`, `kanban_completion_notify.sh`, `kanban_walk_away_post_exec.sh`, `kanban_intervention_inc.sh`, `kanban_git_ops.sh`, `coding_agent_invoke.sh`, `worktree_setup.sh`, `install_pre_push_hook.sh`, `install_pre_commit_hook.sh`, `token_tracker.py`, `dashboard_server.py`, `dashboard_server_keepalive.sh` | `coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_config.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `plan_paths.sh`, `plan_paths.py`, `gateway_hermes_home.sh`, `auto_unblock_core.sh`, `decompose_stamp.py`, `cross_plan_memory.py`, `plan_parse.py`, `cli_output_parse.py`, `card_body.py`, `presentation_acceptance.py`, `verify_optimization_presentation.py`, … |
 
 Init / dashboard **Update Plugin** use the same list via `plugin/script_materialize.py`. `--check` mode exits non-zero if materialized files have drifted from canonical.
+
+### Dashboard server (`dashboard_server.py` + `dashboard_server_keepalive.sh`)
+
+Self-managing sidecar server that restores dashboard API functionality after Hermes v0.17.0's restriction on non-bundled plugin Python backends (GHSA-5qr3-c538-wm9j).
+
+- **`dashboard_server.py`** — Standalone uvicorn process on `127.0.0.1:18900`. Wraps the dashboard API router with CORS, PID file locking, and a watchdog thread that self-terminates when the Hermes dashboard process disappears (via `psutil`).
+- **`dashboard_server_keepalive.sh`** — Crash-recovery cron script. Checks `/health` endpoint every 60s; restarts the server if it's down. Registered at init as `kanban-dashboard-keepalive`.
+
+Port configurable via `KA_DASHBOARD_PORT` env var (default: 18900). For remote/VPS access, configure a reverse proxy to route `/api/plugins/kanban-advanced/` → `127.0.0.1:18900`.
 
 ## Decomposition (`kanban_decompose.py`)
 

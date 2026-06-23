@@ -30,6 +30,14 @@
   var Separator = SDK.components.Separator;
   var cn = SDK.utils.cn;
 
+  // ── Environment detection ──
+  var IS_LOCALHOST = window.location.hostname === "localhost" 
+                  || window.location.hostname === "127.0.0.1"
+                  || window.location.hostname === "[::1]";
+  var API_BASE = IS_LOCALHOST 
+    ? "http://127.0.0.1:" + (window.__KA_DASHBOARD_PORT__ || "18900")
+    : "";
+
   // ── API helpers ──
   function apiFetch(path, opts) {
     opts = opts || {};
@@ -40,7 +48,7 @@
     if (token) {
       opts.headers["X-Hermes-Session-Token"] = token;
     }
-    return fetch(path, opts).then(function (r) {
+    return fetch(API_BASE + path, opts).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (body) {
         if (!r.ok) {
           var msg = body.error || body.detail || ("HTTP " + r.status);
@@ -418,7 +426,11 @@
       }).catch(function (e) {
         setLoading(false);
         setStatusProbing(false);
-        setStatus({ error: e.message || "API unreachable" });
+        var msg = e.message || "API unreachable";
+        if (msg === "Failed to fetch" || msg.indexOf("NetworkError") >= 0) {
+          msg = "Dashboard server not running on port " + (window.__KA_DASHBOARD_PORT__ || "18900") + ". Start it: python3 scripts/dashboard_server.py";
+        }
+        setStatus({ error: msg });
       });
     }
 

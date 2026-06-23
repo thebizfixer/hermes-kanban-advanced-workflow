@@ -87,6 +87,17 @@ Init covers **kanban infrastructure only** (profiles, overlay, materialized scri
 
 Do **not** assume bootstrap copied `.env` into worktrees — the plugin never adds `.env` to `.worktreeinclude` by default.
 
+## When the dashboard tab isn't working
+
+1. Check the sidecar server: `curl http://127.0.0.1:18900/health` → should return `{"status":"ok"}`.
+2. If not running, start it: `python3 scripts/dashboard_server.py` (or re-run `hermes kanban-advanced init`).
+3. Check the keepalive cron: `hermes cron list | grep kanban-dashboard-keepalive`.
+4. For VPS/remote: ensure reverse proxy routes `/api/plugins/kanban-advanced/` → `127.0.0.1:18900`.
+5. Port conflict: `KA_DASHBOARD_PORT=18901 python3 scripts/dashboard_server.py`.
+6. Full troubleshooting: `wiki/troubleshooting.md` § Dashboard tab not loading.
+
+The server self-manages: starts at init, watchdog thread self-terminates when the Hermes dashboard process disappears, keepalive cron provides crash recovery. The frontend detects localhost vs remote and routes API calls accordingly.
+
 ## Key commands
 
 - `hermes kanban-advanced init` — bootstrap project (dispatch profiles, config, cron script files — not cron jobs; **advisory** coding-agent smoke only)

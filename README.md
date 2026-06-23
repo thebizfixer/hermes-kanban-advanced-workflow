@@ -21,7 +21,9 @@ cd your-project
 hermes kanban-advanced init --project-root . --working-branch <branch-name>
 ```
 
-Two steps. Restart Hermes and you're ready. Init creates `kanban-advanced-orchestrator` and `kanban-advanced-worker`, installs plugin SOUL prompts, seeds role-only profile skills, and verifies the result. Replace `<branch-name>` with your integration branch (e.g. `main`). Details: [wiki/bootstrap.md](wiki/bootstrap.md).
+Two steps. Init creates `kanban-advanced-orchestrator` and `kanban-advanced-worker`, installs plugin SOUL prompts, seeds role-only profile skills, starts the dashboard server, and verifies the result. Replace `<branch-name>` with your integration branch (e.g. `main`). Details: [wiki/bootstrap.md](wiki/bootstrap.md).
+
+> **Dashboard:** The plugin includes a dashboard settings tab (port 18900). The server starts automatically during init and runs while the Hermes dashboard is active. For remote/VPS setups, configure your reverse proxy to route `/api/plugins/kanban-advanced/` → `127.0.0.1:18900`.
 
 > **Verify your installation:** Run the [standard smoke test](test-plan/kanban-standard-smoke-test.plan.md) to validate the full governance pipeline end-to-end. Copy the plan to `.hermes/kanban/plans/`, then decompose and execute. Expected: 5 cards, 8/8 tests passing, governance gates exercised, postmortem generated.
 
@@ -227,5 +229,8 @@ flowchart LR
 | Working branch shows `main` after update | Set `KANBAN_PROJECT_ROOT`; use dashboard **Save** or edit `kanban-config.yaml` — [wiki/troubleshooting.md](wiki/troubleshooting.md) |
 | Bootstrap OK but coding agent fails at execute | Bootstrap smoke is advisory — run `check_coding_agent_cli.py`, fix keys/OAuth/`HOME` — [coding-agent auth](plugin/data/references/coding-agent-auth.md) |
 | `HOME: unbound variable` / false OAuth errors | Set `HOME=` in `.env` or gateway unit; restart gateway — [wiki/troubleshooting.md](wiki/troubleshooting.md) |
+| Dashboard tab shows "Server Not Running" | Server starts automatically during init. If missing: `python3 scripts/dashboard_server.py`. Gateway must be running for keepalive cron — [wiki/troubleshooting.md](wiki/troubleshooting.md) |
+| Dashboard API returns errors / won't save | Check server is running: `curl http://127.0.0.1:18900/health`. For VPS: verify reverse proxy routes `/api/plugins/kanban-advanced/` → `127.0.0.1:18900` |
+| Port 18900 already in use | Set `KA_DASHBOARD_PORT=18901` in your environment; restart the server |
 
 Full guide: [docs/how-to/troubleshooting.md](docs/how-to/troubleshooting.md)

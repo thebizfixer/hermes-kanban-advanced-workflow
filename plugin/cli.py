@@ -601,6 +601,51 @@ def _handle_init(args) -> int:
     except Exception as exc:
         print(f"   X Could not check gateway: {exc}")
 
+    # ── 7. Dashboard server ───────────────────────────────────────────
+    print("7. Dashboard server + keepalive cron...")
+    server_script = cron_dir / "dashboard_server.py"
+    keepalive_script = cron_dir / "dashboard_server_keepalive.sh"
+    
+    # Register keepalive cron for crash recovery (idempotent)
+    if keepalive_script.exists():
+        try:
+            existing = subprocess.run(
+                [HERMES_BIN, "cron", "list"],
+                capture_output=True, text=True,
+                env={**os.environ, "HERMES_HOME": str(hermes_home)},
+                timeout=15,
+            )
+            if "kanban-dashboard-keepalive" not in (existing.stdout or ""):
+                subprocess.run([
+                    HERMES_BIN, "cron", "create", "60s",
+                    "--name", "kanban-dashboard-keepalive",
+                    "--no-agent",
+                    "--script", str(keepalive_script),
+                    "--deliver", "local",
+                    "--repeat", "999",
+                ], env={**os.environ, "HERMES_HOME": str(hermes_home)}, timeout=15)
+                print(f"   OK Keepalive cron registered (crash recovery every 60s)")
+            else:
+                print(f"   OK Keepalive cron already registered")
+        except Exception as exc:
+            print(f"   !  Could not register keepalive cron: {exc}")
+    
+    # Start the server now (don't wait for cron)
+    if server_script.exists():
+        try:
+            subprocess.Popen(
+                ["python3", str(server_script)],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            print(f"   OK Dashboard server started (port 18900)")
+        except Exception as exc:
+            print(f"   !  Could not start dashboard server: {exc}")
+            print(f"   Start manually: python3 {server_script}")
+    else:
+        print(f"   !  Server script not found at {server_script}")
+
     # ── Readiness ────────────────────────────────────────────────────
     print()
     print("=" * 50)

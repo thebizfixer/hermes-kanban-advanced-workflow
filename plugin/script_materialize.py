@@ -27,6 +27,8 @@ HERMES_SCRIPT_NAMES = (
     "worktree_setup.sh",
     "install_pre_push_hook.sh",
     "install_pre_commit_hook.sh",
+    "dashboard_server.py",
+    "dashboard_server_keepalive.sh",
 )
 
 LIB_SCRIPT_NAMES = (
