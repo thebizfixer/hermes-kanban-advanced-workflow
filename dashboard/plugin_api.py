@@ -102,9 +102,6 @@ _TTL_MODEL_PROBE = 180.0
 # ── Model probe background executor ──
 _probe_executor = ThreadPoolExecutor(max_workers=1)  # sequential via single worker
 _inflight_probes: set[str] = set()
-_probe_failures: dict[str, int] = {}
-_PROBE_CIRCUIT_BREAKER_THRESHOLD = 3
-_PROBE_CIRCUIT_COOLDOWN = 300  # 5 minutes
 
 
 def _cache_get(key: str, ttl: float):
@@ -326,36 +323,12 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
         return None, "inconclusive"
 
 
-def _should_skip_probe(profile: str) -> bool:
-    """Circuit breaker: skip probing if model has failed N times consecutively.
-    
-    After _PROBE_CIRCUIT_BREAKER_THRESHOLD consecutive timeouts, the circuit
-    opens. It stays open until _PROBE_CIRCUIT_COOLDOWN seconds have passed
-    since the last cached probe result. A successful probe resets the counter.
-    """
-    failures = _probe_failures.get(profile, 0)
-    if failures < _PROBE_CIRCUIT_BREAKER_THRESHOLD:
-        return False
-    # Check if cooldown has elapsed via cache age
-    cached = _cache_get(f"model_reachable:{profile}", _PROBE_CIRCUIT_COOLDOWN)
-    if cached is not None:
-        return True  # circuit still open
-    # Cooldown expired — reset and allow probe
-    _probe_failures[profile] = 0
-    return False
-
 
 def _run_probe(profile: str) -> None:
     """Run in ThreadPoolExecutor. Probes model reachability, updates cache.
     
-    Circuit breaker: skips probe after N consecutive timeouts (5-min cooldown).
     Grace period: preserves recent successful result on transient timeout.
     """
-    # Circuit breaker — skip probe if model has been failing repeatedly
-    if _should_skip_probe(profile):
-        _inflight_probes.discard(profile)
-        return
-
     reachable, detail = _check_model_reachable(profile)
 
     # Grace period: don't overwrite a recent successful probe with a timeout
@@ -371,12 +344,6 @@ def _run_probe(profile: str) -> None:
         {"reachable": reachable, "detail": detail},
     )
     _inflight_probes.discard(profile)
-
-    # Circuit breaker tracking (after cache update so cooldown starts from now)
-    if reachable is None and "timed out" in (detail or ""):
-        _probe_failures[profile] = _probe_failures.get(profile, 0) + 1
-    elif reachable is True:
-        _probe_failures[profile] = 0  # success resets counter
 
 
 @router.post("/profiles/{profile_name}/probe", status_code=202)
