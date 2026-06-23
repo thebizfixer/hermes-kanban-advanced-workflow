@@ -636,17 +636,12 @@
       setCodingAgentModelQuery("");
       setEditingCodingAgentModel(true);
       if (binary === "hermes") {
-        // Hermes uses the same provider/model catalog as profile model pickers
-        if (!modelOptions) {
-          apiFetch("/api/model/options").then(function (opts) {
-            setModelOptions(opts);
-            setCodingAgentModelOptions({ providers: opts.providers || [], source: "catalog" });
-          }).catch(function () {
-            setCodingAgentModelOptions({ error: true, models: [{ id: "auto", label: "Auto (profile config)" }] });
-          });
-        } else {
-          setCodingAgentModelOptions({ providers: modelOptions.providers || [], source: "catalog" });
-        }
+        // Hermes: use sidecar endpoint for profile-aware model labels
+        apiCodingAgentModels("hermes").then(function (opts) {
+          setCodingAgentModelOptions(opts);
+        }).catch(function () {
+          setCodingAgentModelOptions({ error: true, models: [{ id: "auto", label: "Auto (profile config)" }] });
+        });
       } else {
         apiCodingAgentModels(binary).then(function (opts) {
           setCodingAgentModelOptions(opts);
