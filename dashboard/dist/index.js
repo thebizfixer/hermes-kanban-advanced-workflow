@@ -48,7 +48,7 @@
     if (token) {
       opts.headers["X-Hermes-Session-Token"] = token;
     }
-    return fetch(API_BASE + path, opts).then(function (r) {
+    return fetch(path.indexOf("/api/plugins/kanban-advanced/") === 0 ? API_BASE + path : path, opts).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (body) {
         if (!r.ok) {
           var msg = body.error || body.detail || ("HTTP " + r.status);
