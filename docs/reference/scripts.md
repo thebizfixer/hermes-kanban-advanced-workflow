@@ -193,7 +193,7 @@ Init / dashboard **Update Plugin** use the same list via `plugin/script_material
 
 Self-managing sidecar server that restores dashboard API functionality after Hermes v0.17.0's restriction on non-bundled plugin Python backends (GHSA-5qr3-c538-wm9j).
 
-- **`dashboard_server.py`** — Standalone uvicorn process on `127.0.0.1:18900`. Wraps the dashboard API router with CORS, PID file locking, and a watchdog thread that self-terminates when the Hermes dashboard process disappears (via `psutil`).
+- **`dashboard_server.py`** — Standalone uvicorn process on `127.0.0.1:18900`. Wraps the dashboard API router with CORS, PID file locking, and a watchdog thread that self-terminates when no Hermes processes are running (via `psutil`).
 - **`dashboard_server_keepalive.sh`** — Crash-recovery cron script. Checks `/health` endpoint every 60s; restarts the server if it's down. Registered at init as `kanban-dashboard-keepalive`.
 
 Port configurable via `KA_DASHBOARD_PORT` env var (default: 18900). For remote/VPS access, configure a reverse proxy to route `/api/plugins/kanban-advanced/` → `127.0.0.1:18900`.

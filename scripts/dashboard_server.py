@@ -7,8 +7,8 @@ on localhost.
 
 Lifecycle (self-managing, no cron needed for normal operation):
 - Started by: plugin init or keepalive cron (crash recovery)
-- Watchdog: checks every 30s if Hermes dashboard process is alive (via psutil)
-- Self-terminates: when dashboard process disappears
+- Watchdog: checks every 30s if any Hermes process is alive (via psutil)
+- Self-terminates: when no Hermes processes are running
 - PID file: prevents duplicate instances
 
 Security:
@@ -59,17 +59,25 @@ app.include_router(router, prefix="/api/plugins/kanban-advanced")
 # ═══════════════════════════════════════════════════════════════════════
 
 def _is_dashboard_running() -> bool:
-    """Check if a Hermes dashboard process is running (cross-platform via psutil)."""
+    """Check if any Hermes process is running (gateway, desktop, or CLI).
+    
+    The Hermes desktop app (Electron) and gateway (pythonw) don't have
+    'hermes' in their process name on Windows, so we can't detect them
+    by name alone. Instead, we look for ANY Hermes process — if Hermes
+    is running at all, the dashboard might be in use. This is fail-open:
+    the sidecar only self-terminates when NO hermes processes exist.
+    The keepalive cron (60s) handles crash recovery; the watchdog is for
+    clean shutdown when the user exits Hermes.
+    """
     try:
         import psutil
     except ImportError:
-        return True  # can't check — stay alive (fail open)
+        return True  # can't check — stay alive
     
-    for proc in psutil.process_iter(['name', 'cmdline']):
+    for proc in psutil.process_iter(['name']):
         try:
             name = (proc.info['name'] or '').lower()
-            cmdline = proc.info['cmdline'] or []
-            if 'hermes' in name and len(cmdline) >= 2 and 'dashboard' in cmdline:
+            if 'hermes' in name:
                 return True
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             continue

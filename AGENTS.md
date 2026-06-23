@@ -100,7 +100,7 @@ Do **not** assume bootstrap copied `.env` into worktrees — the plugin never ad
 5. Port conflict: `KA_DASHBOARD_PORT=18901 python3 scripts/dashboard_server.py`.
 6. Full troubleshooting: `wiki/troubleshooting.md` § Dashboard tab not loading.
 
-The server self-manages: starts at init, watchdog thread self-terminates when the Hermes dashboard process disappears, keepalive cron provides crash recovery. The frontend detects localhost vs remote and routes API calls accordingly.
+The server self-manages: starts at init, watchdog thread self-terminates when no Hermes processes are running, keepalive cron provides crash recovery. The frontend detects localhost vs remote and routes API calls accordingly.
 
 ## When dashboard config changes revert / don't stick
 
