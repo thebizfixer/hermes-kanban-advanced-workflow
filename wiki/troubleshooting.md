@@ -644,6 +644,7 @@ curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.
 - The keepalive cron ticks inside the gateway process — if the gateway dies, the cron dies too
 - `taskkill /F` forces termination without cleanup — no graceful shutdown, no state save
 - Even with `/FI` filters, the image name match is unreliable on Windows
+- **Restarting the sidecar spawns duplicate subprocesses:** The old sidecar's `ThreadPoolExecutor` may have in-flight `hermes chat` subprocesses that survive the kill. Starting a new sidecar immediately creates a second executor that also spawns subprocesses — doubling the probe load and overloading the gateway. **Prefer reloading the dashboard tab** over restarting the sidecar (frontend JS changes take effect on tab reload). If restart is unavoidable, kill by PID and wait 10 seconds for subprocess cleanup before starting the new sidecar.
 
 **Auto-recovery:** The keepalive cron (`kanban-dashboard-keepalive`) restarts the sidecar within 60 seconds if it crashes. Check with `hermes cron list | grep kanban-dashboard-keepalive`. If missing, run `hermes kanban-advanced init` to recreate it. The keepalive cron runs inside the gateway — the gateway must be running for auto-recovery.
 
