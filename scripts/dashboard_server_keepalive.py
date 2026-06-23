@@ -1,0 +1,38 @@
+"""dashboard_server_keepalive.py — Crash-recovery safety net (Python, no bash).
+
+The sidecar server self-manages its lifecycle. This script is a backup:
+if the server crashes, this restarts it within 60s.
+
+Invoked by a script-only cron job every 60s.
+Empty stdout = silent. Non-empty = action was taken.
+"""
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+PORT = os.environ.get("KA_DASHBOARD_PORT", "18900")
+HEALTH_URL = f"http://127.0.0.1:{PORT}/health"
+
+# Check if server is already running via health endpoint
+try:
+    import urllib.request
+    req = urllib.request.Request(HEALTH_URL, method="GET")
+    urllib.request.urlopen(req, timeout=2)
+    sys.exit(0)  # running — silent
+except Exception:
+    pass  # not running — start it
+
+# Find plugin root (this script is at <plugin_root>/scripts/)
+script_dir = Path(__file__).resolve().parent
+plugin_root = script_dir.parent
+server_script = plugin_root / "scripts" / "dashboard_server.py"
+
+# Start server (PID locking in Python prevents duplicates)
+subprocess.Popen(
+    [sys.executable, str(server_script)],
+    cwd=str(plugin_root),
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL,
+)
+print(f"[dashboard_server] Crash recovery: restarted on port {PORT}")
