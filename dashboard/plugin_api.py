@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Lock
 
@@ -97,6 +98,10 @@ _status_cache: dict[str, tuple[float, object]] = {}
 _status_cache_lock = Lock()
 _TTL_GIT_BEHIND = 300.0
 _TTL_MODEL_PROBE = 180.0
+
+# ── Model probe background executor ──
+_probe_executor = ThreadPoolExecutor(max_workers=1)  # sequential via single worker
+_inflight_probes: set[str] = set()
 
 
 def _cache_get(key: str, ttl: float):
@@ -304,6 +309,82 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
         return None, "inconclusive"
 
 
+def _run_probe(profile: str) -> None:
+    """Run in ThreadPoolExecutor. Probes model reachability, updates cache."""
+    reachable, detail = _check_model_reachable(profile)
+    _cache_set(
+        f"model_reachable:{profile}",
+        {"reachable": reachable, "detail": detail},
+    )
+    _inflight_probes.discard(profile)
+
+
+@router.post("/profiles/{profile_name}/probe", status_code=202)
+async def probe_profile_endpoint(profile_name: str):
+    """Enqueue a model reachability probe for one profile. Returns 202 immediately."""
+    profile = profile_name.strip()
+    if not profile:
+        raise HTTPException(status_code=400, detail="profile_name is required")
+
+    project_root = resolve_project_root()
+    config_file = overlay_path(project_root)
+    if not config_file.is_file():
+        raise HTTPException(status_code=400, detail="Config not found. Run bootstrap first.")
+
+    worker_profile, orchestrator_profile, _ = resolve_dispatch_profiles(
+        read_overlay_config(config_file)
+    )
+    allowed = {worker_profile, orchestrator_profile}
+    if profile not in allowed:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Profile must be a dispatch profile: {', '.join(sorted(allowed))}",
+        )
+
+    if profile in _inflight_probes:
+        return {"status": "already_queued", "profile": profile}
+
+    _inflight_probes.add(profile)
+    _probe_executor.submit(_run_probe, profile)
+
+    return {"status": "queued", "profile": profile}
+
+
+def _run_coding_agent_probe(binary: str, model: str | None) -> None:
+    """Run in ThreadPoolExecutor. Probes coding agent CLI, updates cache."""
+    cli = check_coding_agent_cli(
+        binary,
+        model,
+        _run_coding_agent_cli,
+        probe=True,
+        cache_get=None,
+        cache_set=None,
+    )
+    _cache_set(
+        f"coding_agent_smoke:{binary}:{model or 'auto'}",
+        cli.get("model_reachable"),
+    )
+    _inflight_probes.discard(binary)
+
+
+@router.post("/coding-agent/probe", status_code=202)
+async def probe_coding_agent_endpoint():
+    """Enqueue a coding agent CLI reachability probe. Returns 202 immediately."""
+    project_root = resolve_project_root()
+    config = _read_config(project_root)
+    env = _read_env(project_root)
+    coding_agent = resolve_coding_agent(project_root, env=env)
+    coding_agent_model = resolve_coding_agent_model(project_root, env=env)
+
+    if coding_agent in _inflight_probes:
+        return {"status": "already_queued", "profile": coding_agent}
+
+    _inflight_probes.add(coding_agent)
+    _probe_executor.submit(_run_coding_agent_probe, coding_agent, coding_agent_model)
+
+    return {"status": "queued", "profile": coding_agent}
+
+
 def _dispatch_profile_list(project_root: Path | None = None) -> list[str]:
     if project_root is None:
         project_root = resolve_project_root()
@@ -387,7 +468,7 @@ def _check_profiles(
             reasoning = read_reasoning_effort_from_config_show(stdout)
             info.update(reasoning)
 
-            if info["has_model"] and probe_models:
+            if info["has_model"]:
                 cache_key = f"model_reachable:{profile}"
                 cached = _cache_get(cache_key, _TTL_MODEL_PROBE)
                 if cached is not None:
@@ -396,7 +477,7 @@ def _check_profiles(
                         info["model_reachability_detail"] = cached.get("detail") or ""
                     else:
                         info["model_reachable"] = cached
-                else:
+                elif probe_models:
                     reachable, detail = _check_model_reachable(profile)
                     info["model_reachable"] = reachable
                     info["model_reachability_detail"] = detail

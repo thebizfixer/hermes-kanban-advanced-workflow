@@ -179,6 +179,9 @@
       body: JSON.stringify(data)
     });
   }
+  function apiProbeProfile(profileName) {
+    return apiFetch("/api/plugins/kanban-advanced/profiles/" + encodeURIComponent(profileName) + "/probe", { method: "POST" });
+  }
 
   var REASONING_EFFORT_LEVELS = [
     "none", "low", "minimal", "medium", "high", "xhigh"
@@ -260,6 +263,7 @@
     var notifyTouchedRef = useRef(false);
     var _useState33 = useState(false), walkawayTouched = _useState33[0], setWalkawayTouched = _useState33[1];
     var walkawayTouchedRef = useRef(false);
+    var _useState34 = useState(null), probingProfile = _useState34[0], setProbingProfile = _useState34[1];
 
     function resolvedCodingBinary() {
       return codingAgent === "__custom__" ? (customAgent.trim() || "agent") : codingAgent;
@@ -463,6 +467,32 @@
       invalidateSessionStatus();
       opts = opts || {};
       return loadStatus({ skipCache: true, forceFull: true, skipApply: opts.skipApply });
+    }
+
+    function pollUntilProbed(profileName) {
+      var attempts = 0;
+      var maxAttempts = 15;
+      var interval = setInterval(function () {
+        attempts++;
+        if (attempts > maxAttempts) {
+          clearInterval(interval);
+          setProbingProfile(null);
+          return;
+        }
+        apiStatus().then(function (s) {
+          var info = s.profiles && s.profiles[profileName];
+          if (info && info.model_reachable != null) {
+            clearInterval(interval);
+            setProbingProfile(null);
+            setStatus(s);
+          }
+        }).catch(function () {
+          if (attempts >= 3) {
+            clearInterval(interval);
+            setProbingProfile(null);
+          }
+        });
+      }, 2000);
     }
 
     useEffect(function () { loadStatus(); }, []);
@@ -688,6 +718,7 @@
     }
 
     function profileApplyEnabled() {
+      if (probingProfile === editingProfile) return false;
       var reasoningDirty = pendingReasoningEffort !== initialReasoningEffort;
       return Boolean(selectedModel) || reasoningDirty;
     }
@@ -703,19 +734,21 @@
       }
       if (!Object.keys(body).length) return;
 
-      // Close modal immediately — save happens in background
+      // Close modal immediately — save + probe happens in background
       var newModelName = selectedModel ? selectedModel.model : null;
       var newEffort = pendingReasoningEffort !== initialReasoningEffort ? pendingReasoningEffort : null;
       setEditingProfile(null);
       setSelectedModel(null);
       setSavingProfile(profileName);
       apiPutProfile(profileName, body).then(function () {
-        setSavingProfile("checking:" + profileName + "|" + (newModelName || "") + "|" + (newEffort || ""));
-        reloadStatus().then(function () {
-          setSavingProfile(null);
-        });
+        setSavingProfile(null);
+        setProbingProfile(profileName);
+        return apiProbeProfile(profileName);
+      }).then(function () {
+        pollUntilProbed(profileName);
       }).catch(function (e) {
         setSavingProfile(null);
+        setProbingProfile(null);
         addLines(["ERROR updating profile: " + e.message], "line-err");
       });
     }
@@ -759,6 +792,9 @@
     function profileBadge(info, profileName) {
       if (savingProfile === profileName) {
         return React.createElement("span", { style: { fontSize: "12px", color: "#a78bfa" } }, "saving…");
+      }
+      if (probingProfile === profileName) {
+        return React.createElement("span", { style: { fontSize: "12px", color: "#a78bfa" } }, "checking…");
       }
       if (savingProfile && savingProfile.indexOf("checking:" + profileName) === 0) {
         var parts = savingProfile.split("|");
