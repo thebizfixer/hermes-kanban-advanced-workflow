@@ -138,4 +138,4 @@ if __name__ == "__main__":
     watchdog.start()
     
     print(f"[dashboard_server] Starting on 127.0.0.1:{port}")
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", timeout_keep_alive=30, workers=2)
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", timeout_keep_alive=30)
