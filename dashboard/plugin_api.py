@@ -538,13 +538,22 @@ def _check_profiles(
                     else:
                         info["model_reachable"] = cached
                 elif probe_models:
-                    reachable, detail = _check_model_reachable(profile)
-                    info["model_reachable"] = reachable
-                    info["model_reachability_detail"] = detail
-                    _cache_set(
-                        cache_key,
-                        {"reachable": reachable, "detail": detail},
-                    )
+                    # Submit to background executor instead of blocking the
+                    # status response. The per-profile probe endpoint runs
+                    # probes serially (single-thread executor), avoiding
+                    # concurrent API calls. Cache is updated as probes complete;
+                    # frontend polls /status to pick up results.
+                    if profile not in _inflight_probes:
+                        _inflight_probes.add(profile)
+                        _probe_executor.submit(_run_probe, profile)
+                    # Show last known result while probe runs (use extended TTL)
+                    stale = _cache_get(cache_key, _PROBE_CIRCUIT_COOLDOWN)
+                    if stale is not None:
+                        if isinstance(stale, dict):
+                            info["model_reachable"] = stale.get("reachable")
+                            info["model_reachability_detail"] = stale.get("detail") or ""
+                        else:
+                            info["model_reachable"] = stale
 
         result[profile] = info
     return result
@@ -875,11 +884,16 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
 
     coding_agent = resolve_coding_agent(project_root, env=env)
     coding_agent_model = resolve_coding_agent_model(project_root, env=env)
+    if probe:
+        # Submit to background executor instead of blocking the status response
+        if coding_agent not in _inflight_probes:
+            _inflight_probes.add(coding_agent)
+            _probe_executor.submit(_run_coding_agent_probe, coding_agent, coding_agent_model)
     coding_agent_cli = check_coding_agent_cli(
         coding_agent,
         coding_agent_model,
         _run_coding_agent_cli,
-        probe=probe,
+        probe=False,  # don't probe synchronously — executor handles it
         cache_get=_cache_get,
         cache_set=_cache_set,
         probe_ttl=_TTL_MODEL_PROBE,
