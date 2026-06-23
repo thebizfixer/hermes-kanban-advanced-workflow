@@ -70,3 +70,36 @@ def register(ctx):
 
     logger.info("plugin: kanban-advanced v1.0.0 registered (%d skills, 7 tools, 2 hooks, 1 CLI)",
                 registered)
+
+    # ── 5. Start dashboard sidecar server (if not already running) ───
+    _start_dashboard_sidecar()
+
+
+def _start_dashboard_sidecar() -> None:
+    """Start the dashboard sidecar server as a background subprocess.
+
+    The sidecar runs on 127.0.0.1:18900 and serves the plugin's dashboard
+    API. PID file locking prevents duplicate instances. Started here so
+    the dashboard tab works immediately — no manual init required.
+    """
+    import subprocess
+    import os
+    import sys
+
+    plugin_root = Path(__file__).resolve().parent.parent
+    server_script = plugin_root / "scripts" / "dashboard_server.py"
+
+    if not server_script.is_file():
+        logger.warning("plugin: dashboard server script not found at %s", server_script)
+        return
+
+    try:
+        subprocess.Popen(
+            [sys.executable, str(server_script)],
+            cwd=str(plugin_root),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        logger.info("plugin: dashboard sidecar server started")
+    except Exception as exc:
+        logger.warning("plugin: could not start dashboard server: %s", exc)
