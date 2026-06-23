@@ -419,6 +419,23 @@
         });
         setLoading(false);
 
+        // Submit probes serially via per-profile endpoint (executor queue)
+        // with staggered delays to avoid flooding the gateway
+        if (needProbe) {
+          var profiles = Object.keys(merged.profiles || {});
+          var delay = 0;
+          profiles.forEach(function (p) {
+            setTimeout(function () {
+              apiProbeProfile(p);
+            }, delay);
+            delay += 5000;  // 5s gap between probes
+          });
+          // Also probe coding agent after profiles
+          setTimeout(function () {
+            apiFetch("/api/plugins/kanban-advanced/coding-agent/probe", { method: "POST" });
+          }, delay);
+        }
+
         if (needGitFetch) {
           return apiStatus("git_fetch=1").then(function (gitStatus) {
             var complete = mergeStatusFields(merged, gitStatus);
