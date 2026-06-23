@@ -687,10 +687,11 @@
       }
       if (!Object.keys(body).length) return;
 
+      // Close modal immediately — save happens in background
+      setEditingProfile(null);
+      setSelectedModel(null);
       setChangingModel(true);
       apiPutProfile(profileName, body).then(function () {
-        setEditingProfile(null);
-        setSelectedModel(null);
         setChangingModel(false);
         reloadStatus();
       }).catch(function (e) {
