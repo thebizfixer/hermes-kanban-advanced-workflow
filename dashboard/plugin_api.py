@@ -1064,14 +1064,14 @@ def _append_coding_agent_cli_log(
     *,
     probe: bool = True,
 ) -> None:
+    normalized_model = model or "auto"
     cli = check_coding_agent_cli(
         binary,
         model,
         _run_coding_agent_cli,
-        probe=probe,
-        cache_get=_cache_get if probe else None,
-        cache_set=_cache_set if probe else None,
-        probe_ttl=_TTL_MODEL_PROBE,
+        probe=False,  # fast path — on_path only, no smoke test
+        cache_get=None,
+        cache_set=None,
     )
     label = model_display_label(model, binary=binary)
     if not cli.get("on_path"):
@@ -1085,7 +1085,18 @@ def _append_coding_agent_cli_log(
     output.append(f"   coding_agent_model: {model} ({label})")
     if not probe:
         return
-    reachable = cli.get("model_reachable")
+    # Submit to background executor — don't block init/save on smoke test
+    cache_key = f"coding_agent_smoke:{binary}:{normalized_model}"
+    cached = _cache_get(cache_key, _TTL_MODEL_PROBE)
+    if cached is None:
+        # No recent result — submit probe to executor (serial queue)
+        if binary not in _inflight_probes:
+            _inflight_probes.add(binary)
+            _probe_executor.submit(_run_coding_agent_probe, binary, model)
+        output.append(f"   ... model probe queued (check dashboard badges)")
+        return
+    # Use cached result
+    reachable = cached
     if reachable is True:
         output.append(f"   OK coding CLI reachable ({label})")
     elif reachable is False:
