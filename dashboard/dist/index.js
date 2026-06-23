@@ -231,7 +231,7 @@
     var _useState9 = useState(false), initialized = _useState9[0], setInitialized = _useState9[1];
     var _useState10 = useState(null), editingProfile = _useState10[0], setEditingProfile = _useState10[1];
     var _useState11 = useState(null), modelOptions = _useState11[0], setModelOptions = _useState11[1];
-    var _useState12 = useState(false), changingModel = _useState12[0], setChangingModel = _useState12[1];
+    var _useState12 = useState(null), savingProfile = _useState12[0], setSavingProfile = _useState12[1];
     var _useState13 = useState(null), selectedProvider = _useState13[0], setSelectedProvider = _useState13[1];
     var _useState14 = useState(null), selectedModel = _useState14[0], setSelectedModel = _useState14[1];
     // selectedModel is {provider: string, model: string} | null
@@ -690,12 +690,12 @@
       // Close modal immediately — save happens in background
       setEditingProfile(null);
       setSelectedModel(null);
-      setChangingModel(true);
+      setSavingProfile(profileName);
       apiPutProfile(profileName, body).then(function () {
-        setChangingModel(false);
+        setSavingProfile(null);
         reloadStatus();
       }).catch(function (e) {
-        setChangingModel(false);
+        setSavingProfile(null);
         addLines(["ERROR updating profile: " + e.message], "line-err");
       });
     }
@@ -736,7 +736,10 @@
       );
     }
 
-    function profileBadge(info) {
+    function profileBadge(info, profileName) {
+      if (savingProfile === profileName) {
+        return React.createElement("span", { style: { fontSize: "12px", color: "#a78bfa" } }, "saving…");
+      }
       var inConfig = info && info.exists && info.has_model;
       var effort = profileEffortSuffix(info);
       var dotColor, labelText, labelColor;
@@ -852,7 +855,7 @@
                     onClick: function () { openModelPicker(row.label); }
                   },
                     React.createElement("span", { className: "text-sm" }, row.label),
-                    profileBadge(status && status.profiles && status.profiles[row.label])
+                    profileBadge(status && status.profiles && status.profiles[row.label], row.label)
                   );
                 });
               })(),
@@ -1150,9 +1153,9 @@
                   React.createElement(Button, { variant: "outline", size: "sm", onClick: function () { setEditingProfile(null); setSelectedModel(null); } }, "Cancel"),
                   React.createElement(Button, {
                     size: "sm",
-                    disabled: !profileApplyEnabled() || changingModel,
+                    disabled: !profileApplyEnabled() || !!savingProfile,
                     onClick: function () { applyProfileSettings(editingProfile); }
-                  }, changingModel ? "…" : "Apply")
+                  }, savingProfile ? "…" : "Apply")
                 )
               )
             )
