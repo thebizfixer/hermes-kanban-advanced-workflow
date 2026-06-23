@@ -591,7 +591,12 @@
           }
         }
         setBootstrapping(false);
-        reloadStatus();
+        reloadStatus().then(function () {
+          if (status && status.dispatch_profiles) {
+            pollUntilProbed(status.dispatch_profiles.worker);
+            pollUntilProbed(status.dispatch_profiles.orchestrator);
+          }
+        });
       }).catch(function (e) {
         addLines(["ERROR: " + e.message], "line-err");
         setBootstrapping(false);
@@ -612,7 +617,12 @@
       apiSave(data).then(saveSucceeded).then(function (r) {
         if (r.output) addLines(r.output);
         setBootstrapping(false);
-        reloadStatus();
+        reloadStatus().then(function () {
+          if (status && status.dispatch_profiles) {
+            pollUntilProbed(status.dispatch_profiles.worker);
+            pollUntilProbed(status.dispatch_profiles.orchestrator);
+          }
+        });
       }).catch(function (e) {
         addLines(["ERROR: " + e.message], "line-err");
         setBootstrapping(false);
