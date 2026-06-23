@@ -359,7 +359,7 @@ def _run_probe(profile: str) -> None:
     reachable, detail = _check_model_reachable(profile)
 
     # Grace period: don't overwrite a recent successful probe with a timeout
-    if reachable is None and detail == "timed out":
+    if reachable is None and detail and "timed out" in detail:
         cached = _cache_get(f"model_reachable:{profile}", 600.0)  # 10 min grace
         if cached is not None:
             if isinstance(cached, dict) and cached.get("reachable") is True:
