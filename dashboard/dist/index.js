@@ -432,7 +432,7 @@
         // Start polling immediately — badges show "checking…" until
         // every profile + coding agent has a probed result.
         var pollAttempts = 0;
-        var maxPollAttempts = 45; // 90 seconds max
+        var maxPollAttempts = 90; // 180 seconds max (3 probes × 60s typical)
         var pollInterval = setInterval(function () {
           pollAttempts++;
             apiStatus().then(function (fresh) {
@@ -521,7 +521,7 @@
 
     function pollUntilProbed(profileName) {
       var attempts = 0;
-      var maxAttempts = 15;
+      var maxAttempts = 60;  // 120 seconds
       var interval = setInterval(function () {
         attempts++;
         if (attempts > maxAttempts) {

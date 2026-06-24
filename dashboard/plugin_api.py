@@ -291,7 +291,7 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
     This checks **Hermes profile provider auth**, not the coding-agent CLI.
     No --yolo flag is needed; "say ok" never triggers tool calls.
 
-    Two-stage probe: liveness (config show, 3s) then readiness (chat, 60s).
+    Two-stage probe: liveness (config show, 3s) then readiness (chat, 120s).
     """
     if not profile:
         return None, "missing profile"
@@ -308,7 +308,7 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
 
     # Stage 2 — Readiness: can the LLM respond?
     try:
-        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=60)
+        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=120)
         out = (r.stdout + r.stderr).lower()
         if r.returncode == 0:
             return True, ""
@@ -344,6 +344,11 @@ def _run_probe(profile: str) -> None:
         f"model_reachable:{profile}",
         {"reachable": reachable, "detail": detail},
     )
+
+    # Inter-probe cooldown — gives the gateway breathing room between
+    # sequential probes so the next one doesn't time out immediately.
+    time.sleep(15)
+
     _inflight_probes.discard(profile)
 
 
@@ -392,6 +397,11 @@ def _run_coding_agent_probe(binary: str, model: str | None) -> None:
         f"coding_agent_smoke:{binary}:{model or 'auto'}",
         {"reachable": cli.get("model_reachable"), "probed": True},
     )
+
+    # Inter-probe cooldown — gives the gateway breathing room between
+    # sequential probes so the next one doesn't time out immediately.
+    time.sleep(15)
+
     _inflight_probes.discard(binary)
 
 
