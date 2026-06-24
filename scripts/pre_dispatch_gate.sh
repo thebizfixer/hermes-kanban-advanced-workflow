@@ -18,16 +18,16 @@ fi
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$REPO_ROOT"
 
-# Normalize Windows backslash paths to forward slashes (safe no-op on Linux/macOS).
-# Prevents eval mangling when paths are interpolated into check()/warn() commands.
-HERMES_HOME="${HERMES_HOME//\\//}"
-REPO_ROOT="${REPO_ROOT//\\//}"
-BUNDLE_PATH="${BUNDLE_PATH//\\//}"
-
 WORKING_BRANCH="${KANBAN_WORKING_BRANCH:-main}"
 PLAN_MEMORY_PATH="${KANBAN_PLAN_MEMORY_PATH:-.hermes/kanban/memory}"
 BUNDLE_PATH="${KANBAN_BUNDLE_PATH:-hermes-kanban-advanced-workflow}"
 OVERLAY_CONFIG="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
+
+# Normalize Windows backslash paths to forward slashes (safe no-op on Linux/macOS).
+# Must happen AFTER all variables are set but BEFORE they're used in eval/interpolation.
+HERMES_HOME="${HERMES_HOME//\\//}"
+REPO_ROOT="${REPO_ROOT//\\//}"
+BUNDLE_PATH="${BUNDLE_PATH//\\//}"
 
 if [[ -f "$OVERLAY_CONFIG" ]]; then
   _wb="$(grep -E '^working_branch:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^working_branch: *//; s/^"//; s/"$//')"
