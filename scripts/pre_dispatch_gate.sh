@@ -101,7 +101,7 @@ elif [[ -n "$PLAN_ID" && -f "${BUNDLE_PATH}/scripts/validate_card_bodies.py" ]];
 fi
 
 check "cron_scripts" \
-  "python3 -c \"import os; hh=os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')); scripts=os.path.join(hh,'scripts'); exit(0 if all(os.path.isfile(os.path.join(scripts,f)) for f in ['auto_unblock.sh','board_keeper.sh','worktree_setup.sh']) else 1)\""
+  "python3 -c \"import os; hh=os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')); scripts=os.path.join(hh,'scripts'); exit(0 if all(os.path.isfile(os.path.join(scripts,f)) for f in ['auto_unblock.py','board_keeper.py','worktree_setup.sh']) else 1)\""
 
 check "cron_hermes_path" \
   "PATH=\"${HOME}/.local/bin:${PATH}\" command -v hermes >/dev/null 2>&1"

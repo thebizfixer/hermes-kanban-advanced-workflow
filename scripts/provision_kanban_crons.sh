@@ -26,9 +26,11 @@ CRON_HERMES_HOME="$KANBAN_GATEWAY_HERMES_HOME"
 AUTO_UNBLOCK_NAME="kanban-auto-unblock-1m"
 BOARD_KEEPER_NAME="kanban-board-keeper-3m"
 LIFECYCLE_NOTIFY_NAME="kanban-lifecycle-notify-5m"
-AUTO_UNBLOCK_SCRIPT="auto_unblock.sh"
-BOARD_KEEPER_SCRIPT="board_keeper.sh"
-LIFECYCLE_SCRIPT="kanban_lifecycle_notify.sh"
+# .py launchers work around https://github.com/NousResearch/hermes-agent/issues/23404
+# (bash script paths with Windows backslashes get mangled by the cron runner).
+AUTO_UNBLOCK_SCRIPT="auto_unblock.py"
+BOARD_KEEPER_SCRIPT="board_keeper.py"
+LIFECYCLE_SCRIPT="kanban_lifecycle_notify.py"
 
 ACTION=""
 PLAN_ID=""
