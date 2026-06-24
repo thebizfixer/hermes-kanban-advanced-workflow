@@ -46,7 +46,7 @@ ALLOWED_BRANCH="wt/${TASK_ID}"
 cd "$REPO_ROOT"
 
 # 1. Prune stale worktree registrations
-git worktree prune 2>/dev/null || true
+git worktree prune --expire=now 2>/dev/null || true
 
 # 2. Detect existing worktree at target path
 REUSE=false
@@ -64,10 +64,10 @@ fi
 if [ "$REUSE" = false ]; then
     mkdir -p "$BASE"
     if git show-ref --verify --quiet "refs/heads/${ALLOWED_BRANCH}"; then
-        git worktree add "$WORKTREE_PATH" "$ALLOWED_BRANCH" 2>/dev/null || \
-        git worktree add -b "$ALLOWED_BRANCH" "$WORKTREE_PATH" HEAD
+        git worktree add -f "$WORKTREE_PATH" "$ALLOWED_BRANCH" 2>/dev/null || \
+        git worktree add -f -b "$ALLOWED_BRANCH" "$WORKTREE_PATH" HEAD
     else
-        git worktree add -b "$ALLOWED_BRANCH" "$WORKTREE_PATH" HEAD
+        git worktree add -f -b "$ALLOWED_BRANCH" "$WORKTREE_PATH" HEAD
     fi
 fi
 
