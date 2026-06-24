@@ -223,7 +223,7 @@
     var _useState3 = useState(""), workingBranch = _useState3[0], setWorkingBranch = _useState3[1];
     var _useState3b = useState(""), triggerBranch = _useState3b[0], setTriggerBranch = _useState3b[1];
     var _useState4 = useState("hermes"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
-    var _useState4b = useState(""), codingAgentModel = _useState4b[0], setCodingAgentModel = _useState4b[1];
+    var _useState4b = useState("auto"), codingAgentModel = _useState4b[0], setCodingAgentModel = _useState4b[1];
     var _useState5 = useState(""), customAgent = _useState5[0], setCustomAgent = _useState5[1];
     var _useState6 = useState(180), maxTurns = _useState6[0], setMaxTurns = _useState6[1];
     var _useState6c = useState(false), maxTurnsTouched = _useState6c[0], setMaxTurnsTouched = _useState6c[1];
@@ -307,20 +307,17 @@
       if (codingAgentModelSelectionBlocked()) {
         return "Resolve the binary symlink conflict before selecting a model (choose an unambiguous command such as cursor-agent).";
       }
+      // Default to "auto" if no model selected — the backend resolves the actual model
       if (!codingAgentModel) {
-        return "Select a model for " + resolvedCodingBinary() + " before Save or Bootstrap.";
+        setCodingAgentModel("auto");
       }
       return "";
     }
 
     function resetCodingAgentModelForBinary(binary) {
       if (!binary) return;
-      // Hermes uses the profile config model by default — pre-select auto
-      if (binary === "hermes") {
-        setCodingAgentModel("auto");
-      } else {
-        setCodingAgentModel("");
-      }
+      // Default to "auto" for all binaries — the backend resolves it
+      setCodingAgentModel("auto");
       setPendingCodingAgentModel(null);
       setCodingAgentModelQuery("");
       setCodingAgentModelOptions(null);
@@ -372,7 +369,7 @@
           setCodingAgentOptions(buildCodingAgentOptions(s));
         }
         if (s.coding_agent_model) setCodingAgentModel(s.coding_agent_model);
-        else setCodingAgentModel("");
+        else setCodingAgentModel("auto");
       }
       if (s.max_turns && !maxTurnsTouchedRef.current) setMaxTurns(s.max_turns);
       if (!policyTouchedRef.current) {
