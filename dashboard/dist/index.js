@@ -406,9 +406,10 @@
         opts.forceFull ||
         !sessionGreen && (!(cached && cached.probedAt) || !cached.probeGreen)
       );
-      var needGitFetch = opts.full !== false && !needProbe;
 
-      if (needGitFetch) setStatusProbing(true);
+      // Always fetch git status on load — the backend caches results
+      // for 5 min, so repeated calls are cheap.
+      setStatusProbing(true);
       setLoading(true);
       return apiStatus().then(function (s) {
         var merged = cached && cached.data ? mergeStatusFields(cached.data, s) : s;
@@ -465,8 +466,7 @@
             });
           }, 2000);
 
-        if (needGitFetch) {
-          return apiStatus("git_fetch=1").then(function (gitStatus) {
+        return apiStatus("git_fetch=1").then(function (gitStatus) {
             var complete = mergeStatusFields(merged, gitStatus);
             setStatus(complete);
             if (!opts.skipApply) applyStatusToForm(complete);
@@ -480,9 +480,7 @@
             setStatusProbing(false);
             return merged;
           });
-        }
 
-        return merged;
       }).catch(function (e) {
         setLoading(false);
         setStatusProbing(false);
