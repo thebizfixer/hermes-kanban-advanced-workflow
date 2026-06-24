@@ -420,30 +420,21 @@
         });
         setLoading(false);
 
-        // Always submit staggered probes on page load — the executor queue
-        // serializes them so they can't flood the gateway
+        // Submit all probes immediately — the backend's single-threaded
+        // executor serializes them, no need for frontend staggering.
+        setProbesPending(true);
         var profiles = Object.keys(merged.profiles || {});
-        var staggerDelay = 0;
         profiles.forEach(function (p) {
-          setTimeout(function () {
-            apiProbeProfile(p);
-          }, staggerDelay);
-          staggerDelay += 5000;
+          apiProbeProfile(p);
         });
-        setTimeout(function () {
-          apiFetch("/api/plugins/kanban-advanced/coding-agent/probe", { method: "POST" });
-        }, staggerDelay);
+        apiFetch("/api/plugins/kanban-advanced/coding-agent/probe", { method: "POST" });
 
-        // Start polling for probe results after all probes have been submitted.
-        // Probes run in a background ThreadPoolExecutor — poll /status until
-        // results come back so dashboard badges update.
-        var probeStaggerTotal = staggerDelay + 2000;
-        setTimeout(function () {
-          setProbesPending(true);
-          var pollAttempts = 0;
-          var maxPollAttempts = 45; // 90 seconds max
-          var pollInterval = setInterval(function () {
-            pollAttempts++;
+        // Start polling immediately — badges show "checking…" until
+        // every profile + coding agent has a probed result.
+        var pollAttempts = 0;
+        var maxPollAttempts = 45; // 90 seconds max
+        var pollInterval = setInterval(function () {
+          pollAttempts++;
             apiStatus().then(function (fresh) {
               var allProbed = true;
               var freshProfiles = fresh.profiles || {};
@@ -473,7 +464,6 @@
               }
             });
           }, 2000);
-        }, probeStaggerTotal);
 
         if (needGitFetch) {
           return apiStatus("git_fetch=1").then(function (gitStatus) {
