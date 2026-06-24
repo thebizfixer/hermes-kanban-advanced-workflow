@@ -23,15 +23,25 @@ Returns current initialization state and config values.
 
 | Param | Default | Meaning |
 |-------|---------|---------|
-| `probe` | `0` | When `1`, run reachability probes on the slow path: (1) each **Hermes dispatch profile** via `hermes -p <profile> chat -q "say ok"`; (2) the **coding CLI** via `build_smoke_argv` / `smoke_test_coding_agent` (same contract as `scripts/coding_agent_invoke.sh smoke`). Skipped by default for fast tab loads. |
-| `git_fetch` | `0` | When `1`, run `git fetch origin` before computing `plugin_behind`. Skipped by default; uses a short-lived server cache or local `rev-list` only. |
+| `probe` | `0` | When `1`, submits reachability probes to the background executor (legacy synchronous path). Normally probes are submitted via `POST /profiles/{profile}/probe` and `POST /coding-agent/probe` — the frontend uses these instead of `?probe=1` for async non-blocking loads. |
+| `git_fetch` | `0` | When `1`, runs `git fetch origin` before computing `plugin_behind`. The frontend always calls this on every page load (cached for 5 min server-side). |
 
-The dashboard loads **`/status`** first (fast), then one background call:
+**Dashboard loading sequence (current behavior):**
 
-- **`/status?probe=1&git_fetch=1`** when reachability has not yet passed this browser session (or probes were not all green).
-- **`/status?git_fetch=1`** only when the last probe was **all green** (Hermes profile dots + coding CLI) — refreshes **Update Plugin** / `plugin_behind` without re-running slow model probes.
+1. `GET /status` — fast, returns cached probe results + `probed` flags
+2. `POST /profiles/{profile}/probe` × N — submits profile probes to background executor (202 Accepted)
+3. `POST /coding-agent/probe` — submits coding-agent CLI smoke to background executor (202 Accepted)
+4. Frontend polls `GET /status` every 2s until all `probed` flags are `true` (max 90 attempts = 180s window)
+5. `GET /status?git_fetch=1` — always runs; refreshes `plugin_behind` / update banner
 
-Returning to the tab reuses **sessionStorage** for probe results; plugin update checks still run `git_fetch=1` on each load. Non-green or never-probed sessions always run the full probe. **Save**, **Bootstrap**, and **Update Plugin** invalidate session cache and re-probe.
+**Probe architecture:**
+
+- Probes run in a **single-threaded** `ThreadPoolExecutor` (max_workers=1) — serialized, never concurrent
+- **Inter-probe cooldown:** 15s sleep between sequential probes so the gateway recovers between sessions
+- **Profile probe timeout:** 120s (`hermes -p <profile> chat -q "say ok"`)
+- **Coding-agent probe timeout:** 180s (`SMOKE_TIMEOUT_SECONDS` in `plugin/coding_agent.py`)
+- **`probed` flag** (bool) on each profile and `coding_agent_cli` — `true` when a probe has been attempted (regardless of result value). Distinguishes "not probed yet" from "probed but inconclusive/timed out" — both produce `model_reachable: null`, but `probed: true` means the frontend can stop polling.
+- Results are cached server-side: profiles 180s (`_TTL_MODEL_PROBE`), coding agent 180s. Cache format is `{reachable, detail}` for profiles, `{reachable, probed}` for coding agent.
 
 **Response:**
 ```json
@@ -53,6 +63,7 @@ Returning to the tab reuses **sessionStorage** for probe results; plugin update 
     "model_label": "Auto (profile config)",
     "model_configured": true,
     "model_reachable": true,
+    "probed": true,
     "supports_model_pick": true,
     "conflict": "",
     "conflict_hint": ""
@@ -75,6 +86,7 @@ Returning to the tab reuses **sessionStorage** for probe results; plugin update 
       "provider": "openrouter",
       "model_reachable": true,
       "model_reachability_detail": "",
+      "probed": true,
       "reasoning_effort": "high",
       "reasoning_effort_configured": true,
       "reasoning_effort_source": "agent",
@@ -85,6 +97,9 @@ Returning to the tab reuses **sessionStorage** for probe results; plugin update 
       "has_model": true,
       "model": "anthropic/claude-sonnet-4.6",
       "provider": "openrouter",
+      "model_reachable": true,
+      "model_reachability_detail": "",
+      "probed": true,
       "reasoning_effort": "medium",
       "reasoning_effort_configured": false,
       "reasoning_effort_source": "default",
@@ -120,7 +135,7 @@ Returning to the tab reuses **sessionStorage** for probe results; plugin update 
 | `plugin_update_available` | `true` when `plugin_behind > 0` |
 | `plugin_local_changes` | Porcelain dirty count in `plugin_install_path`; `null` when not checkable |
 
-`profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. When false, `profiles.*.model_reachability_detail` may be `model not found`, `provider auth failed`, or `inconclusive` — the dashboard labels this **model unreachable**, not coding-agent CLI auth. `profiles.*.reasoning_effort` reflects `agent.reasoning_effort` from the profile `config.yaml` (or Hermes default `medium` when unset). `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
+`profiles.*.model_reachable` reflects **Hermes** LLM backend reachability for orchestrator/worker sessions. When the probe has not yet run, `model_reachable` is `null` and `probed` is `false`. After probing: `true` = reachable (green dot), `false` = auth/model failure (yellow "model unreachable"), `null` with `probed: true` = timed out or inconclusive (yellow "configured"). `profiles.*.model_reachability_detail` may be `model not found`, `provider auth failed`, `inconclusive`, or `timed out (120s)`. `profiles.*.reasoning_effort` reflects `agent.reasoning_effort` from the profile `config.yaml` (or Hermes default `medium` when unset). `coding_agent_cli.model_reachable` reflects the **external coding CLI** smoke from project root — a green dot does not guarantee worktree dispatch (Cursor may still need `--trust` in the card worktree). Both fields populate when `probe=1`. **Save** and **Bootstrap** always run coding-CLI smoke when the binary is on PATH, regardless of `probe`.
 
 `available_coding_binaries` lists supported commands currently on PATH for the **Binary on PATH** dropdown. When the configured binary is a contested shared name (e.g. `agent`), `coding_agent_cli.conflict` and `conflict_hint` are set — the dashboard shows a warning independent of reachability color. The plugin does not repair PATH; it surfaces operator direction only.
 
@@ -177,6 +192,30 @@ When `config_exists` is false, the dashboard shows the bootstrap form.
 The status banner shows **Initialized (Up-to-date)** or **Initialized (Update Plugin)** when `plugin_can_update` is true. **Update Plugin** calls `POST /api/plugins/kanban-advanced/update` (git pull in `plugin_install_path`, then re-materialize skills and cron scripts). On success the UI applies the response plugin-git fields immediately — it does **not** re-run `GET /status?git_fetch=1`. Disabled when up to date.
 
 Use `project_root` to confirm the API resolved the correct repo (especially after `hermes update` or when multiple clones are on disk). If it points at the plugin install tree, set `KANBAN_PROJECT_ROOT` to your application repo before opening the tab.
+
+## `POST /api/plugins/kanban-advanced/profiles/{profile_name}/probe`
+
+Submits a model reachability probe for one dispatch profile to the background executor. Returns `202 Accepted` immediately — the probe runs asynchronously in the single-threaded executor. The frontend polls `GET /status` until `profiles.{profile_name}.probed` becomes `true`.
+
+**Path:** `profile_name` must be a configured dispatch profile.
+
+**Response 202:**
+```json
+{ "status": "queued", "profile": "kanban-advanced-orchestrator" }
+```
+
+Returns `"already_queued"` when a probe for this profile is already in-flight.
+
+## `POST /api/plugins/kanban-advanced/coding-agent/probe`
+
+Submits a coding-agent CLI smoke probe to the background executor. Same async contract as the profile probe — returns `202` immediately, frontend polls `GET /status` for `coding_agent_cli.probed`.
+
+**Response 202:**
+```json
+{ "status": "queued", "profile": "hermes" }
+```
+
+Returns `"already_queued"` when a coding-agent probe is already in-flight.
 
 ## `GET /api/plugins/kanban-advanced/coding-agent/models`
 

@@ -654,17 +654,32 @@ curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.
 
 **Symptom:** After changing a profile's model or coding agent binary, the badge still shows the old reachability state.
 
-**How it works:**
-- Model probe results are cached for 180s (`_TTL_MODEL_PROBE`). Cache key: `model_reachable:{profile}`.
-- When you click Apply on a profile, `_invalidate_profile_probe_cache(profile)` clears the cache.
-- When you click Save (main form), `_invalidate_status_cache()` clears ALL caches.
-- The dashboard then calls `GET /status?probe=1` to re-probe — badge shows "checking (model)…" during probe.
-- Badge transitions: "saving…" → "checking (model · effort)…" → "reachable (model)" or "auth/model failed".
+**How it works (current architecture):**
+- Probes run asynchronously in a **single-threaded background executor** (`ThreadPoolExecutor(max_workers=1)`).
+- The frontend submits probes via `POST /profiles/{profile}/probe` and `POST /coding-agent/probe` (202 Accepted).
+- Results are cached server-side: profiles 180s (`_TTL_MODEL_PROBE`), coding agent 180s. Cache key: `model_reachable:{profile}`.
+- The frontend polls `GET /status` every 2s until `probed: true` on all profiles + `coding_agent_cli.probed: true` (max 90 attempts = 180s window).
+- On page load: banner shows "Checking for updates" (`statusProbing` for git fetch + `probesPending` for model probes). Badges show "checking (model)…" while probing, then resolve to green (reachable) or yellow (configured / unreachable).
+- When you click Apply on a profile, `_invalidate_profile_probe_cache(profile)` clears the cache, then `apiProbeProfile()` + `pollUntilProbed()` re-probe.
+- When you click Save or Bootstrap, `_invalidate_status_cache()` clears ALL caches, then probes are re-submitted.
+- **`probed` flag:** `true` when a probe has been attempted (regardless of result). Distinguishes "not probed yet" from "probed but timed out / inconclusive" — both produce `model_reachable: null`, but `probed: true` stops the frontend polling loop.
+- **Inter-probe cooldown:** 15s sleep between sequential probes so the gateway recovers between sessions.
+- **Timeouts:** Profile probes 120s, coding-agent smoke 180s.
+
+**Badge states:**
+| Condition | Color | Label |
+|-----------|-------|-------|
+| `model_reachable: true` | green | `reachable (model)` |
+| `model_reachable: false` | yellow | `model unreachable` or `auth/model failed` |
+| `model_reachable: null` + `probed: false` | gray | `checking (model)…` (during polling) |
+| `model_reachable: null` + `probed: true` | yellow | `configured (model)` (timed out or inconclusive) |
 
 **If badges stay stale:** 
-1. Check the probe is completing: `curl "http://127.0.0.1:18900/api/plugins/kanban-advanced/status?probe=1"` — look for `model_reachable: true/false` on each profile
-2. If probe times out (60s+), the coding-agent smoke test may be hanging — check `scripts/check_coding_agent_cli.py`
-3. Cache TTL is 180s — waiting 3 minutes without any action will naturally expire the cache and trigger a fresh probe on next status refresh
+1. Check probes are completing: `curl -s http://127.0.0.1:18900/api/plugins/kanban-advanced/status` — look for `probed: true` and `model_reachable` on each profile
+2. Submit probes manually: `curl -s -X POST http://127.0.0.1:18900/api/plugins/kanban-advanced/profiles/kanban-advanced-worker/probe`
+3. If profile probe times out (120s+), the model may be slow to respond — increase `_check_model_reachable` timeout in `dashboard/plugin_api.py`
+4. If coding-agent probe fails, check `scripts/check_coding_agent_cli.py`
+5. Cache TTL is 180s — wait 3 minutes without action for natural expiry; or reload the dashboard tab to force re-probe
 
 ## Still stuck?
 
