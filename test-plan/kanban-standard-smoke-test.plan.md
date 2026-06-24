@@ -1,7 +1,7 @@
 ---
 name: Kanban Standard Smoke Test
 plan_id: kanban-standard-smoke-test
-line_budget: 200
+line_budget: 110
 overview: >
   Standardized end-to-end validation test for the kanban-advanced plugin.
   Verifies card body parsing, coding-agent dispatch, eval chain governance
@@ -11,7 +11,31 @@ overview: >
   post-execution success.
 isProject: false
 optimization_checklist:
+  agent_blocks_present: pass
+  no_model_in_card_bodies: pass
+  iteration_budget_estimated: pass
+  files_mode_lines_present: pass
+  commit_granularity_aligned: pass
+  dependency_graph_drawn: pass
+  card_order_finalized: pass
+  line_budget_computed: pass
+  card_granularity_verified: pass
+  same_file_merge_verified: pass
+  cross_section_contradictions: pass
   plan_committed: pass
+  card_body_self_containment: pass
+  diff_cap_present: pass
+  acceptance_surface_audit: pass
+  call_site_audit: pass
+  verification_taxonomy: pass
+  same_file_graph: pass
+  multi_parent_cap: pass
+  spec_precision: pass
+  markup_safe_placeholders: pass
+  contracts_block: pass
+  plan_memory_seed: pass
+prior_run_learnings:
+  note: "Fresh smoke test — no prior runs. This plan ships with the plugin as a self-diagnostic for new installations."
 contingencies:
   - risk: "Coding agent not configured (KANBAN_CODING_AGENT unset or binary missing)"
     probability: High
@@ -41,7 +65,7 @@ contingencies:
   - risk: "E020/E018 token logging blocked — coding agent produces no JSON usage block (aider only; hermes now uses authoritative insights metering via hermes_token_meter.py + E018 accepts hermes_insights source)"
     probability: Medium
     impact: BLOCKING
-    mitigation: "For hermes: hermes_token_meter.py snapshots insights before dispatch and computes deltas after — no JSON output needed. For aider: character-count estimation via Tier 3. For JSON-output agents (Cursor, Claude Code, Codex): capture agent stdout to /tmp/agent_output_<task_id>.json with usage block. See § Token Logging below for tier details."
+    mitigation: "For hermes: hermes_token_meter.py snapshots insights before dispatch and computes deltas after — no JSON output needed. For aider: character-count estimation via Tier 3. For JSON-output agents (Cursor, Claude Code, Codex): capture agent stdout to /tmp/agent_output_{task_id}.json with usage block. See § Token Logging below for tier details."
     auto_retry: false
   - risk: "Gateway not running (dispatcher won't pick up cards)"
     probability: Medium
@@ -163,13 +187,7 @@ grep 'coding_agent_binary' .hermes/kanban-overrides/kanban-config.yaml
 ---
 
 
-**Escalation demo (for next run):** Card 4 (E002 negative test) is expected to block at least twice.
-Board-keeper detects the second block (re-block count >=2), forces `[escalation:worker:attempt:2]`,
-calls tracker, and escalates to orchestrator (unblocks with tag + comment). Orchestrator resolves
-before a third block. Additionally, if any card accumulates 5 identical error blocks, the board-keeper's
-conversation cap forces immediate escalation to orchestrator (E023 error attractors in the eval chain
-provide a first line of defense — short-circuiting repeated identical failures before they reach 5 loops). Use local override `escalation_max_attempts.worker: 2` (orchestrator: 1-2)
-for the smoke test to make thresholds hit cleanly at 2.
+> **Note (non-actionable context):** Card 4 (E002 negative test) is expected to block at least twice in future runs with escalation enabled. Board-keeper detects the second block (re-block count >=2), forces `[escalation:worker:attempt:2]`, calls tracker, and escalates to orchestrator. E023 error attractors in the eval chain short-circuit repeated identical failures before they reach 5 loops. This plan doesn't configure escalation — it's documented here for future hardening passes.
 
 ## Workstream 1 — Create Utility Module
 
@@ -194,9 +212,12 @@ Spec:
 - def add(a: int, b: int) -> int: returns a + b
 - def format_name(first: str, last: str) -> str: returns '{last}, {first}' (Last, First format)
 - Include a __main__ guard that runs all three and prints results
+Call-sites: none (standalone utility module)
+Forbidden: no external dependencies, no pip installs, no files outside Files: list
 Acceptance:
 - Done when: test-plan/scripts/smoke_utils.py exists with all three functions
 - Verify: python3 -c \"from scripts.smoke_utils import greet, add, format_name; assert greet() == 'hello from kanban'; assert add(2,3) == 5; assert format_name('Jane','Doe') == 'Doe, Jane'; print('OK')\"
+Self-audit: before commit, confirm each Spec/Acceptance bullet; revert any file not in Files:
 Tests: python3 -c \"from scripts.smoke_utils import greet, add, format_name; assert greet() == 'hello from kanban'; assert add(2,3) == 5; assert format_name('Jane','Doe') == 'Doe, Jane'; print('ALL TESTS PASSED')\"
 Commit: feat: add smoke_utils module with greet, add, format_name
 Diff cap: if >30 net lines, STOP and report.
@@ -229,9 +250,12 @@ Spec:
 - test_format_name_standard: format_name('Jane', 'Doe') == 'Doe, Jane'
 - test_format_name_single: format_name('Madonna', '') == ', Madonna'
 - Import smoke_utils from scripts.smoke_utils
+Call-sites: none (test file, no production callers)
+Forbidden: no new production files, no pip installs, no files outside Files: list
 Acceptance:
 - Done when: pytest test-plan/scripts/test_smoke_utils.py passes all 6 tests (or runs all collected tests with 0 failures)
 - Verify: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v
+Self-audit: before commit, confirm each Spec/Acceptance bullet; revert any file not in Files:
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: test: add pytest suite for smoke_utils
 Diff cap: if >50 net lines, STOP and report.
@@ -256,14 +280,18 @@ agent -p "Add a multiply() function to test-plan/scripts/smoke_utils.py and a te
 plan_id: kanban-standard-smoke-test
 Files: test-plan/scripts/smoke_utils.py (modify-only), test-plan/scripts/test_smoke_utils.py
 Mode: modify-only
+**Before modifying test-plan/scripts/test_smoke_utils.py, rebase on Card 2's branch: git fetch origin {card2-branch} && git merge {card2-branch}.**
 Spec:
 - Add def multiply(a: int, b: int) -> int: returns a * b to test-plan/scripts/smoke_utils.py
 - Add test_multiply_positive and test_multiply_zero to test-plan/scripts/test_smoke_utils.py
 - Do NOT modify existing functions — only add the new one
 - Do NOT create any new files
+Call-sites: none (standalone utility function)
+Forbidden: no new files, no pip installs, do not modify existing greet/add/format_name functions
 Acceptance:
 - Done when: multiply(3, 4) == 12 and pytest passes all tests including new ones
 - Verify: python3 -c \"from scripts.smoke_utils import multiply; assert multiply(3,4) == 12; assert multiply(0,5) == 0; print('OK')\" && python3 -m pytest test-plan/scripts/test_smoke_utils.py -v
+Self-audit: before commit, confirm each Spec/Acceptance bullet; revert any file not in Files; verify existing functions unchanged
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: feat: add multiply function to smoke_utils with tests
 Diff cap: if >40 net lines, STOP and report.
@@ -292,11 +320,12 @@ Files: test-plan/scripts/smoke_utils.py
 Mode: modify-only
 Spec:
 - Add a module-level docstring to test-plan/scripts/smoke_utils.py: '\"\"\"Kanban smoke test utility functions.\"\"\"' at the top of the file (after the hashbang if present, before imports)
-- ALSO create scripts/_smoke_scratchpad.md with content '# Smoke Test Scratchpad' and today's date
+- ALSO create test-plan/scripts/_smoke_scratchpad.md with content '# Smoke Test Scratchpad' and today's date
 - This second file is INTENTIONALLY not on the Files: line — the governance gate should catch it
 Acceptance:
 - Verify: python3 -c \"import scripts.smoke_utils; assert scripts.smoke_utils.__doc__ is not None; print('OK')\"
 - The _smoke_scratchpad.md file will be auto-reverted by the eval chain — this is EXPECTED
+Self-audit: before commit, confirm docstring added to smoke_utils.py only; do NOT commit the scratchpad file
 Tests: python3 -c \"import scripts.smoke_utils; assert scripts.smoke_utils.__doc__ is not None; print('OK')\"
 Commit: docs: add module docstring to smoke_utils
 Diff cap: if >20 net lines, STOP and report.
@@ -320,27 +349,17 @@ Do NOT push to main — commit to worktree branch only."
 ```
 Type: verification-local
 plan_id: kanban-standard-smoke-test
+Acceptance:
+- 1. Run token report: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test
+- 2. Generate postmortem: python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test
+- 3. Verify KPI artifacts exist: ls .hermes/kanban/reports/kanban-standard-smoke-test_*.md .hermes/kanban/reports/kanban-standard-smoke-test_kpi.json
+- 4. Run reconciliation per kanban-advanced:kanban-reconciliation skill
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: N/A (verification only)
 Mode: read-only
 ```
 
-**Additional verification checks (run manually after card completion):**
-
-```bash
-# 1. Token log populated
-python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test
-
-# 2. Postmortem generated (run after all cards complete)
-python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test
-
-# 3. Verify postmortem artifacts exist
-ls -la .hermes/kanban/reports/kanban-standard-smoke-test_*.md
-ls -la .hermes/kanban/reports/kanban-standard-smoke-test_kpi.json
-
-# 4. Run reconciliation
-# Follow kanban-advanced:kanban-reconciliation skill
-```
+> **Operator note:** Steps 1–4 in Acceptance are manual — run after the test suite passes and all cards complete. These produce the postmortem and KPI artifacts that confirm the smoke test succeeded.
 
 ---
 
@@ -365,6 +384,10 @@ Card 1 (create test-plan/scripts/smoke_utils.py)
 | Card 4 | Card 5 | Card 5 verifies everything after all cards complete |
 
 All cards are serial (wave_parent chain) because each depends on the prior card's output file.
+
+### Contracts
+
+Contracts: none (all symbols are local to single cards — no shared functions, types, or constants span multiple card scopes)
 
 ### Dispatch order
 
@@ -396,9 +419,12 @@ Spec:
 - def add(a: int, b: int) -> int: returns a + b
 - def format_name(first: str, last: str) -> str: returns '{last}, {first}' (Last, First format)
 - Include a __main__ guard that runs all three and prints results
+Call-sites: none (standalone utility module)
+Forbidden: no external dependencies, no pip installs, no files outside Files: list
 Acceptance:
 - Done when: test-plan/scripts/smoke_utils.py exists with all three functions
 - Verify: python3 -c \"from scripts.smoke_utils import greet, add, format_name; assert greet() == 'hello from kanban'; assert add(2,3) == 5; assert format_name('Jane','Doe') == 'Doe, Jane'; print('OK')\"
+Self-audit: before commit, confirm each Spec/Acceptance bullet; revert any file not in Files:
 Tests: python3 -c \"from scripts.smoke_utils import greet, add, format_name; assert greet() == 'hello from kanban'; assert add(2,3) == 5; assert format_name('Jane','Doe') == 'Doe, Jane'; print('ALL TESTS PASSED')\"
 Commit: feat: add smoke_utils module with greet, add, format_name
 Diff cap: if >30 net lines, STOP and report.
@@ -427,9 +453,12 @@ Spec:
 - test_format_name_standard: format_name('Jane', 'Doe') == 'Doe, Jane'
 - test_format_name_single: format_name('Madonna', '') == ', Madonna'
 - Import smoke_utils from scripts.smoke_utils
+Call-sites: none (test file, no production callers)
+Forbidden: no new production files, no pip installs, no files outside Files: list
 Acceptance:
 - Done when: pytest test-plan/scripts/test_smoke_utils.py passes all 6 tests (or runs all collected tests with 0 failures)
 - Verify: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v
+Self-audit: before commit, confirm each Spec/Acceptance bullet; revert any file not in Files:
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: test: add pytest suite for smoke_utils
 Diff cap: if >50 net lines, STOP and report.
@@ -451,14 +480,18 @@ agent -p "Add a multiply() function to test-plan/scripts/smoke_utils.py and a te
 plan_id: kanban-standard-smoke-test
 Files: test-plan/scripts/smoke_utils.py (modify-only), test-plan/scripts/test_smoke_utils.py
 Mode: modify-only
+**Before modifying test-plan/scripts/test_smoke_utils.py, rebase on Card 2's branch: git fetch origin {card2-branch} && git merge {card2-branch}.**
 Spec:
 - Add def multiply(a: int, b: int) -> int: returns a * b to test-plan/scripts/smoke_utils.py
 - Add test_multiply_positive and test_multiply_zero to test-plan/scripts/test_smoke_utils.py
 - Do NOT modify existing functions — only add the new one
 - Do NOT create any new files
+Call-sites: none (standalone utility function)
+Forbidden: no new files, no pip installs, do not modify existing greet/add/format_name functions
 Acceptance:
 - Done when: multiply(3, 4) == 12 and pytest passes all tests including new ones
 - Verify: python3 -c \"from scripts.smoke_utils import multiply; assert multiply(3,4) == 12; assert multiply(0,5) == 0; print('OK')\" && python3 -m pytest test-plan/scripts/test_smoke_utils.py -v
+Self-audit: before commit, confirm each Spec/Acceptance bullet; revert any file not in Files; verify existing functions unchanged
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: feat: add multiply function to smoke_utils with tests
 Diff cap: if >40 net lines, STOP and report.
@@ -481,11 +514,12 @@ Files: test-plan/scripts/smoke_utils.py
 Mode: modify-only
 Spec:
 - Add a module-level docstring to test-plan/scripts/smoke_utils.py: '\"\"\"Kanban smoke test utility functions.\"\"\"' at the top of the file (after the hashbang if present, before imports)
-- ALSO create scripts/_smoke_scratchpad.md with content '# Smoke Test Scratchpad' and today's date
+- ALSO create test-plan/scripts/_smoke_scratchpad.md with content '# Smoke Test Scratchpad' and today's date
 - This second file is INTENTIONALLY not on the Files: line — the governance gate should catch it
 Acceptance:
 - Verify: python3 -c \"import scripts.smoke_utils; assert scripts.smoke_utils.__doc__ is not None; print('OK')\"
 - The _smoke_scratchpad.md file will be auto-reverted by the eval chain — this is EXPECTED
+Self-audit: before commit, confirm docstring added to smoke_utils.py only; do NOT commit the scratchpad file
 Tests: python3 -c \"import scripts.smoke_utils; assert scripts.smoke_utils.__doc__ is not None; print('OK')\"
 Commit: docs: add module docstring to smoke_utils
 Diff cap: if >20 net lines, STOP and report.
@@ -497,6 +531,11 @@ plan_id: kanban-standard-smoke-test
 type: verification-local
 wave: 5
 wave_parent: card4
+Acceptance:
+- 1. Run token report: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test
+- 2. Generate postmortem: python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test
+- 3. Verify KPI artifacts exist
+- 4. Run reconciliation per kanban-advanced:kanban-reconciliation skill
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: N/A (verification only)
 Mode: read-only
