@@ -1,7 +1,7 @@
 ---
 name: Smoke Test Bug Fixes and Hardening
 plan_id: smoke-test-fixes
-line_budget: 300
+line_budget: 475
 overview: >
   Fix 11 bugs discovered during kanban-standard-smoke-test execution,
   harden cron launchers against Windows path mangling, and document
@@ -10,6 +10,19 @@ overview: >
 isProject: false
 optimization_checklist:
   plan_committed: pass
+prior_run_learnings:
+  postmortem: .hermes/kanban/reports/kanban-standard-smoke-test_postmortem_2026-06-24.md
+  success_rate: 83.3%
+  dominant_failure: blocked (5 tasks — all block-on-create; 2 cards required manual unblock/complete)
+  token_data: missing (token_tracker not configured for hermes coding agent)
+  audit_data: missing (tier1/tier2 JSON never generated; final audit skipped)
+  intervention_data: missing (interventions.count never incremented during manual unblocks)
+  key_takeaways:
+    - "Token tracking must be configured before dispatch — hermes_token_meter.py delta pattern"
+    - "Final audit (final_audit_sanity.py) must run before archiving board"
+    - "Manual unblocks must call kanban_intervention_inc.sh for accurate postmortem KPIs"
+    - "delegate_task subagents unreliable on Windows — disable parallel gate"
+    - "Cards unblock to todo instead of ready on Windows — auto_decompose: false leaves them stuck"
 contingencies:
   - risk: "Git Bash not at expected path (C:/Program Files/Git/usr/bin/bash.exe)"
     probability: Low
@@ -20,6 +33,16 @@ contingencies:
     probability: High
     impact: DEGRADED
     mitigation: "Disable parallel subagent gate on Windows; document as known limitation"
+    auto_retry: true
+  - risk: "Token tracker not configured for hermes coding agent"
+    probability: Medium
+    impact: DEGRADED
+    mitigation: "Configure hermes_token_meter.py delta pattern in .env; verify tokens.jsonl after first card"
+    auto_retry: true
+  - risk: "Final audit skipped — tier JSON missing"
+    probability: Medium
+    impact: DEGRADED
+    mitigation: "Run final_audit_sanity.py --tier all before archiving; document in card body"
     auto_retry: true
 todos:
   - id: fix-cron-launchers
@@ -163,23 +186,79 @@ Commit: docs: document Windows-specific known limitations from smoke test
 Do NOT push to main — commit to worktree branch only."
 ```
 
-## Kanban optimization
+---
+
+## Workstream 3 — Configure Token Tracking for Hermes Coding Agent
+
+**Priority:** 3 (no dependencies — can run in parallel with 1 and 2)
+
+**Approach:** The postmortem showed all token entries as `unknown` with 0 tokens. The `hermes` coding agent uses Tier 2 (hermes_insights delta). Configure `hermes_token_meter.py` in `.env` and verify tokens.jsonl is populated after card completion.
+
+**Tests:** Verify `tokens.jsonl` has entries with real token counts after a test dispatch
+
+```agent
+agent -p "Configure token tracking for hermes coding agent.
+plan_id: smoke-test-fixes
+Files: .env (if exists), .hermes/.env
+Mode: modify-only
+Spec:
+- Add KANBAN_TOKEN_METER=hermes_token_meter.py to .hermes/.env
+- Verify hermes_token_meter.py is in PATH or scripts/
+- Add token_tracker.py import path to .env if needed
+- Document the delta pattern: snapshot before dispatch, compute delta after
+Acceptance:
+- Done when: tokens.jsonl has entries with non-zero token counts after next card completion
+- Verify: python3 -c \"import json; lines=[json.loads(l) for l in open('.hermes/kanban/tokens.jsonl')]; print(f'{len(lines)} entries, {sum(e.get(\\\"tokens\\\",0) for e in lines)} total tokens')\"
+Tests: test -f .hermes/kanban/tokens.jsonl && python3 -c \"import json; assert len([l for l in open('.hermes/kanban/tokens.jsonl')]) > 0\"
+Commit: config: enable token tracking for hermes coding agent
+Do NOT push to main — commit to worktree branch only."
+```
+
+---
+
+## Workstream 4 — Enforce Final Audit Before Board Archive
+
+**Priority:** 4 (can run in parallel with 1-3)
+
+**Approach:** The postmortem showed tier1/tier2 JSON missing and `uncaught_violation_count: unknown`. Add a pre-archive check to the cleanup flow that runs `final_audit_sanity.py --tier all` and blocks archiving if the audit hasn't run.
+
+**Tests:** Run `final_audit_sanity.py --tier all` and verify tier JSON is generated
+
+```agent
+agent -p "Enforce final audit before board cleanup.
+plan_id: smoke-test-fixes
+Files: scripts/kanban_cleanup.sh (or provision_kanban_crons.sh), docs/reference/scripts.md
+Mode: modify-only
+Spec:
+- Add pre-archive gate: check for {plan_id}_audit_tier1.json and {plan_id}_audit_tier2.json before allowing archive
+- If missing, print warning and exit non-zero with instructions to run final_audit_sanity.py
+- Update docs/reference/scripts.md to document the audit requirement in the cleanup flow
+Acceptance:
+- Done when: cleanup script refuses to archive if audit JSON is missing, with clear error message
+- Verify: run cleanup without audit → expect exit 1 with \"run final_audit_sanity.py first\" message
+Tests: bash scripts/provision_kanban_crons.sh --check 2>&1 | grep -q 'audit' || echo 'audit gate not yet in provision script — verify manually'
+Commit: feat: enforce final audit before board archive
+Do NOT push to main — commit to worktree branch only."
+```
 
 ### Dependency graph
 
 ```
 Card 1 (launchers) ──┐
-                      ├── Card 3 (verify + reconcile)
-Card 2 (docs) ───────┘
+Card 2 (docs) ───────┤
+Card 3 (token track) ─┼── Card 5 (verify + reconcile closeout)
+Card 4 (audit gate) ──┘
 ```
 
-Wave 1: Cards 1 and 2 in parallel (no dependencies between them)
-Wave 2: Card 3 gates on both (verification + reconciliation closeout)
+Wave 1: Cards 1-4 in parallel (no dependencies between them)
+Wave 2: Card 5 gates on all four (verification + reconciliation closeout)
 
 | Parent | Child | Reason |
 |--------|-------|--------|
-| card1 | card3 | Launcher fixes must be verified |
-| card2 | card3 | Docs must be complete before closeout |
+| card1 | card5 | Launcher fixes must be verified |
+| card2 | card5 | Docs must be complete before closeout |
+| card3 | card5 | Token tracking must be verified |
+| card4 | card5 | Audit gate must be verified |
 
 #### Card 1 — Harden Cron Launchers
 plan_id: smoke-test-fixes
@@ -238,21 +317,72 @@ Commit: docs: document Windows-specific limitations from smoke test
 Do NOT push to main — commit to worktree branch only."
 ```
 
-#### Card 3 — Verification and Reconciliation Closeout
+#### Card 3 — Configure Token Tracking
+plan_id: smoke-test-fixes
+files:
+  - .hermes/.env
+mode: modify-only
+wave: 1
+estimated_lines: 10
+assignee: kanban-advanced-worker
+
+```agent
+agent -p "Configure token tracking for hermes coding agent.
+plan_id: smoke-test-fixes
+Files: .hermes/.env
+Mode: modify-only
+Spec:
+- Add KANBAN_TOKEN_METER=hermes_token_meter.py to .hermes/.env
+- Verify hermes_token_meter.py is in PATH or scripts/
+- Document the delta pattern: snapshot before dispatch, compute delta after
+Acceptance:
+- Done when: tokens.jsonl has entries with non-zero token counts after next card
+- Verify: python3 -c \"import json; lines=[json.loads(l) for l in open('.hermes/kanban/tokens.jsonl')]; print(f'{len(lines)} entries')\"
+Tests: test -f .hermes/kanban/tokens.jsonl
+Commit: config: enable token tracking for hermes coding agent
+Do NOT push to main — commit to worktree branch only."
+```
+
+#### Card 4 — Enforce Final Audit Before Archive
+plan_id: smoke-test-fixes
+files:
+  - scripts/provision_kanban_crons.sh
+mode: modify-only
+wave: 1
+estimated_lines: 25
+assignee: kanban-advanced-worker
+
+```agent
+agent -p "Add pre-archive audit gate to cleanup flow.
+plan_id: smoke-test-fixes
+Files: scripts/provision_kanban_crons.sh
+Mode: modify-only
+Spec:
+- Add check in --remove path: warn if {plan_id}_audit_tier1.json missing
+- Print instructions: python3 scripts/final_audit_sanity.py --plan-id {plan_id} --tier all
+- Do NOT block removal — warn only (operator may have valid reason to skip)
+Acceptance:
+- Done when: --remove prints audit warning if tier JSON missing
+- Verify: run provision_kanban_crons.sh --remove --plan-id smoke-test-fixes and check for audit warning
+Tests: bash scripts/provision_kanban_crons.sh --remove --plan-id smoke-test-fixes --dry-run 2>&1
+Commit: feat: warn when archiving board without final audit
+Do NOT push to main — commit to worktree branch only."
+```
+
+#### Card 5 — Verification and Reconciliation Closeout
 plan_id: smoke-test-fixes
 Type: verification
 wave: 2
 wave_parent: card1
 ordinal_parent: card2
-assignee: kanban-advanced-orchestrator
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 
 ```agent
-agent -p "Verify smoke test fixes and run reconciliation.
+agent -p "Verify smoke test fixes, token tracking, and audit gate.
 plan_id: smoke-test-fixes
 Acceptance:
-- Done when: all 8 smoke tests pass, launchers verified, docs complete, reconciliation report written
-- Verify: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
+- Done when: all 8 smoke tests pass, token log has entries, audit gate warns on missing tier JSON, docs complete
+- Verify: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts && test -f .hermes/kanban/tokens.jsonl
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: chore: reconciliation closeout for smoke-test-fixes
 Do NOT push to main — commit to worktree branch only."
