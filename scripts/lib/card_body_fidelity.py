@@ -255,17 +255,20 @@ def validate_parsed_cards(
                         plan_file=plan_label,
                     )
                 )
-            full = repo_root / norm
-            if not full.is_file():
-                violations.append(
-                    FidelityViolation(
-                        code="V008_PATH_MISSING",
-                        severity=block_sev,
-                        message=f"Files: path not in repo: {norm}",
-                        card_key=key,
-                        plan_file=plan_label,
+            # create-only cards are expected to create their Files: — skip existence check
+            mode = (card.get("mode") or "").lower()
+            if mode != "create-only":
+                full = repo_root / norm
+                if not full.is_file():
+                    violations.append(
+                        FidelityViolation(
+                            code="V008_PATH_MISSING",
+                            severity=block_sev,
+                            message=f"Files: path not in repo: {norm}",
+                            card_key=key,
+                            plan_file=plan_label,
+                        )
                     )
-                )
 
     return violations
 
