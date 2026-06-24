@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # validate_board.sh â€” Pre-dispatch structural gate for kanban-advanced.
 #
 # Run BEFORE the orchestrator completes the gate card. Validates that the decomposition
@@ -96,7 +96,12 @@ SCRIPT_DIR_VAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR_VAL/lib/hermes_home.sh"
 
 CRON_SCRIPTS_DIR="${HERMES_HOME}/scripts"
-CRON_SCRIPT_PAIRS="auto_unblock.sh board_keeper.sh"
+# Windows crons use .py launchers (hermes #23404 workaround); Unix uses .sh directly
+if [[ "$OS" == *"Windows"* || "$(uname -s 2>/dev/null)" == MINGW* || "$(uname -s 2>/dev/null)" == MSYS* ]]; then
+    CRON_SCRIPT_PAIRS="auto_unblock.py board_keeper.py"
+else
+    CRON_SCRIPT_PAIRS="auto_unblock.sh board_keeper.sh"
+fi
 ALL_PRESENT=true
 ALL_EXEC=true
 for s in $CRON_SCRIPT_PAIRS; do

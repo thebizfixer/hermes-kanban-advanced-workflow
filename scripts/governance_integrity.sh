@@ -61,9 +61,17 @@ _resolve_skill_path() {
 }
 
 # ── 1. Required scripts exist and are executable ────────────────────────
+# Windows crons use .py launchers (hermes #23404 workaround); Unix uses .sh
+if [[ "$OS" == *"Windows"* || "$(uname -s 2>/dev/null)" == MINGW* || "$(uname -s 2>/dev/null)" == MSYS* ]]; then
+    _unblock="auto_unblock.py"
+    _keeper="board_keeper.py"
+else
+    _unblock="auto_unblock.sh"
+    _keeper="board_keeper.sh"
+fi
 REQUIRED_SCRIPTS=(
-    auto_unblock.sh
-    board_keeper.sh
+    $_unblock
+    $_keeper
     generate_postmortem.py
     git_safe_cleanup.sh
     kanban_attestation.py
