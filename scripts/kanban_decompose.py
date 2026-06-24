@@ -322,7 +322,9 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
             if not workspace or workspace == "worktree":
                 # Auto-generate worktree path when plan doesn't specify one.
                 # "worktree" alone is rejected by the dispatcher — must have :<path>.
-                workspace = f"worktree:/tmp/wt-{plan_id}-{card_key}"
+                # Use platform-appropriate temp dir (C:\Users\...\Temp on Windows, /tmp on Unix).
+                tmp = Path(tempfile.gettempdir()).as_posix()
+                workspace = f"worktree:{tmp}/wt-{plan_id}-{card_key}"
             branch = card.get("branch") or f"kanban/{plan_id}/{card_key}"
             cmd.extend(["--workspace", workspace])
             cmd.extend(["--branch", branch])
