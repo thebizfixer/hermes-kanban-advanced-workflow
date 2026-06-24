@@ -695,7 +695,6 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
                 cards_yaml_path: Path | None = None,
                 gate_status: str = "UNKNOWN (not run)",
                 gate_script: Path | None = None,
-                parallel_gate_enabled: bool = False,
                 gateway_at_handoff: str = "unknown",
                 notification_overlay: dict[str, str] | None = None,
                 cron_provision: str = "UNKNOWN (not run)") -> str:
@@ -719,10 +718,6 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
             "pre_dispatch_gate already PASSED — skip directly to Step 2. "
             "Do not re-run pre_dispatch_gate.sh or preflight."
         )
-    elif gate_status.startswith("DEFERRED"):
-        gate_skip = _parallel_gate_step1_block(
-            plan_id, repo_root, working_branch, bundle, gate_script
-        )
     elif gate_status.startswith("FAILED") or gate_status.startswith("UNKNOWN"):
         gate_path = (
             gate_script.resolve().as_posix()
@@ -741,15 +736,7 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
     gate_script_line = (
         f"gate_script: {gate_script.resolve().as_posix()}" if gate_script else "gate_script: none"
     )
-    parallel_gate_line = (
-        "parallel_gate: enabled" if parallel_gate_enabled else "parallel_gate: disabled"
-    )
-    gate_body_escaped = _gate_card_body(plan_id).replace('"', '\\"')
-    step1_label = (
-        "Step 1 — Pre-dispatch gate (parallel default)"
-        if parallel_gate_enabled or gate_status.startswith("DEFERRED")
-        else "Step 1 — Pre-dispatch gate (if needed)"
-    )
+    step1_label = "Step 1 — Pre-dispatch gate (if needed)"
     notify = notification_overlay or {}
     notify_lifecycle = notify.get("notify_lifecycle", "true")
     walk_away_mode = notify.get("walk_away_mode", "false")
@@ -763,7 +750,6 @@ Repo: {repo_root}
 working_branch: {working_branch}
 BUNDLE_ROOT: {bundle}
 {gate_script_line}
-{parallel_gate_line}
 gateway_at_handoff: {gateway_at_handoff}
 pre_dispatch_gate: {gate_status}
 notify_lifecycle: {notify_lifecycle}
@@ -926,16 +912,12 @@ def main() -> int:
         })
         return 7
 
-    parallel_gate_enabled = _resolve_subagent_gate_enabled(project_root, overlay)
-    gate_script = _resolve_gate_script(project_root, overlay)
+    # Always run serial pre_dispatch_gate at handoff time.
+    # Parallel subagent gate (delegate_task) is unreliable on Windows —
+    # subagents don't survive kanban worker session boundaries.
+    # When Hermes core fixes delegate_task, re-enable the parallel path here.
+    gate_status, gate_script = _run_pre_dispatch_gate(plan_id, project_root, overlay)
     gateway_stamp, _gateway_ok = _gateway_status_stamp()
-    if parallel_gate_enabled:
-        ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        gate_status = (
-            f"DEFERRED at {ts} (parallel subagent gate — orchestrator Step 1)"
-        )
-    else:
-        gate_status, gate_script = _run_pre_dispatch_gate(plan_id, project_root, overlay)
 
     title = f"Decompose: {plan_id}"
 
@@ -1006,7 +988,6 @@ def main() -> int:
         cards_yaml_path=cards_yaml_path,
         gate_status=gate_status,
         gate_script=gate_script,
-        parallel_gate_enabled=parallel_gate_enabled,
         gateway_at_handoff=gateway_stamp,
         notification_overlay=notification_overlay,
         cron_provision=cron_stamp,

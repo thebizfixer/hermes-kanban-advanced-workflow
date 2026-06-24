@@ -44,3 +44,21 @@ After committing, the worker will run:
 3. The evaluation chain (E001–E021)
 
 Your commit message must match the `Commit:` line. Token usage is extracted from your JSON output.
+
+## delegate_task in Kanban Worker Sessions
+
+Kanban worker sessions are short-lived (claim → work → complete → exit).
+The `delegate_task` tool spawns subagents that require the parent session to
+remain alive to collect results. On Windows, worker sessions terminate after
+the agent's turn, killing subagents before they complete.
+
+**Rule:** Workers must NOT use `delegate_task`. If a card requires multi-step
+reasoning that would benefit from subagents, split the card into smaller
+cards in the plan. This limitation will be lifted when the Hermes core
+session lifecycle supports subagent result collection across turns.
+
+**Affected:** All platforms, but crashes are silent on Linux/macOS (subagents
+complete but results are discarded) and visible on Windows (worker process
+terminated with `pid not alive`). The parallel subagent gate was removed from
+the orchestrator runbook as a workaround — `kanban_handoff.py` always runs the
+serial gate at handoff time.

@@ -259,6 +259,16 @@ case "$ACTION" in
     # CLEANUP CONTRACT: This block removes only wave crons for the plan.
     # It does NOT touch notify_lifecycle in the overlay config.
     # See header GOVERNANCE NOTE.
+
+    # Pre-archive audit gate: warn if final audit hasn't run.
+    # The tier JSON is written by final_audit_sanity.py --tier all.
+    if [[ -n "$PLAN_ID" && -n "$REPO_ROOT" ]]; then
+      local tier1="${REPO_ROOT}/.hermes/kanban/reports/${PLAN_ID}_audit_tier1.json"
+      if [[ ! -f "$tier1" ]]; then
+        echo "[provision_kanban_crons] WARN: tier1 audit JSON missing at $tier1" >&2
+        echo "[provision_kanban_crons] WARN: run: python3 scripts/final_audit_sanity.py --plan-id $PLAN_ID --tier all" >&2
+      fi
+    fi
     stored_auto="" stored_keeper="" stored_lifecycle=""
     if [[ -n "$PLAN_ID" ]]; then
       while IFS= read -r line; do

@@ -119,6 +119,15 @@ kanban_auto_unblock_tick() {
 
     if hermes kanban unblock "$tid" 2>/dev/null; then
       ((unblocked++)) || true
+      # Hermes #24489: link_tasks() demotes multi-parent children ready→todo
+      # even when blocked. Unblock returns them to todo, not ready.
+      # Detect and promote.
+      local new_status
+      new_status=$(hermes kanban show "$tid" 2>/dev/null | grep 'status:' | head -1 | awk '{print $2}')
+      if [[ "$new_status" == "todo" ]]; then
+        hermes kanban promote "$tid" >/dev/null 2>&1 || true
+        echo "auto_unblock: recovered $tid from todo → ready (link_tasks demotion)" >&2
+      fi
       if [[ "$stagger_sec" =~ ^[0-9]+$ && "$stagger_sec" -gt 0 ]]; then
         sleep "$stagger_sec"
       fi

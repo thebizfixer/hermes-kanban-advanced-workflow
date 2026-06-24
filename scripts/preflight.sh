@@ -499,7 +499,7 @@ check_kanban_db_integrity() {
       "kanban.db not found at $db (gateway may create on first run)"
     return
   fi
-  if python3 -c "import sqlite3; c=sqlite3.connect('${db}'); r=c.execute('PRAGMA integrity_check').fetchone()[0]; assert r=='ok', r; c.close()"; then
+  if python3 -c "import sqlite3, os; db_path=os.path.join(os.environ.get('HERMES_HOME',''),'kanban.db'); c=sqlite3.connect(db_path); r=c.execute('PRAGMA integrity_check').fetchone()[0]; assert r=='ok', r; c.close()"; then
     record_check "kanban_db_integrity" "pass" "blocking" "kanban.db integrity ok at $db"
   else
     record_check "kanban_db_integrity" "fail" "blocking" "kanban.db integrity check failed at $db"

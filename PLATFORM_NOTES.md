@@ -97,6 +97,43 @@ Python scripts (`token_tracker.py`, `kanban_evaluation_chain.py`, etc.) are
 cross-platform. They use `os.environ` for path resolution and handle both forward
 and backslash separators. Run with `python3` or `python` on any platform.
 
+### Cross-platform scripting (bash)
+
+All `.sh` scripts in `scripts/` must run on Linux, macOS, and Windows (Git Bash).
+Windows paths use backslashes (`C:\Users\...`) which bash interprets as escape
+sequences. Apply these conventions:
+
+1. **Path normalization at entry:** `${VAR//\\//}` converts backslashes to forward
+   slashes. Safe no-op on Linux/macOS (no backslashes to replace). Apply to
+   `HERMES_HOME`, `BUNDLE_PATH`, and `REPO_ROOT` at the top of every script.
+
+2. **Python one-liners:** Never interpolate paths with `${VAR}` into Python strings.
+   Use `os.environ.get('VAR')` or `os.path.join()`. Example:
+   ```bash
+   # BROKEN on Windows (\\U becomes unicode escape):
+   python3 -c "open('${HERMES_HOME}/kanban.db')"
+   # FIXED:
+   python3 -c "import os; open(os.path.join(os.environ['HERMES_HOME'], 'kanban.db'))"
+   ```
+
+3. **`test -x`:** Not supported on Windows (no executable bit). Use `test -f` or
+   `python3 -c "import os; os.access(path, os.X_OK)"`.
+
+4. **YAML config:** Never store Windows backslash paths in YAML (cron `workdir`,
+   overlay `bundle_path`). The YAML parser interprets `\U`, `\A` as escape sequences.
+   Use forward slashes (`C:/Users/...`) in all config files.
+
+5. **`source` guards for cron scripts:** Scripts invoked by cron (`auto_unblock.sh`,
+   `board_keeper.sh`, `kanban_lifecycle_notify.sh`) must not die on missing lib files.
+   Guard with `2>/dev/null || true`.
+
+6. **Gate script (`PREFLIGHT_SKIP_CODING_AGENT_CLI`):** Set `PREFLIGHT_SKIP_CODING_AGENT_CLI=1`
+   to skip the coding-agent CLI smoke check on Windows (often hangs in non-interactive
+   contexts).
+
+7. **Import paths:** Use `from lib.card_body` (not `from card_body`) in Python scripts.
+   The decomposer adds `scripts/` to `sys.path` but not `scripts/lib/`.
+
 ## WSL2
 
 Fully supported. Install Hermes inside WSL2 using the standard Linux one-liner.

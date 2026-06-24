@@ -62,6 +62,28 @@ done
 
 **Detection:** `hermes kanban show <child>` shows parent `status: running` while child is `todo` with no dispatch.
 
+### link_tasks() demotes blocked children with multi-parent links (#24489 — same bug, different trigger)
+
+**Upstream ref:** [nousresearch/hermes-agent#24489](https://github.com/NousResearch/hermes-agent/issues/24489)
+
+**Symptom:** Cards created via block-on-create (kanban-advanced standard) unblock to `todo` instead of `ready` when they have multiple parents. The card was created `ready`, immediately blocked, then linked to multiple parents — at least one not yet `done`. `link_tasks()` demotes it from `ready` → `todo` despite the card being `blocked`. When later unblocked, it returns to `todo` and never dispatches (stuck with `auto_decompose: false`).
+
+**Exposure:** Any card with **2+ parents** where at least one parent is not `done` at link time. Single-parent cards are unaffected because the single parent (Gate) is blocked at link time — `link_tasks()` only triggers on non-`done` parents, and a blocked parent isn't `running`, so the demotion path may not fire. Multi-parent cards link to an implementation parent that IS `running` or in an intermediate state, triggering the demotion.
+
+Observed in kanban-standard-smoke-test:
+- Card 2 (parents: Card 1 + Gate) → unblocked to `todo`
+- Card 5 (parents: Cards 3 + 4) → unblocked to `todo`
+- Cards 1, 3, 4 (single parent: Gate) → unblocked to `ready` ✓
+
+**Workaround:**
+1. **Auto-unblock recovery (preferred):** After unblocking a card, check its status. If it landed in `todo`, use `hermes kanban promote <id>` to move it to `ready`. The `auto_unblock.sh` script should do this automatically.
+2. **Decompose ordering:** Create and link single-parent cards first. For multi-parent cards, wait until all implementation parents are `done` before linking — but this breaks block-on-create (dispatcher race).
+3. **Post-decompose fix-up:** After all cards are created and linked, the orchestrator runs a final pass: for every blocked card with all parents `done`, unblock → check status → promote if `todo`.
+
+**Detection:** After gate completion, `hermes kanban list` shows `◻ todo` for cards that should be `▶ ready`. Run: `hermes kanban show <id>` — if `parents:` are all `done` but status is `todo`, the demotion fired.
+
+**Fix target:** `auto_unblock.sh` (or `auto_unblock_core.sh`) — add a post-unblock status check and promote `todo` → `ready`.
+
 ### `--initial-status blocked` can race to `ready` (observed)
 
 **Upstream ref:** Not filed upstream as of 2026-06-10. Related reliability surface: [#35986](https://github.com/NousResearch/hermes-agent/issues/35986).
