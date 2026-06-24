@@ -166,7 +166,7 @@ The kanban-advanced plugin supports three tiers of token metering, selected auto
 - audit-start
 - cleanup-complete
 
-All four must log via hermes_insights delta. Deltas must appear in the project `.hermes/kanban/tokens.jsonl`.
+All four must log via hermes_insights delta. Deltas must appear in `~/.hermes/kanban/tokens.jsonl`.
 
 **Observability requirements (drawn from industry best practices for AI agent workflows):**
 - Track across the full decision chain (not just final output).
@@ -307,7 +307,7 @@ Do NOT push to main — commit to worktree branch only."
 **File:** `test-plan/scripts/smoke_utils.py`
 **Mode:** modify-only
 
-**Approach:** This card **intentionally** instructs the agent to create a file NOT listed in `Files:`. The agent is told to add a docstring to `test-plan/scripts/smoke_utils.py` (which is on `Files:`) BUT ALSO to create a `scripts/_smoke_scratchpad.md` file (which is NOT on `Files:`). The evaluation chain Step 2 (E002) should detect the unlisted file and auto-revert it. If the revert succeeds, the card completes. If unlisted changes remain after revert, the card blocks.
+**Approach:** This card **intentionally** instructs the agent to create a file NOT listed in `Files:`. The agent is told to add a docstring to `test-plan/scripts/smoke_utils.py` (which is on `Files:`) BUT ALSO to create a `test-plan/scripts/_smoke_scratchpad.md` file (which is NOT on `Files:`). The evaluation chain Step 2 (E002) should detect the unlisted file and auto-revert it. If the revert succeeds, the card completes. If unlisted changes remain after revert, the card blocks.
 
 **Expected behavior:** E002_UNLISTED_FILE_CHANGE triggers. The unlisted file is either auto-reverted (card completes with warning) or blocks if revert fails. Either outcome is valid — the test verifies that the E002 gate is operational.
 
