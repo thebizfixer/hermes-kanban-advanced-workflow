@@ -441,7 +441,7 @@
         setTimeout(function () {
           setProbesPending(true);
           var pollAttempts = 0;
-          var maxPollAttempts = 15; // 30 seconds max
+          var maxPollAttempts = 45; // 90 seconds max
           var pollInterval = setInterval(function () {
             pollAttempts++;
             apiStatus().then(function (fresh) {

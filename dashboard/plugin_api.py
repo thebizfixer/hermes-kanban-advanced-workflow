@@ -291,7 +291,7 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
     This checks **Hermes profile provider auth**, not the coding-agent CLI.
     No --yolo flag is needed; "say ok" never triggers tool calls.
 
-    Two-stage probe: liveness (config show, 3s) then readiness (chat, 8s).
+    Two-stage probe: liveness (config show, 3s) then readiness (chat, 60s).
     """
     if not profile:
         return None, "missing profile"
@@ -308,7 +308,7 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
 
     # Stage 2 — Readiness: can the LLM respond?
     try:
-        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=20)
+        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=60)
         out = (r.stdout + r.stderr).lower()
         if r.returncode == 0:
             return True, ""
