@@ -483,25 +483,43 @@
         setStatusProbing(false);
         var msg = e.message || "API unreachable";
         if (msg === "Failed to fetch" || msg.indexOf("NetworkError") >= 0) {
-          // Sidecar may be starting — poll health until it's up (keepalive cron restarts within 60s)
-          setStatus({ error: "Sidecar server starting… (auto-recovery in progress)" });
+          // Sidecar may be starting — poll health with timeout until it's up.
+          // Fast poll (2s) for 60s, then slow poll (15s) indefinitely.
+          var fastPoll = true;
           var attempts = 0;
-          var healthInterval = setInterval(function () {
+          var fastMax = 30;       // 30 × 2s = 60s fast window
+          var fastInterval = 2000;
+          var slowInterval = 15000;
+
+          function healthPoll() {
             attempts++;
-            fetch("http://127.0.0.1:" + (window.__KA_DASHBOARD_PORT__ || "18900") + "/health")
+            var controller = new AbortController();
+            var timeout = setTimeout(function () { controller.abort(); }, 3000);
+            fetch(
+              "http://127.0.0.1:" + (window.__KA_DASHBOARD_PORT__ || "18900") + "/health",
+              { signal: controller.signal }
+            )
               .then(function (r) {
+                clearTimeout(timeout);
                 if (r.ok) {
-                  clearInterval(healthInterval);
-                  loadStatus();  // retry full load
+                  clearInterval(healthTimer);
+                  loadStatus();  // retry full load — replaces error status on success
                 }
               })
-              .catch(function () {});
-            if (attempts >= 30) {  // 60s max
-              clearInterval(healthInterval);
-              msg = "Dashboard server not running on port " + (window.__KA_DASHBOARD_PORT__ || "18900") + ". Start it: python3 scripts/dashboard_server.py";
-              setStatus({ error: msg });
+              .catch(function () {
+                clearTimeout(timeout);
+              });
+            if (fastPoll && attempts >= fastMax) {
+              fastPoll = false;
+              clearInterval(healthTimer);
+              healthTimer = setInterval(healthPoll, slowInterval);
+              setStatus({ error: "Dashboard server not responding on port " + (window.__KA_DASHBOARD_PORT__ || "18900") + " (still retrying every 15s — click Retry to try now)", _retry: true });
             }
-          }, 2000);
+          }
+
+          setStatus({ error: "Sidecar server starting\u2026 (auto-recovery in progress)", _retry: true });
+          var healthTimer = setInterval(healthPoll, fastInterval);
+          healthPoll();  // fire first attempt immediately
           return;
         }
         setStatus({ error: msg });
@@ -918,7 +936,14 @@
                 statusError ? "Cannot reach API" : initializedLabel()
               ),
               React.createElement("p", { className: "text-xs text-muted-foreground truncate" },
-                statusError ? status.error
+                statusError ? React.createElement(React.Fragment, null,
+                status.error,
+                status._retry ? React.createElement("span", {
+                  className: "cursor-pointer underline ml-2 whitespace-nowrap",
+                  onClick: function () { loadStatus(); },
+                  style: { color: "var(--primary)" }
+                }, "Retry") : null
+              )
                   : statusInitialized ? "Config: " + (status.config_path || "kanban-config.yaml")
                   : "Run bootstrap to provision profiles, config, and cron scripts."
               ),
