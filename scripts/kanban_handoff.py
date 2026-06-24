@@ -742,6 +742,9 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
     walk_away_mode = notify.get("walk_away_mode", "false")
     notify_deliver = notify.get("notify_deliver_resolved", "unknown")
 
+    gate_body = _gate_card_body(plan_id)
+    gate_body_escaped = gate_body.replace('\\', '\\\\').replace('"', '\\"')
+
     return f"""Type: {HANDOFF_TYPE}
 plan_id: {plan_id}
 Plan: {plan_path}
