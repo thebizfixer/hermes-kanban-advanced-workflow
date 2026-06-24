@@ -147,33 +147,37 @@ def _run_cron_provision(
 
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     bash_cron = _bash_path(cron_script)
-    create_cmd = ["bash", bash_cron, "--create", "--plan-id", plan_id]
-    check_cmd = ["bash", bash_cron, "--check"]
+    # shell=True is required on Windows so the spawned bash process inherits
+    # MSYS2 path translation. Passing bash + args as a list bypasses the
+    # shell layer and MSYS2's automount can't resolve /c/ paths.
+    create_args = f"bash {bash_cron} --create --plan-id {plan_id}"
     if dry_run:
-        create_cmd.append("--dry-run")
+        create_args += " --dry-run"
 
     try:
         create = subprocess.run(
-            create_cmd,
+            create_args,
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
             timeout=120,
             cwd=str(project_root),
+            shell=True,
         )
         if create.returncode != 0 and not dry_run:
             detail = (create.stdout + create.stderr).strip()[:400]
             return f"FAILED at {ts}: create exit {create.returncode}", False, detail
 
         check = subprocess.run(
-            check_cmd,
+            f"bash {bash_cron} --check",
             capture_output=True,
             text=True,
             encoding="utf-8",
             errors="replace",
             timeout=60,
             cwd=str(project_root),
+            shell=True,
         )
         if check.returncode != 0 and not dry_run:
             detail = (check.stdout + check.stderr).strip()[:400]
