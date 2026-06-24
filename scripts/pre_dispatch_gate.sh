@@ -125,9 +125,9 @@ fi
 GATE_LIB_DIR="$SCRIPT_DIR/lib"
 [[ "$SCRIPT_DIR" == */lib ]] && GATE_LIB_DIR="$SCRIPT_DIR"
 # shellcheck source=lib/coding_agent_env.sh
-source "$GATE_LIB_DIR/coding_agent_env.sh"
+source "$GATE_LIB_DIR/coding_agent_env.sh" 2>/dev/null || true
 # shellcheck source=lib/coding_agent_auth_lock.sh
-source "$GATE_LIB_DIR/coding_agent_auth_lock.sh"
+source "$GATE_LIB_DIR/coding_agent_auth_lock.sh" 2>/dev/null || true
 if [ -f "$REPO_ROOT/.env" ]; then
   set -a
   # shellcheck disable=SC1091

@@ -88,6 +88,7 @@ def parse_args():
                    help="Pause duration in millis (default: 3000)")
     p.add_argument("--from-handoff", action="store_true",
                    help="Internal: only set by kanban_handoff.py. Direct use is a governance violation.")
+    p.add_argument("--gate-id", help="Reuse existing gate card (from handoff runbook Step 2)")
 
     args = p.parse_args()
     if not args.plan and not args.cards_yaml:
