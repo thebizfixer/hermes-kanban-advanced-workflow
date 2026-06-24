@@ -171,15 +171,13 @@ _create_job() {
   local script="$3"
   local deliver="${4:-local}"
   local extra_args="${5:-}"
-  local workdir_args=()
-  [[ -n "$WORKDIR" ]] && workdir_args=(--workdir "$WORKDIR")
   local existing
   existing="$(_find_job_id_by_name "$name")"
   if [[ -n "$existing" ]]; then
     if [[ "$DRY_RUN" == true ]]; then
       echo "[provision_kanban_crons] [dry-run] would reuse job $existing ($name)"
     else
-      HERMES_HOME="$CRON_HERMES_HOME" hermes cron edit "$existing" --deliver "$deliver" --no-agent --script "$script" --repeat 999 "${workdir_args[@]}" $extra_args >/dev/null 2>&1 || true
+      HERMES_HOME="$CRON_HERMES_HOME" hermes cron edit "$existing" --deliver "$deliver" --no-agent --script "$script" --repeat 999 $extra_args >/dev/null 2>&1 || true
       echo "[provision_kanban_crons] reused job $existing ($name, deliver=$deliver)"
     fi
     printf '%s' "$existing"
@@ -197,7 +195,6 @@ _create_job() {
     --script "$script" \
     --deliver "$deliver" \
     --repeat 999 \
-    "${workdir_args[@]}" \
     $extra_args 2>&1)" || {
     echo "[provision_kanban_crons] create failed for $name: $out" >&2
     return 1

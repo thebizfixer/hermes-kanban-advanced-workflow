@@ -554,22 +554,16 @@ def _check_board_cleanliness(
     running = [
         c for c in cards if str(c.get("status", "")).lower() == "running"
     ]
-    if running:
-        ids = ", ".join(str(c.get("id", "?")) for c in running)
-        return (
-            False,
-            (
-                f"Board has {len(running)} running card(s) for plan_id {plan_id} "
-                f"({ids}). Wind down to blocked or done before handoff."
-            ),
-            [],
-        )
 
     if force:
         archived: list[str] = []
+        skipped: list[str] = []
         for card in cards:
             cid = str(card.get("id", "")).strip()
             if not cid:
+                continue
+            if str(card.get("status", "")).lower() == "running":
+                skipped.append(cid)
                 continue
             result = _hermes("kanban", "archive", cid)
             if result.returncode == 0:
@@ -580,7 +574,23 @@ def _check_board_cleanliness(
                     f"Failed to archive {cid}: {(result.stderr or result.stdout).strip()}",
                     archived,
                 )
-        return True, f"Archived {len(archived)} card(s) for plan_id {plan_id}.", archived
+        msg_parts = [f"Archived {len(archived)} card(s) for plan_id {plan_id}."]
+        if skipped:
+            msg_parts.append(
+                f"Skipped {len(skipped)} running card(s): {', '.join(skipped)}."
+            )
+        return True, " ".join(msg_parts), archived
+
+    if running:
+        ids = ", ".join(str(c.get("id", "?")) for c in running)
+        return (
+            False,
+            (
+                f"Board has {len(running)} running card(s) for plan_id {plan_id} "
+                f"({ids}). Wind down to blocked or done before handoff."
+            ),
+            [],
+        )
 
     lines = [
         f"Board has {len(cards)} existing card(s) for plan_id {plan_id}:",
