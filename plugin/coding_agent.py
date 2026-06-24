@@ -945,6 +945,7 @@ def check_coding_agent_cli(
         "model": normalized_model,
         "model_configured": True,
         "model_reachable": None,
+        "probed": False,
         "supports_model_pick": binary in ADAPTERS or on_path,
     }
 
@@ -952,15 +953,22 @@ def check_coding_agent_cli(
         info["model_configured"] = False
         return info
 
-    if probe:
-        cache_key = f"coding_agent_smoke:{binary}:{normalized_model}"
-        cached = cache_get(cache_key, probe_ttl) if cache_get else None
-        if cached is not None:
-            info["model_reachable"] = cached
+    # Always read cached probe result so /status surfaces it without ?probe=1.
+    cache_key = f"coding_agent_smoke:{binary}:{normalized_model}"
+    cached = cache_get(cache_key, probe_ttl) if cache_get else None
+    if cached is not None:
+        if isinstance(cached, dict):
+            info["model_reachable"] = cached.get("reachable")
+            info["probed"] = cached.get("probed", True)
         else:
-            reachable = smoke_test_coding_agent(binary, normalized_model, run)
-            info["model_reachable"] = reachable
-            if cache_set is not None and reachable is not None:
-                cache_set(cache_key, reachable)
+            info["model_reachable"] = cached  # legacy raw value
+            info["probed"] = True
+
+    if probe and cached is None:
+        reachable = smoke_test_coding_agent(binary, normalized_model, run)
+        info["model_reachable"] = reachable
+        if cache_set is not None:
+            cache_set(cache_key, {"reachable": reachable, "probed": True})
+        info["probed"] = True
 
     return info

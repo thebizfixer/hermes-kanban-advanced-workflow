@@ -390,7 +390,7 @@ def _run_coding_agent_probe(binary: str, model: str | None) -> None:
     )
     _cache_set(
         f"coding_agent_smoke:{binary}:{model or 'auto'}",
-        cli.get("model_reachable"),
+        {"reachable": cli.get("model_reachable"), "probed": True},
     )
     _inflight_probes.discard(binary)
 
@@ -473,6 +473,7 @@ def _check_profiles(
             "provider": "",
             "model_reachable": None,
             "model_reachability_detail": "",
+            "probed": False,
             "reasoning_effort": "medium",
             "reasoning_effort_configured": False,
             "reasoning_effort_source": "default",
@@ -500,6 +501,7 @@ def _check_profiles(
                 cache_key = f"model_reachable:{profile}"
                 cached = _cache_get(cache_key, _TTL_MODEL_PROBE)
                 if cached is not None:
+                    info["probed"] = True
                     if isinstance(cached, dict):
                         info["model_reachable"] = cached.get("reachable")
                         info["model_reachability_detail"] = cached.get("detail") or ""
@@ -517,6 +519,7 @@ def _check_profiles(
                     # Show last known result while probe runs (use extended TTL)
                     stale = _cache_get(cache_key, _PROBE_CIRCUIT_COOLDOWN)
                     if stale is not None:
+                        info["probed"] = True
                         if isinstance(stale, dict):
                             info["model_reachable"] = stale.get("reachable")
                             info["model_reachability_detail"] = stale.get("detail") or ""
@@ -1063,8 +1066,11 @@ def _append_coding_agent_cli_log(
             _probe_executor.submit(_run_coding_agent_probe, binary, model)
         output.append(f"   ... model probe queued (check dashboard badges)")
         return
-    # Use cached result
-    reachable = cached
+    # Use cached result (supports legacy raw value and dict format)
+    if isinstance(cached, dict):
+        reachable = cached.get("reachable")
+    else:
+        reachable = cached
     if reachable is True:
         output.append(f"   OK coding CLI reachable ({label})")
     elif reachable is False:

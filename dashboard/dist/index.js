@@ -449,12 +449,12 @@
               var freshProfiles = fresh.profiles || {};
               Object.keys(freshProfiles).forEach(function (k) {
                 var pinfo = freshProfiles[k];
-                if (pinfo && pinfo.exists && pinfo.has_model && pinfo.model_reachable == null) {
+                if (pinfo && pinfo.exists && pinfo.has_model && !pinfo.probed) {
                   allProbed = false;
                 }
               });
               var cli = fresh.coding_agent_cli || {};
-              if (cli.on_path && cli.model_reachable == null) {
+              if (cli.on_path && !cli.probed) {
                 allProbed = false;
               }
               if (allProbed || pollAttempts >= maxPollAttempts) {
@@ -541,7 +541,7 @@
         }
         apiStatus().then(function (s) {
           var info = s.profiles && s.profiles[profileName];
-          if (info && info.model_reachable != null) {
+          if (info && info.probed) {
             clearInterval(interval);
             setProbingProfile(null);
             setStatus(s);
@@ -719,14 +719,14 @@
 
     function initializedLabel() {
       if (!statusInitialized) return "Not initialized";
-      if (statusProbing) return "Initialized (Checking for updates)";
+      if (statusProbing || probesPending) return "Initialized (Checking for updates)";
       if (status && status.plugin_can_update && status.plugin_up_to_date === true) return "Initialized (Up-to-date)";
       if (status && status.plugin_can_update && status.plugin_update_available) return "Initialized (Update Plugin)";
       return "Initialized";
     }
 
     var pluginUpdateDisabled = !status || !status.plugin_can_update || status.plugin_up_to_date === true
-      || pluginUpdating || bootstrapping || statusProbing;
+      || pluginUpdating || bootstrapping || statusProbing || probesPending;
 
     // ── Model selector ──
     function openModelPicker(profileName) {
