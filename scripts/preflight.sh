@@ -623,7 +623,7 @@ check_kanban_auto_decompose() {
   local cfg_out
   cfg_out="$(hermes config show 2>/dev/null || true)"
   if echo "$cfg_out" | grep -qE 'kanban\.auto_decompose:\s*true'; then
-    record_check "kanban_auto_decompose" "degraded" "degraded" \
+    record_check "kanban_auto_decompose" "fail" "blocking" \
       "kanban.auto_decompose is true — manual decomposition will duplicate cards; run: hermes config set kanban.auto_decompose false"
   elif echo "$cfg_out" | grep -qE 'kanban\.auto_decompose:\s*false'; then
     record_check "kanban_auto_decompose" "pass" "degraded" \
