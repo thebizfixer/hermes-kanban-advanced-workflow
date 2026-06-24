@@ -97,6 +97,47 @@ Python scripts (`token_tracker.py`, `kanban_evaluation_chain.py`, etc.) are
 cross-platform. They use `os.environ` for path resolution and handle both forward
 and backslash separators. Run with `python3` or `python` on any platform.
 
+### Troubleshooting common failures
+
+#### Git worktree "already registered" error
+
+**Symptom:** After prior decompositions, workers fail with:
+`git worktree add failed: already registered worktree`
+
+**Root cause:** Git's internal worktree metadata (`$GIT_DIR/worktrees/`) persists even
+after the worktree directory is deleted. The default `gc.worktreePruneExpire` is 3
+months — registrations from minutes ago are never pruned.
+
+**Fix:** Run `git worktree prune --expire=now` before `git worktree add -f`.
+The `-f` flag overrides the safeguard for "path already assigned but missing" per the
+[git-worktree docs](https://git-scm.com/docs/git-worktree). `worktree_setup.sh` applies
+this automatically.
+
+#### Cron jobs active but cards not promoting
+
+**Symptom:** Auto-unblock cron shows as active in `hermes cron list` but cards stay
+`blocked` after gate completion.
+
+**Root cause:** Lock contention from dual gateway instances can skip cron ticks.
+This commonly happens after a gateway restart when the old process hasn't fully
+exited before the new one starts.
+
+**Fix:** Verify a single gateway with `hermes gateway status`. Force a diagnostic
+tick with `hermes cron run {job_id}`. See the
+[Hermes cron troubleshooting docs](https://hermes-agent.nousresearch.com/docs/guides/cron-troubleshooting#check-3-lock-contention).
+
+#### Debugging silent cron runs
+
+**Symptom:** Cron with `deliver=local` + `no_agent=true` produces zero output —
+no way to know if it ran or what it did.
+
+**Fix:** Check `$HERMES_HOME/kanban/logs/auto_unblock.log` for timestamped run
+summaries (written by `auto_unblock.sh` L93–95). Format:
+`[ISO timestamp] unblocked=N skipped=N errors=N stagger=S max_unblock=M`
+
+Use `tail -5 $HERMES_HOME/kanban/logs/auto_unblock.log` to verify recent activity,
+or `kanban_cron_monitor_log_fallback.sh` for automated monitoring.
+
 ### Cross-platform scripting (bash)
 
 All `.sh` scripts in `scripts/` must run on Linux, macOS, and Windows (Git Bash).

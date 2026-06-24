@@ -81,7 +81,7 @@ if [[ "$HEADLESS" == true && "$ACTION" == "create" ]]; then
   echo "[provision_kanban_crons] headless mode — cron jobs not created."
   echo "  Manual loop (from repo root):"
   echo "    while hermes kanban list 2>/dev/null | grep -qE '⊘|●|▶'; do"
-  echo "      bash ${HERMES_HOME}/scripts/auto_unblock.sh --stagger-sec \${KANBAN_UNBLOCK_STAGGER_SEC:-30}"
+  echo "      bash ${HERMES_HOME}/scripts/${AUTO_UNBLOCK_SCRIPT} --stagger-sec \${KANBAN_UNBLOCK_STAGGER_SEC:-30}"
   echo "      sleep 60"
   echo "    done"
   exit 0
