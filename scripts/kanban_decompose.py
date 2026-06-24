@@ -324,6 +324,11 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
                 # "worktree" alone is rejected by the dispatcher — must have :<path>.
                 # Use platform-appropriate temp dir (C:\Users\...\Temp on Windows, /tmp on Unix).
                 tmp = Path(tempfile.gettempdir()).as_posix()
+                # Guard: when gettempdir() returns MSYS-style /tmp/ on Windows,
+                # the Hermes dispatcher rejects it as non-absolute. Fall back to
+                # the Windows-native TEMP env var (C:/Users/.../AppData/Local/Temp).
+                if tmp == "/tmp" or tmp.startswith("/tmp/"):
+                    tmp = Path(os.environ.get("TEMP", os.environ.get("TMP", tmp))).as_posix()
                 workspace = f"worktree:{tmp}/wt-{plan_id}-{card_key}"
             branch = card.get("branch") or f"kanban/{plan_id}/{card_key}"
             cmd.extend(["--workspace", workspace])
