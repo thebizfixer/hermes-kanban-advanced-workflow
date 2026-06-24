@@ -19,7 +19,7 @@ _LIB = Path(__file__).resolve().parent / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
-from card_body import normalize_file_path  # noqa: E402
+from lib.card_body import normalize_file_path  # noqa: E402
 from plan_parse import (  # noqa: E402
     extract_optimization_section,
     find_backtick_file_refs,

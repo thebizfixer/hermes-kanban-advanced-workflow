@@ -25,7 +25,7 @@ from typing import List, Tuple, Optional
 _LIB = Path(__file__).resolve().parent / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
-from card_body import (  # noqa: E402
+from lib.card_body import (  # noqa: E402
     has_files_declaration,
     has_mode_declaration,
     is_verification_card,

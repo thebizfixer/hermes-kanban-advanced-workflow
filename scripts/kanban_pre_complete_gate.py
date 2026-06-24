@@ -12,7 +12,7 @@ _LIB = Path(__file__).resolve().parent / "lib"
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
 
-from card_body import is_verification_deploy, parse_card_body  # noqa: E402
+from lib.card_body import is_verification_deploy, parse_card_body  # noqa: E402
 from presentation_acceptance import verification_deploy_attested  # noqa: E402
 
 

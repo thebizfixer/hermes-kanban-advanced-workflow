@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from card_body import (
+from lib.card_body import (
     body_tests_valid,
     extract_tests_line,
     normalize_file_path,

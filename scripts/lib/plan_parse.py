@@ -11,7 +11,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from card_body import normalize_file_path, sanitize_tests_command  # noqa: E402
+from lib.card_body import normalize_file_path, sanitize_tests_command  # noqa: E402
 
 _CARD_HEADING_RE = re.compile(r"^#### (Card \d+.*?)$", re.MULTILINE)
 _CARD_ORDINAL_RE = re.compile(r"^#### Card (\d+)", re.MULTILINE)

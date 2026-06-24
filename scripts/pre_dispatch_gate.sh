@@ -90,7 +90,7 @@ check "plan_memory" \
   "test -f ${PLAN_MEMORY_PATH}/${PLAN_ID}.json"
 
 check "kanban_db" \
-  "python3 -c \"import sqlite3; db=sqlite3.connect('${HERMES_HOME}/kanban.db'); assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'\""
+  "python3 -c \"import sqlite3, os; db_path = os.path.join(os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')), 'kanban.db'); db=sqlite3.connect(db_path); assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'\" 2>/dev/null"
 
 if [[ -n "$PLAN_REL" && -f "${BUNDLE_PATH}/scripts/validate_card_bodies.py" ]]; then
   check "card_bodies_fidelity" \
@@ -101,7 +101,7 @@ elif [[ -n "$PLAN_ID" && -f "${BUNDLE_PATH}/scripts/validate_card_bodies.py" ]];
 fi
 
 check "cron_scripts" \
-  "test -x ${HERMES_HOME}/scripts/auto_unblock.sh && test -x ${HERMES_HOME}/scripts/board_keeper.sh && test -x ${HERMES_HOME}/scripts/worktree_setup.sh"
+  "python3 -c \"import os; hh=os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')); scripts=os.path.join(hh,'scripts'); exit(0 if all(os.path.isfile(os.path.join(scripts,f)) for f in ['auto_unblock.sh','board_keeper.sh','worktree_setup.sh']) else 1)\""
 
 check "cron_hermes_path" \
   "PATH=\"${HOME}/.local/bin:${PATH}\" command -v hermes >/dev/null 2>&1"

@@ -208,7 +208,7 @@ def collect_plan_files(plan_text: str) -> set[str]:
 
 def collect_card_surfaces(cards: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     """Map task_id -> parsed surfaces for done impl/remediation cards."""
-    from card_body import parse_card_body
+    from lib.card_body import parse_card_body
 
     out: dict[str, dict[str, Any]] = {}
     for card in cards:
@@ -253,7 +253,7 @@ def _path_cleared_by_prior_commit(
     Scans done cards whose Files: include path and reuses find_prior_commit (same helper
     as kanban_evaluation_chain.py step 1 / E001).
     """
-    from card_body import find_prior_commit
+    from lib.card_body import find_prior_commit
 
     norm = path.replace("\\", "/")
     search_base = _prior_commit_search_baseline(baseline)
@@ -373,7 +373,7 @@ def _check_verification_deploy_attestations(ctx: AuditContext) -> list[Violation
     """Fail when verification-deploy cards reached terminal state without card-attestation."""
     violations: list[Violation] = []
     try:
-        from card_body import is_verification_deploy, parse_card_body
+        from lib.card_body import is_verification_deploy, parse_card_body
         from presentation_acceptance import verification_deploy_attested
     except ImportError:
         return violations
@@ -536,7 +536,7 @@ def _check_plan_todo_drift(
         r"(deploy|verification-deploy)", fm, re.I
     ):
         try:
-            from card_body import is_verification_deploy, parse_card_body
+            from lib.card_body import is_verification_deploy, parse_card_body
             from presentation_acceptance import verification_deploy_attested
         except ImportError:
             return violations
