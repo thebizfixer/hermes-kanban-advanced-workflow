@@ -4,10 +4,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Callable
 
-from .file_text import read_utf8_text
+# Dual-path: support both `python3 plugin/script_materialize.py` (direct run)
+# and import under hermes_plugins namespace (plugin loader).
+if __name__ != "__main__":
+    from .file_text import read_utf8_text
+else:
+    _plugin_dir = str(Path(__file__).resolve().parent.parent)
+    if _plugin_dir not in sys.path:
+        sys.path.insert(0, _plugin_dir)
+    from plugin.file_text import read_utf8_text
 
 MANIFEST_FILENAME = ".materialize-manifest.json"
 
