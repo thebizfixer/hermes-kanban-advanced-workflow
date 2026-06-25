@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from plugin.config_overlay import read_overlay_config, resolve_hermes_home
+from .config_overlay import read_overlay_config, resolve_hermes_home
 
 WORKTREE_INCLUDE_FILENAME = ".worktreeinclude"
 

@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from plugin.file_text import read_utf8_text
+from .file_text import read_utf8_text
 
 MANIFEST_FILENAME = ".materialize-manifest.json"
 
@@ -29,6 +29,7 @@ HERMES_SCRIPT_NAMES = (
     "install_pre_commit_hook.sh",
     "dashboard_server.py",
     "dashboard_server_keepalive.sh",
+    "dashboard_server_keepalive.py",
 )
 
 LIB_SCRIPT_NAMES = (

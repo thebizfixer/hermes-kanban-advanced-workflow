@@ -52,10 +52,7 @@ def _repo_root() -> Path | None:
 
 def _trigger_event_driven_unblock() -> None:
     """Fire auto_unblock after kanban_complete (complements 1m cron). Fail silently."""
-    try:
-        from plugin.hermes_gateway_home import resolve_gateway_hermes_home
-    except ImportError:
-        from hermes_gateway_home import resolve_gateway_hermes_home  # type: ignore
+    from .hermes_gateway_home import resolve_gateway_hermes_home
 
     hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
     gateway_home = resolve_gateway_hermes_home(hermes_home)

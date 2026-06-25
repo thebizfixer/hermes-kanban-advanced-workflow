@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from plugin.coding_agent_env import (
+from .coding_agent_env import (
     AUTH_PROFILES,
     audit_coding_agent_prerequisites,
     describe_prerequisite_issues,
@@ -476,7 +476,7 @@ def list_models_for_binary(
             {"id": CODING_AGENT_MODEL_AUTO, "label": "Auto (profile config)"}
         ]
         try:
-            from plugin.hermes_model_config import read_active_model_config
+            from .hermes_model_config import read_active_model_config
 
             cfg = read_active_model_config(run, binary, timeout=15)
             if cfg.get("default"):

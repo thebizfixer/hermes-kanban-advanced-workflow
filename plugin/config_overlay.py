@@ -463,7 +463,7 @@ def resolve_notify_deliver(
     hermes_home: Path | str | None = None,
 ) -> str:
     """Overlay notify_deliver → cron.default_deliver → single home → all."""
-    from plugin.hermes_notify_deliver import resolve_notify_deliver as _resolve
+    from .hermes_notify_deliver import resolve_notify_deliver as _resolve
 
     home = str(hermes_home) if hermes_home is not None else None
     return _resolve(project_root, hermes_home=home)
@@ -527,7 +527,7 @@ def sync_dispatch_runtime_env(
     env: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Persist HOME (and related) so gateway workers can resolve CLI credentials."""
-    from plugin.coding_agent_env import dispatch_runtime_env_updates
+    from .coding_agent_env import dispatch_runtime_env_updates
 
     updates = dispatch_runtime_env_updates(env)
     if updates:
@@ -593,7 +593,7 @@ def resolve_coding_agent_model(
     coding_agent_model: str | None = None,
     env: dict[str, str] | None = None,
 ) -> str:
-    from plugin.coding_agent import normalize_coding_agent_model
+    from .coding_agent import normalize_coding_agent_model
 
     if coding_agent_model is not None:
         return normalize_coding_agent_model(coding_agent_model)
@@ -622,7 +622,7 @@ def build_overlay_yaml(
     project_root: Path | None = None,
 ) -> str:
     """Build overlay YAML, preserving user keys not managed by init/save."""
-    from plugin.coding_agent import normalize_coding_agent_model
+    from .coding_agent import normalize_coding_agent_model
 
     existing = dict(existing or {})
     worker_profile, orchestrator_profile, preflight_profiles = resolve_dispatch_profiles(
