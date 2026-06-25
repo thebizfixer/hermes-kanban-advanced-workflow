@@ -20,6 +20,7 @@ _AGENT_FIELD_RE = re.compile(
     r"^(Call-sites|Acceptance|Spec|Forbidden):\s*(.*)$",
     re.MULTILINE | re.IGNORECASE,
 )
+_CARD_BRANCH_RE = re.compile(r"\{card(\d+)-branch\}", re.IGNORECASE)
 
 
 def normalize_parent_key(ref: str) -> str:
@@ -117,6 +118,20 @@ def _matrix_items(matrix: dict[str, Any], card_key: str) -> list[str]:
     return []
 
 
+def _substitute_card_branches(text: str, plan_id: str, all_card_keys: set[str]) -> str:
+    """Replace {cardN-branch} placeholders with actual branch names."""
+    if not text or "{card" not in text:
+        return text
+
+    def _replacer(m: re.Match) -> str:
+        key = f"card{m.group(1)}"
+        if key in all_card_keys:
+            return f"kanban/{plan_id}/{key}"
+        return m.group(0)
+
+    return _CARD_BRANCH_RE.sub(_replacer, text)
+
+
 def stamp_impl_card(
     card: dict[str, Any],
     *,
@@ -124,6 +139,7 @@ def stamp_impl_card(
     plan_file_rel: str = "",
     acceptance_matrix: dict[str, list[str]] | None = None,
     wave_baseline: str = "",
+    all_card_keys: set[str] | None = None,
 ) -> None:
     """Mutate card body with decomposition auto-stamps (idempotent)."""
     if card.get("type") not in ("code-gen", "verification", "manual"):
@@ -171,9 +187,17 @@ def stamp_impl_card(
         if "Wave-baseline:" not in body:
             stamps.append(f"Wave-baseline: {wave_baseline}")
 
-    if not stamps:
-        return
-    card["body"] = "\n".join(stamps) + "\n\n" + body
+    if stamps:
+        body = "\n".join(stamps) + "\n\n" + body
+
+    # Substitute {cardN-branch} placeholders in body and agent_body
+    if all_card_keys and ("{card" in body or "{card" in agent):
+        body = _substitute_card_branches(body, plan_id, all_card_keys)
+        agent = _substitute_card_branches(agent, plan_id, all_card_keys)
+
+    card["body"] = body
+    if agent:
+        card["agent_body"] = agent
 
 
 def stamp_all_impl_cards(
@@ -185,6 +209,7 @@ def stamp_all_impl_cards(
     wave_baseline: str = "",
 ) -> None:
     matrix = load_acceptance_matrix(plan_path)
+    all_card_keys = {c["key"] for c in cards if c.get("key") and c.get("type") not in ("gate", "root", "audit")}
     for card in cards:
         if card.get("type") in ("gate", "root", "audit"):
             continue
@@ -194,4 +219,5 @@ def stamp_all_impl_cards(
             plan_file_rel=plan_file_rel,
             acceptance_matrix=matrix,
             wave_baseline=wave_baseline,
+            all_card_keys=all_card_keys,
         )

@@ -111,6 +111,30 @@ todos:
   - id: card-5-verify
     content: "Verification card: run test suite, check token log exists, confirm all artifacts"
     status: pending
+acceptance_matrix:
+  card1:
+    - "test-plan/scripts/smoke_utils.py exists with greet(), add(), format_name()"
+    - "assert greet() == 'hello from kanban'"
+    - "assert add(2,3) == 5"
+    - "assert format_name('Jane','Doe') == 'Doe, Jane'"
+  card2:
+    - "pytest test-plan/scripts/test_smoke_utils.py passes all 6 tests"
+    - "test_add_positive, test_add_negative, test_add_zero pass"
+    - "test_format_name_standard, test_format_name_single pass"
+  card3:
+    - "multiply(3,4) == 12"
+    - "pytest passes all tests including test_multiply_positive and test_multiply_zero"
+    - "Existing functions greet/add/format_name unchanged"
+  card4:
+    - "Module docstring added to smoke_utils.py"
+    - "E002_UNLISTED_FILE_CHANGE triggered for _smoke_scratchpad.md"
+    - "Unlisted file auto-reverted or card blocked (both valid outcomes)"
+  card5:
+    - "Full test suite passes: pytest test-plan/scripts/test_smoke_utils.py -v"
+    - "Token report runs: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test"
+    - "Postmortem generated: .hermes/kanban/reports/kanban-standard-smoke-test_postmortem_*.md"
+    - "KPI artifacts exist: .hermes/kanban/reports/kanban-standard-smoke-test_kpi.json"
+    - "Reconciliation report confirms >=80% success rate"
 ---
 
 # Kanban Standard Smoke Test
@@ -360,6 +384,48 @@ Mode: read-only
 ```
 
 > **Operator note:** Steps 1–4 in Acceptance are manual — run after the test suite passes and all cards complete. These produce the postmortem and KPI artifacts that confirm the smoke test succeeded.
+
+---
+
+## Gate Hardening
+
+### Gate 1 — Preflight & Attestation
+
+**Purpose:** Verify all infrastructure is healthy before decomposition. Run from the default profile.
+
+**Files:** None (read-only checks)
+
+```agent
+agent -p "Run the kanban-advanced preflight checklist and attest readiness.
+plan_id: kanban-standard-smoke-test
+Mode: read-only
+Spec:
+- 1. Verify environment: echo HERMES_HOME=$HERMES_HOME && ls $HERMES_HOME
+- 2. Verify profiles exist: hermes profile list (must show 'worker' and 'orchestrator')
+- 3. Verify required scripts: ls scripts/kanban_decompose.py scripts/kanban_handoff.py scripts/provision_kanban_crons.sh scripts/kanban_evaluation_chain.py scripts/hermes_token_meter.py
+- 4. Verify coding agent configured: grep coding_agent_binary .hermes/kanban-overrides/kanban-config.yaml
+- 5. Verify gateway running: hermes kanban list 2>&1 | head -5 (must not show 'gateway not running')
+- 6. Verify token tracker: python3 -c 'import sys; sys.path.insert(0, \"scripts\"); from hermes_token_meter import snapshot; print(snapshot())' 2>&1
+- 7. Verify DB integrity: ls $HERMES_HOME/kanban.db && hermes kanban list 2>&1 | head -3
+- 8. Verify .gitignore covers test artifacts: grep -q 'test-plan/scripts/' .gitignore && echo 'gitignore OK'
+Forbidden: no file modifications, no card creation, no decomposition
+Acceptance:
+- Done when: all 8 checks pass without errors
+- If any check fails, halt and fix before proceeding
+Self-audit: confirm each check passed; report any failures
+Tests: N/A (read-only verification)
+Commit: N/A (verification only)
+Diff cap: N/A (no code changes)"
+```
+
+**Gate Verification:**
+
+```bash
+# After the gate completes, confirm:
+# - All 8 checks returned success
+# - No errors in output
+# - Proceed to Kanban optimization / decompose only after all pass
+```
 
 ---
 
