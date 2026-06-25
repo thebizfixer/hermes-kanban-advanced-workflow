@@ -23,3 +23,5 @@ Session-level standing goals (CLI and gateway): `/goal <text>`, `/goal status`, 
 After SQLite `torn-extend` errors: `hermes gateway restart`, then re-run preflight DB integrity.
 
 Upgrade Hermes before bumping `bundle_version` in your overlay.
+
+> See also: [hermes-v0.17.0-upgrade.md](hermes-v0.17.0-upgrade.md) for breaking changes in the namespace-based plugin loader, `send_message` removal, and new kanban defaults.

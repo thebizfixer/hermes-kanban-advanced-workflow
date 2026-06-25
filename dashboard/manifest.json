@@ -3,7 +3,7 @@
   "label": "Kanban-Advanced",
   "description": "Multi-agent governance workflow — configure profiles, coding agent, and cron scripts",
   "icon": "Layers",
-  "version": "1.0.0",
+  "version": "0.9.0",
   "tab": {
     "path": "/kanban-advanced",
     "position": "after:skills"

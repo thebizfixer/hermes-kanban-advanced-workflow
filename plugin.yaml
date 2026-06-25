@@ -1,5 +1,5 @@
 name: kanban-advanced
-version: 1.0.0
+version: 0.9.0
 description: Multi-agent kanban workflow for Hermes Agent — decompose plans, dispatch workers, govern execution
 author: thebizfixer
 requires_env: []

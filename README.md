@@ -1,7 +1,15 @@
 # Advanced Kanban Workflow for Hermes Agent
 
+> ⚠️ **Development status:** This plugin is under active development and testing.
+> **Hermes v0.17.0 compatibility:** The plugin CLI (`hermes kanban-advanced`)
+> does not load under v0.17.0 due to a namespace-loading change in Hermes's
+> plugin architecture. A fix is in progress (9 internal imports need conversion
+> from absolute to relative). The dashboard sidecar, kanban board, and wave
+> crons continue to function. Tracked in
+> [hermes-v0.17.0-upgrade.md](plugin/data/references/hermes-v0.17.0-upgrade.md).
+
 **Repository:** [github.com/thebizfixer/hermes-kanban-advanced-workflow](https://github.com/thebizfixer/hermes-kanban-advanced-workflow)  
-**Version:** 1.0.0 · **Requires:** Python 3.12+, Hermes Agent ≥ 0.16.0 (tested on 0.17.0)  
+**Version:** 0.9.0 · **Requires:** Python 3.12+, Hermes Agent ≥ 0.16.0 (tested on 0.17.0)  
 **Platforms:** Linux · macOS · Windows (native + WSL)
 
 A six-sigma multi-agent workflow packaged as a Hermes Agent plugin, with deterministic governance gates (AGT + AEP patterns). Environment and model agnostic.
