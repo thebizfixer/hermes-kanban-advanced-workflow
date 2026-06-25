@@ -1048,6 +1048,8 @@ if __name__ == "__main__":
     parser.add_argument("--lattice-memory", default="", help="Path to lattice memory JSON")
     parser.add_argument("--registry", default="", help="Path to error-codes.yaml")
     parser.add_argument("--card-body", default="", help="Card body text (or read from stdin)")
+    parser.add_argument("--check-only", action="store_true",
+        help="Run checks without calling kanban block/complete. Exit 0 on pass, 1 on fail.")
     args = parser.parse_args()
 
     # Resolve paths
@@ -1098,16 +1100,28 @@ if __name__ == "__main__":
 
     if passed:
         print(f"[chain] ALLOW — {reason}")
-        subprocess.run(["hermes", "kanban", "complete", args.task_id, reason])
+        if not args.check_only:
+            subprocess.run(
+                ["hermes", "kanban", "complete", args.task_id, "--summary", reason],
+                timeout=30,
+                check=False,
+                capture_output=True,
+            )
         sys.exit(0)
     else:
         print(f"[chain] DENY — {reason}")
-        subprocess.run(["hermes", "kanban", "block", args.task_id, reason])
-        if should_notify_operator(profile):
-            emit_strict_notification(
-                task_id=args.task_id,
-                reason=reason,
-                failure_class="evaluation_chain",
-                repo_root=args.workspace,
+        if not args.check_only:
+            subprocess.run(
+                ["hermes", "kanban", "block", args.task_id, reason],
+                timeout=30,
+                check=False,
+                capture_output=True,
             )
+            if should_notify_operator(profile):
+                emit_strict_notification(
+                    task_id=args.task_id,
+                    reason=reason,
+                    failure_class="evaluation_chain",
+                    repo_root=args.workspace,
+                )
         sys.exit(1)
