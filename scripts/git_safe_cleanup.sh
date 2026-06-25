@@ -56,12 +56,14 @@ fi
 MODE="audit"
 DRY_RUN=false
 STAGING_BRANCH="$WORKING_BRANCH"
+PLAN_ID=""
 WORKTREE_PATTERN="${KANBAN_WORKTREE_PATTERN:-/tmp/wt-*}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --audit) MODE="audit"; shift ;;
         --clean) MODE="clean"; shift ;;
+        --plan-id) PLAN_ID="${2:-}"; shift 2 ;;
         --dry-run) DRY_RUN=true; shift ;;
         --staging) STAGING_BRANCH="$2"; shift 2 ;;
         *) echo "Unknown flag: $1"; exit 3 ;;
@@ -70,6 +72,9 @@ done
 
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
 cd "$REPO_ROOT"
+
+# Filter worktree pattern by plan_id for multi-board isolation
+[[ -n "$PLAN_ID" ]] && WORKTREE_PATTERN="/tmp/wt-${PLAN_ID}-*"
 
 red()    { echo -e "\033[31m$*\033[0m"; }
 yellow() { echo -e "\033[33m$*\033[0m"; }
