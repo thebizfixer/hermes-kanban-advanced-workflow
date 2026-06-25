@@ -76,12 +76,14 @@ fi
 INTEGRATION_BRANCH="$WORKING_BRANCH"
 CONFIG_FILE="$CONFIG_FILE"
 DRY_RUN=false
-[[ "${1:-}" == "--dry-run" ]] && DRY_RUN=true
+PLAN_ID=""
+[[ "${1:-}" == "--dry-run" ]] && { DRY_RUN=true; shift; }
+[[ "${1:-}" == "--plan-id" ]] && { PLAN_ID="${2:-}"; shift 2; }
 
 # Single-instance guard — skip overlapping ticks (#30908 SQLite write pressure).
 LOCK_DIR="$(kanban_logs_dir "$REPO_ROOT")"
 mkdir -p "$LOCK_DIR"
-KEEPER_LOCK="${LOCK_DIR}/board_keeper.lock"
+KEEPER_LOCK="${LOCK_DIR}/board_keeper${PLAN_ID:+_$PLAN_ID}.lock"
 exec 9>"$KEEPER_LOCK"
 if ! flock -n 9; then
   echo "board_keeper: previous tick still running — skipping"
