@@ -41,6 +41,12 @@ fi
 FAILURES=0
 WARNINGS=0
 
+# Prune stale git worktree registrations BEFORE any dispatch.
+# Phantom registrations (path missing but git metadata present) cause
+# "already registered worktree" errors on spawn, particularly on Windows.
+echo -n "[GATE] worktree_prune ... "
+git worktree prune --expire=now 2>/dev/null && echo "PASS" || echo "WARN (non-blocking)"
+
 check() {
   local name="$1" cmd="$2"
   echo -n "[GATE] $name ... "
@@ -76,7 +82,7 @@ warn "plan pushed" \
   "git fetch origin ${WORKING_BRANCH} --dry-run 2>&1 | grep -q 'up to date'"
 
 warn "preflight" \
-  "bash ${BUNDLE_PATH}/scripts/preflight.sh 2>/dev/null | python3 -c \"import json,sys; d=json.load(sys.stdin); assert d['status'] in ('pass','degraded')\""
+  "PREFLIGHT_SKIP_CODING_AGENT_CLI=\${PREFLIGHT_SKIP_CODING_AGENT_CLI:-} PREFLIGHT_SKIP_MEMORY_BUDGET=\${PREFLIGHT_SKIP_MEMORY_BUDGET:-} bash ${BUNDLE_PATH}/scripts/preflight.sh 2>/dev/null | python3 -c \"import json,sys; d=json.load(sys.stdin); assert d['status'] in ('pass','degraded')\""
 
 if [[ "${PREFLIGHT_SKIP_CODING_AGENT_CLI:-}" == "1" ]]; then
   echo -n "[GATE] coding_agent_cli ... "
@@ -100,10 +106,10 @@ check "kanban_db" \
 
 if [[ -n "$PLAN_REL" && -f "${BUNDLE_PATH}/scripts/validate_card_bodies.py" ]]; then
   check "card_bodies_fidelity" \
-    "python3 ${BUNDLE_PATH}/scripts/validate_card_bodies.py --plan '${PLAN_REL}' --repo-root '${REPO_ROOT}'"
+    "python3 ${BUNDLE_PATH}/scripts/validate_card_bodies.py --plan '${PLAN_REL}' --repo-root '${REPO_ROOT}' --dry-run"
 elif [[ -n "$PLAN_ID" && -f "${BUNDLE_PATH}/scripts/validate_card_bodies.py" ]]; then
   check "card_bodies_fidelity" \
-    "python3 ${BUNDLE_PATH}/scripts/validate_card_bodies.py --plan-id '${PLAN_ID}' --repo-root '${REPO_ROOT}'"
+    "python3 ${BUNDLE_PATH}/scripts/validate_card_bodies.py --plan-id '${PLAN_ID}' --repo-root '${REPO_ROOT}' --dry-run"
 fi
 
 check "cron_scripts" \

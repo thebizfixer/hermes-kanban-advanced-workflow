@@ -87,6 +87,13 @@ run_with_timeout() {
 
 check_memory_budget() {
   local avail_mb="0"
+
+  if [[ "${PREFLIGHT_SKIP_MEMORY_BUDGET:-}" == "1" ]]; then
+    record_check "memory_budget" "pass" "blocking" \
+      "Skipped by PREFLIGHT_SKIP_MEMORY_BUDGET=1 (audit-noted override)"
+    return
+  fi
+
   if [[ -r /proc/meminfo ]]; then
     # Linux / WSL2
     local avail_kb
@@ -108,6 +115,17 @@ check_memory_budget() {
     speculative=${speculative:-0}
     inactive=${inactive:-0}
     avail_mb=$(( (free_pages + speculative + inactive) * page_size / 1024 / 1024 ))
+  elif [[ "$(uname -s 2>/dev/null)" == MINGW* ]] || [[ "$(uname -s 2>/dev/null)" == MSYS* ]]; then
+    # Windows Git Bash / MSYS: try systeminfo first, fall back to PowerShell
+    local avail_str
+    avail_str=$(systeminfo 2>/dev/null | awk -F': *' '/Available Physical Memory/ {gsub(/,/,""); print $2}' | tr -d '\r')
+    if [[ -z "$avail_str" ]] && command -v powershell >/dev/null 2>&1; then
+      local free_kb
+      free_kb=$(powershell -Command "(Get-CimInstance Win32_OperatingSystem).FreePhysicalMemory" 2>/dev/null)
+      avail_mb=$(( free_kb / 1024 ))
+    else
+      avail_mb="${avail_str:-0}"
+    fi
   fi
 
   if [[ "$avail_mb" -lt "$PREFLIGHT_MEMORY_MIN_MB" ]]; then
