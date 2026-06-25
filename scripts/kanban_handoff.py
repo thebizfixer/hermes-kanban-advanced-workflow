@@ -793,9 +793,22 @@ Crons were provisioned in the **default profile session** before this handoff wa
 (`cron_provision: {cron_provision}`). **Do not run `--create` unless `--check` fails.**
 
 ```bash
-hermes kanban create "Gate — {plan_id}" --assignee {orchestrator_profile} --body "{gate_body_escaped}"
-# note the gate_id printed above, then:
-hermes kanban block <gate_id> "Gate — awaiting links"
+# Idempotency: reuse existing gate for this plan_id (re-spawn guard)
+GATE_ID=$(hermes kanban list 2>/dev/null | while IFS= read -r line; do
+  tid=$(echo "$line" | awk '{{print $1}}')
+  [[ "$tid" == t_* ]] || continue
+  hermes kanban show "$tid" 2>/dev/null | grep -qF "plan_id: {plan_id}" && echo "$tid" && break
+done)
+if [[ -z "$GATE_ID" ]]; then
+  hermes kanban create "Gate — {plan_id}" --assignee {orchestrator_profile} --body "{gate_body_escaped}"
+  GATE_ID=$(hermes kanban list 2>/dev/null | while IFS= read -r line; do
+    tid=$(echo "$line" | awk '{{print $1}}')
+    [[ "$tid" == t_* ]] || continue
+    hermes kanban show "$tid" 2>/dev/null | grep -qF "plan_id: {plan_id}" && echo "$tid" && break
+  done)
+fi
+echo "Gate: $GATE_ID"
+hermes kanban block "$GATE_ID" "Gate — awaiting links"
 bash {bundle}/scripts/provision_kanban_crons.sh --check
 ```
 

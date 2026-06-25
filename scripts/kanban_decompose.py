@@ -770,14 +770,17 @@ def main():
         if not child_id:
             continue
 
-        # 3a: Link to gate (all cards depend on gate)
-        link_key = f"gate->{card['key']}"
-        if card["key"] != "gate" and gate_id and link_key not in seen_links:
-            if link_cards(gate_id, child_id, args.dry_run):
-                seen_links.add(link_key)
-                links_created += 1
-                if not args.dry_run:
-                    print(f"  gate -> {card['key']}")
+        # 3a: Link to gate — only for first card in wave chain (no wave_parent).
+        # Linking all cards to gate causes Hermes to promote them all when gate
+        # completes, bypassing the serial wave_parent chain.
+        if not card.get("wave_parent"):
+            link_key = f"gate->{card['key']}"
+            if card["key"] != "gate" and gate_id and link_key not in seen_links:
+                if link_cards(gate_id, child_id, args.dry_run):
+                    seen_links.add(link_key)
+                    links_created += 1
+                    if not args.dry_run:
+                        print(f"  gate -> {card['key']}")
 
         # 3b: Link to wave parent
         wp = card.get("wave_parent")

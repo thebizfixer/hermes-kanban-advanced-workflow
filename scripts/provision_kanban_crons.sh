@@ -238,11 +238,11 @@ case "$ACTION" in
     if _notify_lifecycle_enabled; then
       LIFECYCLE_DELIVER="$(bash "$SCRIPT_DIR/lib/resolve_notify_deliver.sh" "$REPO_ROOT")"
     fi
-    auto_id="$(_create_job "every 1m" "$AUTO_UNBLOCK_NAME" "$AUTO_UNBLOCK_SCRIPT" local)"
-    keeper_id="$(_create_job "every 3m" "$BOARD_KEEPER_NAME" "$BOARD_KEEPER_SCRIPT" local)"
+    auto_id="$(_create_job "every 1m" "$AUTO_UNBLOCK_NAME" "$AUTO_UNBLOCK_SCRIPT" local "--workdir $WORKDIR")"
+    keeper_id="$(_create_job "every 3m" "$BOARD_KEEPER_NAME" "$BOARD_KEEPER_SCRIPT" local "--workdir $WORKDIR")"
     lifecycle_id=""
     if _notify_lifecycle_enabled; then
-      lifecycle_id="$(_create_job "every 5m" "$LIFECYCLE_NOTIFY_NAME" "$LIFECYCLE_SCRIPT" "$LIFECYCLE_DELIVER")"
+      lifecycle_id="$(_create_job "every 5m" "$LIFECYCLE_NOTIFY_NAME" "$LIFECYCLE_SCRIPT" "$LIFECYCLE_DELIVER" "--workdir $WORKDIR")"
       if [[ -n "$PLAN_ID" && "$DRY_RUN" != true ]]; then
         mkdir -p "$REPO_ROOT/.hermes/kanban/logs"
         printf '%s\n' "$PLAN_ID" > "$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id"
