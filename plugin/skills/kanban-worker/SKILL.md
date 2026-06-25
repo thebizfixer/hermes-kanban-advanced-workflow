@@ -24,7 +24,7 @@ metadata:
 >
 > If you find yourself typing code, editing a file, or implementing anything — **stop**. Extract the `agent -p` block and dispatch it instead. The worker session exists to orchestrate and verify, not to produce output.
 
-> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E021, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. On DENY or block → `skill_view("kanban-advanced:kanban-worker-governance")` then `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` — do not guess.
+> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E023, card body policy P001–P009, preflight.sh, validate_board.sh) structurally enforces them. On DENY or block → `skill_view("kanban-advanced:kanban-worker-governance")` then `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` — do not guess.
 
 ## When worker hits a problem (load in order)
 
@@ -646,7 +646,7 @@ Workers waste 5–8 minutes per task running identical pre-flight checks. Use th
 - Never push to `${working_branch}` — commit to worktree branch only.
 - `git reset --hard` destroys plan files — restore with `git checkout ${working_branch} -- .hermes/kanban/plans/`.
 - Agent `-p` is for code generation only — pipeline execution uses terminal commands.
-- Never call `kanban_complete` directly — always run the evaluation chain (E001–E021).
+- Never call `kanban_complete` directly — always run the evaluation chain (E001–E023).
 - Cursor `[unauthenticated]` in logs is cosmetic — use Step 3 `coding_agent_invoke.sh smoke` for auth.
 - `CURSOR_API_KEY` is a decoy env var — Cursor CLI uses OAuth in `~/.config/cursor/auth.json`.
 - Pre-create `.workspace-trusted` before spawning agent in `/tmp` worktrees.

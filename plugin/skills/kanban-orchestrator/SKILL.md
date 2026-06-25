@@ -10,7 +10,7 @@ metadata:
 
 # Kanban Orchestrator — Decomposition Playbook
 
-> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E021, card body policy P001–P009, preflight.sh, validate_board.sh, pre_dispatch_gate.sh) structurally enforces them. If you hit a DENY or block, load `kanban-advanced:kanban-orchestrator-governance` then `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` — do not guess.
+> **Governance notice:** This skill sets procedural expectations. The governance layer (evaluation chain E001–E023, card body policy P001–P009, preflight.sh, validate_board.sh, pre_dispatch_gate.sh) structurally enforces them. If you hit a DENY or block, load `kanban-advanced:kanban-orchestrator-governance` then `skill_view("kanban-advanced:kanban-advanced", "references/in-flight-governance-index.md")` — do not guess.
 
 > The core worker lifecycle (including the `kanban_create` fan-out pattern and the "decompose, don't execute" rule) is auto-injected into every kanban process via the `KANBAN_GUIDANCE` system-prompt block. This skill is the deeper playbook when you're an orchestrator profile whose whole job is routing.
 
@@ -591,7 +591,7 @@ Coding agent fails
         ▼
 2nd resort: WORKER IMPLEMENTS DIRECTLY
    Worker writes the code, runs tests, commits, and runs the FULL
-   evaluation chain (E001–E021). Worker plays both roles: implementer
+   evaluation chain (E001–E023). Worker plays both roles: implementer
    and verifier.
    ✓ Eval chain still runs — log tokens with source="worker-direct".
         │ (if worker cannot implement — wrong skill set, infra-only)
@@ -844,7 +844,7 @@ When a card hits the iteration limit but completed its extraction work, the orch
 
 ## Pitfalls
 
-> **Full pitfall encyclopedia → `kanban-advanced:kanban-orchestrator-governance`.** The evaluation chain (E001–E021) and card body policy (P001–P009) structurally enforce the most critical rules. Load the governance reference skill when you need detailed diagnostics and historical context for a specific pitfall.
+> **Full pitfall encyclopedia → `kanban-advanced:kanban-orchestrator-governance`.** The evaluation chain (E001–E023) and card body policy (P001–P009) structurally enforce the most critical rules. Load the governance reference skill when you need detailed diagnostics and historical context for a specific pitfall.
 
 **Key procedural pitfalls (see governance ref for full context):**
 - `auto_decompose: true` creates duplicate children — set to `false`.
@@ -853,5 +853,5 @@ When a card hits the iteration limit but completed its extraction work, the orch
 - Iteration-limit blocked cards often have committed work — salvage, don't re-dispatch.
 - Workspace paths must be absolute and unique (`worktree:/tmp/wt-<plan>-<card>`).
 - Cherry-pick without `-x` breaks traceability — always use `-x`.
-- Never complete a card without running the evaluation chain (E001–E021).
+- Never complete a card without running the evaluation chain (E001–E023).
 - **Canonical-first rule:** edit canonical source → `provision.sh` → `provision.sh --check`.

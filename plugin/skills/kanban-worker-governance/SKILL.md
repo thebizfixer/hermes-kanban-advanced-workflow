@@ -1,6 +1,6 @@
 ---
 name: kanban-worker-governance
-description: Load when a worker hits evaluation-chain DENY, E-code block, or auth/smoke failure. Error codes E001–E021, worktree quick rows, recover.py — not happy-path steps.
+description: Load when a worker hits evaluation-chain DENY, E-code block, or auth/smoke failure. Error codes E001–E023, worktree quick rows, recover.py — not happy-path steps.
 version: 1.1.0
 metadata:
   hermes:
@@ -31,7 +31,7 @@ metadata:
 | plan missing in WT | T1 | `git checkout origin/${working_branch} -- .hermes/kanban/plans/*{plan_id}*` | `read_file` / cat plan section |
 | `.env` / venv missing | T3 | Operator adds to `.worktreeinclude` | `E003`/`E015` clear after provision |
 
-## Error codes E001–E021
+## Error codes E001–E023
 
 Canonical: `plugin/data/registry/error-codes.yaml`. **Tier:** T1=self-serve BB | T2=MBB | T3=Operator.
 

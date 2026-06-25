@@ -1,14 +1,18 @@
 ---
 name: Kanban Standard Smoke Test
 plan_id: kanban-standard-smoke-test
-line_budget: 110
+line_budget: 145
 overview: >
-  Standardized end-to-end validation test for the kanban-advanced plugin.
-  Verifies card body parsing, coding-agent dispatch, eval chain governance
-  (E001–E023), token logging (E018/E020), postmortem generation, and
-  reconciliation. Ships with the plugin as a self-diagnostic for new
-  installations. Produces example postmortem/KPI artifacts demonstrating
-  post-execution success.
+  End-to-end autonomous-operation validation for the kanban-advanced plugin
+  on vanilla Hermes Agent kanban.  Verifies: handoff → preflight gate →
+  decompose → dispatch → worker execution → eval-chain governance (E001–E023)
+  → TWO-LAYER autonomous error recovery (Card 4: E002 auto-revert at the
+  worker level; Card 5 + final-audit: remediation-card loop at the
+  orchestrator level) → postmortem generation.  The smoke test PASSES when
+  all five cards complete (or Card 4 blocks on E002) with zero manual
+  intervention and a postmortem is produced.  It FAILS if any card requires
+  manual unblock, manual completion, or human triage — signalling the plugin
+  needs hardening before it can run unattended.
 isProject: false
 optimization_checklist:
   agent_blocks_present: pass
@@ -32,10 +36,11 @@ optimization_checklist:
   multi_parent_cap: pass
   spec_precision: pass
   markup_safe_placeholders: pass
-  contracts_block: pass
   plan_memory_seed: pass
+  platform_neutrality_acceptance: pass
+  files_completeness: pass
 prior_run_learnings:
-  note: "Fresh smoke test — no prior runs. This plan ships with the plugin as a self-diagnostic for new installations."
+  note: "Fresh smoke test aligned with orchestrator v5.5.1 / planning v5.5.0 / hermes v0.17.0. Prior runs exercised basic dispatch but lacked autonomous-recovery coverage (final-audit remediation loop) and used a manual agent-block preflight instead of preflight.sh + pre_dispatch_gate.sh."
 contingencies:
   - risk: "Coding agent not configured (KANBAN_CODING_AGENT unset or binary missing)"
     probability: High
@@ -45,71 +50,53 @@ contingencies:
   - risk: "Coding agent auth failure (OAuth expired / API key missing)"
     probability: Medium
     impact: BLOCKING
-    mitigation: "Authenticate coding CLI per `plugin/data/references/coding-agent-auth.md`. Re-run preflight after auth fix."
+    mitigation: "Authenticate coding CLI per `plugin/data/references/coding-agent-auth.md`. Re-run pre_dispatch_gate.sh after auth fix."
     auto_retry: false
-  - risk: "Token tracker unavailable (scripts/token_tracker.py not provisioned)"
-    probability: Low
+  - risk: "Gateway not running (dispatcher won't claim cards)"
+    probability: Medium
     impact: BLOCKING
-    mitigation: "Re-run `hermes kanban-advanced init` or `Update Plugin` to provision token_tracker.py."
+    mitigation: "Start gateway: `hermes gateway run`. Verify: `hermes kanban list` shows cards. The pre_dispatch_gate.sh warns on this."
     auto_retry: false
-  - risk: "Eval chain script missing (scripts/kanban_evaluation_chain.py not found)"
-    probability: Low
-    impact: BLOCKING
-    mitigation: "Run `Update Plugin` to restore scripts. Verify with: ls scripts/kanban_evaluation_chain.py"
-    auto_retry: false
-  - risk: "E002 unlisted changes blocks Card 4 (negative test — expected behavior)"
+  - risk: "E002 unlisted file auto-revert fails → card blocks (acceptable — governance gate is working; Card 4 validates either outcome)"
     probability: Expected
     impact: DEGRADED
-    mitigation: "Card 4 intentionally creates a file outside Files: scope. Verify the block message contains E002_UNLISTED_FILE_CHANGE. Archive the blocked card — this confirms the governance gate works."
+    mitigation: "Archive the blocked Card 4. The E002 gate is proven operational. Card 5 still runs and the smoke test still passes."
     auto_retry: false
-  - risk: "E020/E018 token logging blocked — coding agent produces no JSON usage block (aider only; hermes now uses authoritative insights metering via hermes_token_meter.py + E018 accepts hermes_insights source)"
-    probability: Medium
-    impact: BLOCKING
-    mitigation: "For hermes: hermes_token_meter.py snapshots insights before dispatch and computes deltas after — no JSON output needed. For aider: character-count estimation via Tier 3. For JSON-output agents (Cursor, Claude Code, Codex): capture agent stdout to /tmp/agent_output_{task_id}.json with usage block. See § Token Logging below for tier details."
-    auto_retry: false
-  - risk: "Gateway not running (dispatcher won't pick up cards)"
-    probability: Medium
-    impact: BLOCKING
-    mitigation: "Start gateway: `hermes gateway run` (or Windows scheduled task). Verify: `hermes kanban list` shows cards."
-    auto_retry: false
-  - risk: "Subagent gate interrupted (parallel subagents crash mid-exec)"
-    probability: Medium
-    impact: BLOCKING
-    mitigation: "Known infrastructure issue — delegation subagents may be interrupted. Fall back to serial gate: set `subagent_gate: false` in kanban-config.yaml, then run pre_dispatch_gate.sh directly."
-    auto_retry: false
-  - risk: "Missing or incomplete hermes_insights deltas at orchestrator checkpoints"
-    probability: Medium
-    impact: BLOCKING
-    mitigation: "Orchestrator must emit planning-complete, decompose-complete, audit-start, and cleanup-complete checkpoints using hermes_token_meter + insights. Verify deltas appear in tokens.jsonl and postmortem."
-    auto_retry: false
-  - risk: "Insufficient negative/governance test coverage"
-    probability: Medium
-    impact: DEGRADED
-    mitigation: "Add deliberate malformed-block, budget-violation, and circular-dep negative tests. Archive blocked cards only after confirming exact E00x messages."
-    auto_retry: false
-  - risk: "No formal preflight/attestation step before decompose"
+  - risk: "Final audit spawns remediation cards that also fail → manual intervention needed → smoke test FAILS"
     probability: Low
     impact: BLOCKING
-    mitigation: "Run explicit preflight checklist (env, profiles, scripts, gateway, token tracker, kanban-config, DB integrity) and attest before creating root/gate cards."
+    mitigation: "Investigate why remediation workers can't fix the audit violation. This is a plugin bug — harden before re-running."
+    auto_retry: false
+  - risk: "Subagent gate interrupted (parallel subagents crash mid-exec on Windows)"
+    probability: Medium
+    impact: BLOCKING
+    mitigation: "Fall back to serial gate: set `subagent_gate.enabled: false` in kanban-config.yaml, then run `bash scripts/pre_dispatch_gate.sh kanban-standard-smoke-test` directly."
+    auto_retry: false
+  - risk: "validate_card_bodies V008 false-positive on create-only files"
+    probability: Low
+    impact: BLOCKING
+    mitigation: "card_body_fidelity.py L258-260 already skips create-only files. If you encounter V008, update the plugin (this was fixed post-v0.17.0)."
+    auto_retry: false
+  - risk: "Token metering fallback to estimated tier (reduces KPI accuracy but doesn't block execution)"
+    probability: Medium
+    impact: DEGRADED
+    mitigation: "Accept estimated tokens in postmortem. Audit the metering pipeline after the smoke test."
     auto_retry: false
 todos:
-  - id: card-preflight
-    content: "Preflight & Attestation: verify env, profiles, scripts, gateway, token tracker, kanban-config, DB integrity before any decomposition"
-    status: pending
   - id: card-1-utils
-    content: "Create test-plan/scripts/smoke_utils.py with utility functions (greet, add, format_name)"
+    content: "Create test-plan/scripts/smoke_utils.py with greet(), add(), format_name()"
     status: pending
   - id: card-2-tests
     content: "Create test-plan/scripts/test_smoke_utils.py with pytest tests for all three functions"
     status: pending
   - id: card-3-modify
-    content: "Modify test-plan/scripts/smoke_utils.py to add a multiply() function (modify-only mode)"
+    content: "Modify test-plan/scripts/smoke_utils.py to add multiply() + update tests (modify-only + cross-file rebase)"
     status: pending
-  - id: card-4-e002-test
-    content: "Negative governance test: agent attempts to create a file NOT on Files: (should trigger E002 block)"
+  - id: card-4-e002-recovery
+    content: "Autonomous recovery test: agent adds docstring + creates unlisted scratchpad → E002 auto-revert recovers → card completes"
     status: pending
   - id: card-5-verify
-    content: "Verification card: run test suite, check token log exists, confirm all artifacts"
+    content: "Verification: run test suite, final_audit_sanity.py with remediation loop, token report, postmortem"
     status: pending
 acceptance_matrix:
   card1:
@@ -124,94 +111,165 @@ acceptance_matrix:
   card3:
     - "multiply(3,4) == 12"
     - "pytest passes all tests including test_multiply_positive and test_multiply_zero"
-    - "Existing functions greet/add/format_name unchanged"
+    - "Existing greet/add/format_name unchanged"
   card4:
-    - "Module docstring added to smoke_utils.py"
+    - "Module docstring present on smoke_utils.py"
     - "E002_UNLISTED_FILE_CHANGE triggered for _smoke_scratchpad.md"
-    - "Unlisted file auto-reverted or card blocked (both valid outcomes)"
+    - "Unlisted file auto-reverted (card completes) OR card blocks on E002 — both are PASS outcomes"
   card5:
     - "Full test suite passes: pytest test-plan/scripts/test_smoke_utils.py -v"
+    - "final_audit_sanity.py --tier all exit 0 (possibly after remediation)"
     - "Token report runs: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test"
     - "Postmortem generated: .hermes/kanban/reports/kanban-standard-smoke-test_postmortem_*.md"
     - "KPI artifacts exist: .hermes/kanban/reports/kanban-standard-smoke-test_kpi.json"
-    - "Reconciliation report confirms >=80% success rate"
 ---
 
 # Kanban Standard Smoke Test
 
-> **Purpose:** Validate a kanban-advanced installation end-to-end. Run after `hermes kanban-advanced init` to confirm the plugin is correctly provisioned, the coding agent dispatches and produces verifiable output, all evaluation chain gates function, and postmortem artifacts are generated correctly.
+> **Purpose:** Validate a kanban-advanced installation end-to-end on vanilla Hermes Agent kanban. Exercises the full autonomous pipeline — handoff, preflight gate, decomposition, dispatch, worker execution, eval-chain governance, autonomous error recovery (E002 auto-revert + final-audit remediation loop), and postmortem generation. The smoke test PASSES when every stage completes without manual intervention.
 
 > **Prerequisites:**
-> - Hermes Agent ≥ 0.16.0
+> - Hermes Agent ≥ 0.17.0
 > - `hermes kanban-advanced init` completed successfully
 > - Coding agent binary configured in `.hermes/kanban-overrides/kanban-config.yaml` (`coding_agent_binary`)
 > - Coding agent authenticated (see `plugin/data/references/coding-agent-auth.md`)
 > - Gateway running (`hermes gateway run` or scheduled task)
-> - Working directory: host project repo root
+> - `auto_decompose: false` in Hermes kanban config (`hermes config set kanban.auto_decompose false`)
+> - Working directory: plugin repo root (`hermes-kanban-advanced-workflow/`)
+> - `test-plan` added to `plan_search_dirs` in overlay config (so `pre_dispatch_gate.sh` finds the plan)
 
-> **Expected duration:** 15–30 minutes (depends on coding agent speed)
-> **Expected outcome:** 4 code-gen cards dispatched, 3 completed (Cards 1–3), 1 blocked (Card 4 — E002 expected), 1 verification card passed (Card 5). Postmortem generated at `.hermes/kanban/reports/kanban-standard-smoke-test_postmortem_*.md`. Token log populated at `~/.hermes/kanban/tokens.jsonl` with entries for all completed cards.
+> **Expected duration:** 20–40 minutes (depends on coding agent speed + remediation wave)
+> **Expected outcome:** 4 code-gen cards dispatched, 3 completed (Cards 1–3), 1 completed-or-blocked (Card 4 — E002 autonomous recovery), 1 verification card passed (Card 5 — including optional remediation wave). Zero manual interventions. Postmortem + KPI JSON generated. The smoke test validates both recovery layers: Layer 1 (E002 auto-revert) always exercised; Layer 2 (remediation cards) exercised if any latent issues exist, or via the force-trigger documented in Card 5.
 
-> **Success criteria:**
-> - [ ] Preflight & attestation checklist passed before any decomposition
-> - [ ] Card 1 completed: `test-plan/scripts/smoke_utils.py` exists with `greet()`, `add()`, `format_name()`
-> - [ ] Card 2 completed: `test-plan/scripts/test_smoke_utils.py` exists, tests pass
-> - [ ] Card 3 completed: `multiply()` added to `test-plan/scripts/smoke_utils.py`, tests updated and pass
-> - [ ] Card 4 blocked: E002_UNLISTED_FILE_CHANGE detected, unlisted file auto-reverted
-> - [ ] Card 5 completed: test suite passes, token log has entries, artifacts exist
-> - [ ] hermes_insights deltas present at all four orchestrator checkpoints (planning/decompose/audit/cleanup)
-> - [ ] Token log shows separate input/output/cache where available; Effective Tokens (or equivalent) calculated in postmortem
-> - [ ] ≥2 negative/governance tests executed (E002 + at least one malformed-block or budget test)
-> - [ ] Reconciliation covers: file compliance, token burn accuracy, governance taxonomy, state, and delta vs prior run
-> - [ ] Postmortem generated with KPI JSON, reconciliation sidecar, and concrete action items (owner + deadline)
-> - [ ] Postmortem is blameless and includes decision-path / tool-usage traces for main cards
-> - [ ] Token log (`tokens.jsonl`) has entries for completed cards + orchestrator checkpoints
-> - [ ] Reconciliation report confirms ≥80% success rate and 0 un-reconciled governance violations
+---
+
+## Success Criteria
+
+The smoke test **PASSES** when ALL of the following are true:
+
+- [ ] Preflight (`preflight.sh`) exits with `pass` or `degraded` (no blocking failures)
+- [ ] Pre-dispatch gate (`pre_dispatch_gate.sh`) exits 0
+- [ ] Handoff card created by `kanban_handoff.py` → orchestrator decomposes → all 5 cards dispatched
+- [ ] Card 1 completed: `test-plan/scripts/smoke_utils.py` exists with `greet()`, `add()`, `format_name()`
+- [ ] Card 2 completed: `test-plan/scripts/test_smoke_utils.py` exists, pytest passes 6 tests
+- [ ] Card 3 completed: `multiply()` added, tests updated and pass
+- [ ] Card 4 completed (E002 auto-revert succeeded — autonomous recovery Layer 1) OR blocked (E002 revert failed — governance gate operational, also autonomous)
+- [ ] Card 5 completed: test suite passes, final audit passes (exit 0, possibly after remediation — autonomous recovery Layer 2)
+- [ ] **Zero manual interventions** — no `hermes kanban unblock`, no `hermes kanban complete` by human, no manual triage of any blocked card
+- [ ] Postmortem generated at `.hermes/kanban/reports/kanban-standard-smoke-test_postmortem_*.md`
+- [ ] KPI JSON generated at `.hermes/kanban/reports/kanban-standard-smoke-test_kpi.json`
+- [ ] Token log (`tokens.jsonl`) has entries for all completed cards + orchestrator checkpoints
+
+The smoke test **FAILS** when ANY of the following occur:
+
+- [ ] Any card stuck in `blocked` > 10 minutes without autonomous recovery (E023 escalation, board-keeper salvage, or final-audit remediation)
+- [ ] Any card requires manual `kanban unblock` or `kanban complete` by a human
+- [ ] Gateway notification pages the operator for a non-recoverable failure
+- [ ] Postmortem not generated within 15 minutes of final card completion
+- [ ] `final_audit_sanity.py --tier all` loop exceeds max remediation rounds without reaching exit 0 (remediation loop couldn't self-heal — **plugin gap**)
+
+**When the smoke test fails:** Stop the kanban. Do NOT hand-fix cards. Investigate the plugin gap that required manual intervention, harden the plugin, and re-run. The goal is unattended operation — every manual intervention is a bug to fix.
 
 ---
 
 ## Architecture Notes
 
+### Execution Pipeline (current plugin)
+
+```
+Operator (default profile)
+  │
+  ├─ 1. bash scripts/preflight.sh                 ← env gating (13+ checks)
+  ├─ 2. bash scripts/pre_dispatch_gate.sh {id}    ← plan + CLI + attestation
+  └─ 3. python3 scripts/kanban_handoff.py         ← handoff card + cron provision
+         --plan test-plan/{plan_id}.plan.md
+              │
+              ▼
+Orchestrator (orchestrator profile)
+  │
+  ├─ Receives handoff card → decomposes via runbook
+  ├─ validate_board.sh → completes gate → dispatches Cards 1-5
+  ├─ Monitors workers (watch / cron)
+  └─ When Card 5 done → final_audit_sanity.py --tier all
+       │
+       ├─ exit 0 → postmortem → cleanup
+       └─ exit 1 → --spawn-remediation → remediation wave → re-audit → exit 0
+```
+
+### Autonomous Recovery Mechanisms Tested
+
+| Layer | Mechanism | Trigger | Tested By | Type |
+|-------|-----------|---------|-----------|------|
+| **Worker (eval chain)** | E002 auto-revert | Agent creates unlisted file → auto-revert or block | Card 4 | Automatic (in-chain) |
+| **Worker (eval chain)** | E023 lattice memory | Repeated identical error → escalate | (passive — prevents loops) | Automatic (in-chain) |
+| **Orchestrator (final audit)** | Remediation cards | `final_audit_sanity.py` exit 1 → `--spawn-remediation` → workers fix → re-audit | Card 5 + force-trigger | Automatic (separate cards, `Type: remediation`) |
+| **Orchestrator (board keeper)** | Salvage pattern | Iteration budget exhausted, work present → fetch + merge | (passive — cron-based) | Automatic (direct action) |
+| **Orchestrator (cron)** | Auto-unblock | Parent completed → promote child | Cards 2-5 (wave progression) | Automatic (cron-based) |
+
 ### Token Logging
 
-The kanban-advanced plugin supports three tiers of token metering, selected automatically based on the configured coding agent binary:
+The kanban-advanced plugin supports three tiers of token metering:
 
 | Tier | Source | Agents | Mechanism |
 |------|--------|--------|-----------|
 | 1 | `agent` | Cursor, Claude Code, Codex, Gemini, Grok | Exact from agent JSON `usage` block |
-| 2 | `hermes_insights` | hermes | Authoritative — Hermes insights delta (provider response headers, not self-reported) |
-| 3 | `estimated` | aider, unknown binaries | Character-count estimation from agent output |
+| 2 | `hermes_insights` | hermes | Authoritative — Hermes insights delta (provider response headers) |
+| 3 | `estimated` | aider, unknown binaries | Character-count estimation |
 
-**The `hermes` coding agent** uses Tier 2: hermes_token_meter.py snapshots Hermes token state before dispatch, computes the delta after dispatch, and logs authoritative counts to `tokens.jsonl`. This is NOT self-reported — it comes from Hermes' own provider accounting.
-
-**Orchestrator checkpoints (mandatory for walk-away mode):**
-- planning-complete
-- decompose-complete
-- audit-start
-- cleanup-complete
-
-All four must log via hermes_insights delta. Deltas must appear in `~/.hermes/kanban/tokens.jsonl`.
-
-**Observability requirements (drawn from industry best practices for AI agent workflows):**
-- Track across the full decision chain (not just final output).
-- Log input / output / cache tokens separately.
-- Compute weighted "Effective Tokens" style metric in postmortem (model cost multiplier × (I + 0.1×C + 4×O)).
-- Enforce workflow-level budget thresholds for the smoke test run.
-- Capture decision paths, tool calls, and per-step spend for traceability and audit.
-
-**The `aider` coding agent** uses Tier 3 estimation. aider produces text-only output with no JSON usage block and no integration with Hermes insights. Consider configuring a JSON-output coding agent for exact token tracking.
-
-**How to check your coding agent:**
-```bash
-grep 'coding_agent_binary' .hermes/kanban-overrides/kanban-config.yaml
-# Expected values with full token support: agent, cursor-agent, claude, codex, gemini, grok, hermes
-# Estimated-only: aider
-```
+**Orchestrator checkpoints (logged by `hermes_token_meter.py`):** planning-complete, decompose-complete, audit-start, cleanup-complete.
 
 ---
 
+## Gate Hardening
 
-> **Note (non-actionable context):** Card 4 (E002 negative test) is expected to block at least twice in future runs with escalation enabled. Board-keeper detects the second block (re-block count >=2), forces `[escalation:worker:attempt:2]`, calls tracker, and escalates to orchestrator. E023 error attractors in the eval chain short-circuit repeated identical failures before they reach 5 loops. This plan doesn't configure escalation — it's documented here for future hardening passes.
+Gates are **manual, operator-executed** steps run from the default profile BEFORE decomposition. They verify infrastructure health and plan readiness. They are NOT dispatched to workers.
+
+### Gate 1 — Preflight (environment gating)
+
+**Purpose:** Verify all infrastructure is healthy. Run from repo root.
+
+```bash
+bash hermes-kanban-advanced-workflow/scripts/preflight.sh
+```
+
+**Gate Verification:**
+- Exit 0 → `status: pass` or `status: degraded` → proceed
+- Exit 1 → `status: fail` → fix blocking failures, re-run
+
+If degraded: review the JSON output for warnings. The smoke test can proceed with degraded status (e.g., API down when plan has no API dependency).
+
+### Gate 2 — Pre-Dispatch Gate (plan + CLI + attestation)
+
+**Purpose:** Verify the plan is on the working branch, coding agent is reachable, plan memory is seeded, and the kanban DB is healthy.
+
+```bash
+bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh kanban-standard-smoke-test
+```
+
+**Gate Verification:**
+- Exit 0 → `[GATE] PASSED — proceed to decomposition` → proceed
+- Exit 1 → `[GATE] BLOCKED — fix failures before dispatching` → fix and re-run
+
+Common failure: `coding_agent_cli` — authenticate the coding CLI and re-run. If using `PREFLIGHT_SKIP_CODING_AGENT_CLI=1`, note that workers may fail on auth.
+
+### Gate 3 — Handoff (create orchestrator handoff card)
+
+**Purpose:** Create the handoff card that the orchestrator will decompose. Provisions wave crons (auto-unblock-1m, board-keeper-3m) before card creation.
+
+```bash
+python3 hermes-kanban-advanced-workflow/scripts/kanban_handoff.py \
+  --plan test-plan/kanban-standard-smoke-test.plan.md
+```
+
+**Gate Verification:**
+- Exit 0 → handoff card created with `Type: orchestrator-handoff`
+- Exit 2 → orchestrator profile missing → create it: `hermes profile create orchestrator`
+- Exit 3 → gateway not running → start gateway
+- Exit 8 → cron provisioning failed → check `hermes` on PATH, gateway running
+
+After handoff: the orchestrator receives the card, decomposes, and dispatches Cards 1–5. The operator monitors via `hermes kanban watch` or the board keeper cron.
+
+---
 
 ## Workstream 1 — Create Utility Module
 
@@ -220,9 +278,7 @@ grep 'coding_agent_binary' .hermes/kanban-overrides/kanban-config.yaml
 **File:** `test-plan/scripts/smoke_utils.py`
 **Mode:** create-only
 
-**Approach:** Create a Python utility module with three simple functions that cover different code patterns (string return, arithmetic, string formatting). This exercises basic agent code generation and the E001 (file compliance) gate.
-
-**Tests:** Included inline — the agent creates both the module and an inline assertion.
+**Approach:** Create a Python utility module with three simple functions. Exercises basic agent code generation and the E001 (file compliance) gate.
 
 ### Card body
 
@@ -252,7 +308,7 @@ Do NOT push to main — commit to worktree branch only."
 
 ## Workstream 2 — Create Tests
 
-**Priority:** 2 (depends on Card 1 — needs test-plan/scripts/smoke_utils.py to exist)
+**Priority:** 2 (depends on Card 1 — needs `test-plan/scripts/smoke_utils.py` to exist)
 
 **File:** `test-plan/scripts/test_smoke_utils.py`
 **Mode:** create-only
@@ -288,14 +344,14 @@ Do NOT push to main — commit to worktree branch only."
 
 ---
 
-## Workstream 3 — Modify Utility Module
+## Workstream 3 — Modify Utility Module (cross-file rebase)
 
-**Priority:** 3 (depends on Cards 1 and 2 — modifies test-plan/scripts/smoke_utils.py, needs tests to exist for verification)
+**Priority:** 3 (depends on Cards 1 and 2 — modifies both files, needs Card 2's test file on its branch)
 
-**File:** `test-plan/scripts/smoke_utils.py`
+**Files:** `test-plan/scripts/smoke_utils.py` (modify-only), `test-plan/scripts/test_smoke_utils.py`
 **Mode:** modify-only
 
-**Approach:** Add a `multiply()` function to the existing module AND add a corresponding test to the test file. This exercises E001 (modify-only file compliance), E003 (existing tests still pass), and E017 (excessive churn — should be well under budget).
+**Approach:** Add a `multiply()` function to the existing module AND a corresponding test. Exercises E001 (modify-only file compliance), E003 (existing tests still pass), and same-file cross-card rebase (must merge Card 2's branch before modifying the test file).
 
 ### Card body
 
@@ -324,16 +380,20 @@ Do NOT push to main — commit to worktree branch only."
 
 ---
 
-## Workstream 4 — Negative Governance Test (E002 Gate)
+## Workstream 4 — Autonomous Recovery Test (Two-Layer)
 
 **Priority:** 4 (depends on Card 3 completing first — needs the worktree to have current code)
 
 **File:** `test-plan/scripts/smoke_utils.py`
 **Mode:** modify-only
 
-**Approach:** This card **intentionally** instructs the agent to create a file NOT listed in `Files:`. The agent is told to add a docstring to `test-plan/scripts/smoke_utils.py` (which is on `Files:`) BUT ALSO to create a `test-plan/scripts/_smoke_scratchpad.md` file (which is NOT on `Files:`). The evaluation chain Step 2 (E002) should detect the unlisted file and auto-revert it. If the revert succeeds, the card completes. If unlisted changes remain after revert, the card blocks.
+**Approach:** This is the **autonomous error recovery demonstration card**. It exercises two recovery layers:
 
-**Expected behavior:** E002_UNLISTED_FILE_CHANGE triggers. The unlisted file is either auto-reverted (card completes with warning) or blocks if revert fails. Either outcome is valid — the test verifies that the E002 gate is operational.
+**Layer 1 — E002 Auto-Revert (worker-level, always tested):** The agent is instructed to do useful work (add a module docstring to `smoke_utils.py`, which IS on `Files:`) AND to intentionally create a scratchpad file (`_smoke_scratchpad.md`, which is NOT on `Files:`). The evaluation chain Step 2 (E002) detects the unlisted file and attempts to auto-revert it — without any human involvement. This proves the eval chain can autonomously recover from agent scope violations.
+
+**Layer 2 — Final-Audit Remediation Loop (orchestrator-level, tested when violations exist):** If Cards 1–4 produce any latent issues that pass the eval chain but fail plan-level checks (e.g., a file the plan expected changes in but the agent didn't touch, or a cross-card regression from Card 3 → Card 4), the final audit (`final_audit_sanity.py --tier all`) detects them at Card 5 verification time and auto-spawns remediation cards. Workers pick up and fix those remediation cards autonomously. The smoke test PASSES whether the final audit exits 0 (clean) or exit 1 → remediation → exit 0 (self-healed).
+
+**What "remediation cards" means here:** In the kanban-advanced plugin, autonomous error recovery happens at two layers. The worker layer (E002 auto-revert) fixes scope violations inside the eval chain. The orchestrator layer (`final_audit_sanity.py --spawn-remediation`) creates actual `Type: remediation` kanban cards that workers claim and execute to fix post-merge issues. Card 4 triggers Layer 1. Card 5 exercises Layer 2.
 
 ### Card body
 
@@ -348,7 +408,7 @@ Spec:
 - This second file is INTENTIONALLY not on the Files: line — the governance gate should catch it
 Acceptance:
 - Verify: python3 -c \"import scripts.smoke_utils; assert scripts.smoke_utils.__doc__ is not None; print('OK')\"
-- The _smoke_scratchpad.md file will be auto-reverted by the eval chain — this is EXPECTED
+- The _smoke_scratchpad.md file will be auto-reverted by the eval chain — this is EXPECTED autonomous recovery
 Self-audit: before commit, confirm docstring added to smoke_utils.py only; do NOT commit the scratchpad file
 Tests: python3 -c \"import scripts.smoke_utils; assert scripts.smoke_utils.__doc__ is not None; print('OK')\"
 Commit: docs: add module docstring to smoke_utils
@@ -356,17 +416,29 @@ Diff cap: if >20 net lines, STOP and report.
 Do NOT push to main — commit to worktree branch only."
 ```
 
-> **Operator note:** If this card completes (E002 auto-revert succeeded), the governance gate worked silently — the unlisted file was created then removed. Check `scope_violations.jsonl` in the kanban logs for the recorded violation. If this card blocks (E002 revert failed), the gate prevented unlisted changes from being committed — archive the blocked card. Either result validates the E002 gate.
+> **Operator note — what this card validates:**  
+> - **Card completes →** E002 auto-revert succeeded. The eval chain detected the unlisted file and removed it. Check `scope_violations.jsonl` in the kanban logs for the recorded violation.  
+> - **Card blocks →** E002 revert failed. The eval chain prevented unlisted changes from being committed. **Do NOT manually unblock this card.** Archiving it as blocked is a valid PASS — the governance gate is proven operational.  
+> - **Either outcome = autonomous recovery demonstrated.** The system handled the error without a human touching `kanban unblock` or `kanban complete`.
 
 ---
 
-## Workstream 5 — Verification and Artifact Check
+## Workstream 5 — Verification and Remediation-Loop Exercise
 
 **Priority:** 5 (depends on Cards 1–4 completing)
 
 **Type:** verification-local
 
-**Approach:** Run the full test suite and verify that all expected artifacts exist. This card does NOT invoke a coding agent — it's a supervisor-worker card that validates the entire test run's outputs.
+**Approach:** Run the full test suite, then invoke the final audit pipeline. This card exercises the **orchestrator-level autonomous recovery mechanism** — the remediation-card loop.
+
+**How the remediation loop works:**
+1. `final_audit_sanity.py --tier all` checks the merged state of all completed cards against the plan
+2. If violations detected → exit 1 → cards with `Type: remediation` are auto-created, assigned to workers
+3. Workers autonomously pick up and fix remediation cards
+4. Auto-unblock cron releases the audit card → re-runs `--tier all`
+5. Loop repeats until exit 0 (clean) or max rounds exceeded
+
+**In a clean run** (no latent issues from Cards 1–4), the audit exits 0 immediately — the remediation pipeline is structurally validated. **In a run with issues** (agent non-determinism), the remediation loop self-heals — proving autonomous recovery.
 
 ### Card body
 
@@ -374,58 +446,27 @@ Do NOT push to main — commit to worktree branch only."
 Type: verification-local
 plan_id: kanban-standard-smoke-test
 Acceptance:
-- 1. Run token report: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test
-- 2. Generate postmortem: python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test
-- 3. Verify KPI artifacts exist: ls .hermes/kanban/reports/kanban-standard-smoke-test_*.md .hermes/kanban/reports/kanban-standard-smoke-test_kpi.json
-- 4. Run reconciliation per kanban-advanced:kanban-reconciliation skill
+- 1. Run test suite: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
+- 2. Run final audit: python3 scripts/final_audit_sanity.py --plan-id kanban-standard-smoke-test --tier all
+- 3. If audit exit 1: python3 scripts/final_audit_sanity.py --plan-id kanban-standard-smoke-test --spawn-remediation
+     Wait for all remediation cards to reach done (hermes kanban list). Re-run step 2.
+- 4. If audit exit 2: BLOCK — script error. Do NOT proceed. Investigate.
+- 5. Generate token report: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test
+- 6. Generate postmortem: python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test
+- 7. Verify artifacts: ls .hermes/kanban/reports/kanban-standard-smoke-test_*.md .hermes/kanban/reports/kanban-standard-smoke-test_kpi.json
+- 8. Run reconciliation per kanban-advanced:kanban-reconciliation skill
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: N/A (verification only)
 Mode: read-only
 ```
 
-> **Operator note:** Steps 1–4 in Acceptance are manual — run after the test suite passes and all cards complete. These produce the postmortem and KPI artifacts that confirm the smoke test succeeded.
-
----
-
-## Gate Hardening
-
-### Gate 1 — Preflight & Attestation
-
-**Purpose:** Verify all infrastructure is healthy before decomposition. Run from the default profile.
-
-**Files:** None (read-only checks)
-
-```agent
-agent -p "Run the kanban-advanced preflight checklist and attest readiness.
-plan_id: kanban-standard-smoke-test
-Mode: read-only
-Spec:
-- 1. Verify environment: echo HERMES_HOME=$HERMES_HOME && ls $HERMES_HOME
-- 2. Verify profiles exist: hermes profile list (must show 'worker' and 'orchestrator')
-- 3. Verify required scripts: ls scripts/kanban_decompose.py scripts/kanban_handoff.py scripts/provision_kanban_crons.sh scripts/kanban_evaluation_chain.py scripts/hermes_token_meter.py
-- 4. Verify coding agent configured: grep coding_agent_binary .hermes/kanban-overrides/kanban-config.yaml
-- 5. Verify gateway running: hermes kanban list 2>&1 | head -5 (must not show 'gateway not running')
-- 6. Verify token tracker: python3 -c 'import sys; sys.path.insert(0, \"scripts\"); from hermes_token_meter import snapshot; print(snapshot())' 2>&1
-- 7. Verify DB integrity: ls $HERMES_HOME/kanban.db && hermes kanban list 2>&1 | head -3
-- 8. Verify .gitignore covers test artifacts: grep -q 'test-plan/scripts/' .gitignore && echo 'gitignore OK'
-Forbidden: no file modifications, no card creation, no decomposition
-Acceptance:
-- Done when: all 8 checks pass without errors
-- If any check fails, halt and fix before proceeding
-Self-audit: confirm each check passed; report any failures
-Tests: N/A (read-only verification)
-Commit: N/A (verification only)
-Diff cap: N/A (no code changes)"
-```
-
-**Gate Verification:**
-
-```bash
-# After the gate completes, confirm:
-# - All 8 checks returned success
-# - No errors in output
-# - Proceed to Kanban optimization / decompose only after all pass
-```
+> **Operator note — how to FORCE-test the remediation loop:** If Cards 1–4 all complete perfectly and `final_audit_sanity.py --tier all` exits 0 (no violations), the remediation-card pipeline was NOT exercised. To explicitly validate it, after all cards complete but before running Card 5:  
+> 1. Delete or rename one line from `test-plan/scripts/smoke_utils.py` (e.g., remove the `greet()` function)  
+> 2. Commit the change on the working branch  
+> 3. Run Card 5 normally  
+> 4. `final_audit_sanity.py` will detect `plan_file_zero_diff` for `smoke_utils.py` against Card 1's baseline → exit 1 → spawn remediation cards → workers restore the function → re-audit exit 0.  
+> 5. This proves the remediation-card autonomous recovery pipeline end-to-end.  
+> 6. **After the test:** revert the manual change — the remediation worker already fixed it.
 
 ---
 
@@ -436,34 +477,26 @@ Diff cap: N/A (no code changes)"
 ```
 Card 1 (create test-plan/scripts/smoke_utils.py)
   └─→ Card 2 (create tests)
-        └─→ Card 3 (modify smoke_utils + tests)
-              └─→ Card 4 (negative E002 test)
-                    └─→ Card 5 (verification + artifact check)
+        └─→ Card 3 (modify smoke_utils + tests — cross-file rebase)
+              └─→ Card 4 (autonomous recovery — E002 gate)
+                    └─→ Card 5 (verification + final audit)
 ```
 
-| Parent | Child | Relationship |
-|--------|-------|-------------|
-| — | Card 1 | Root — no dependencies |
-| Card 1 | Card 2 | Card 2 needs test-plan/scripts/smoke_utils.py to exist |
-| Card 2 | Card 3 | Card 3 modifies files Card 2 tests; needs tests as safety net |
-| Card 3 | Card 4 | Card 4 runs after module is stable to test E002 gate cleanly |
-| Card 4 | Card 5 | Card 5 verifies everything after all cards complete |
+All cards are serial (wave_parent chain) because each depends on the prior card's output.
 
-All cards are serial (wave_parent chain) because each depends on the prior card's output file.
+### Dispatch order
+
+| Wave | Card | Title | Parallel? |
+|------|------|-------|-----------|
+| 1 | Card 1 | Create Utility Module | Solo |
+| 2 | Card 2 | Create Tests | Solo (depends on Card 1) |
+| 3 | Card 3 | Modify Utility Module | Solo (depends on Card 2) |
+| 4 | Card 4 | Autonomous Recovery Test | Solo (depends on Card 3) |
+| 5 | Card 5 | Verification + Final Audit | Solo (depends on Card 4) |
 
 ### Contracts
 
 Contracts: none (all symbols are local to single cards — no shared functions, types, or constants span multiple card scopes)
-
-### Dispatch order
-
-| Wave | Cards | Parallel? |
-|------|-------|-----------|
-| 1 | Card 1 — Create Utility Module | Solo |
-| 2 | Card 2 — Create Tests | Solo (depends on Card 1) |
-| 3 | Card 3 — Modify Utility Module | Solo (depends on Card 2) |
-| 4 | Card 4 — Negative E002 Test | Solo (depends on Card 3) |
-| 5 | Card 5 — Verification | Solo (depends on Card 4) |
 
 ---
 
@@ -473,6 +506,7 @@ files:
   - test-plan/scripts/smoke_utils.py
 mode: create-only
 wave: 1
+assignee: kanban-advanced-worker
 estimated_lines: 25
 
 ```agent
@@ -504,6 +538,7 @@ files:
 mode: create-only
 wave: 2
 wave_parent: card1
+assignee: kanban-advanced-worker
 estimated_lines: 40
 
 ```agent
@@ -539,6 +574,7 @@ files:
 mode: modify-only
 wave: 3
 wave_parent: card2
+assignee: kanban-advanced-worker
 estimated_lines: 35
 
 ```agent
@@ -564,13 +600,14 @@ Diff cap: if >40 net lines, STOP and report.
 Do NOT push to main — commit to worktree branch only."
 ```
 
-#### Card 4 — Negative Governance Test (E002)
+#### Card 4 — Autonomous Recovery Test (E002)
 plan_id: kanban-standard-smoke-test
 files:
   - test-plan/scripts/smoke_utils.py
 mode: modify-only
 wave: 4
 wave_parent: card3
+assignee: kanban-advanced-worker
 estimated_lines: 10
 
 ```agent
@@ -584,7 +621,7 @@ Spec:
 - This second file is INTENTIONALLY not on the Files: line — the governance gate should catch it
 Acceptance:
 - Verify: python3 -c \"import scripts.smoke_utils; assert scripts.smoke_utils.__doc__ is not None; print('OK')\"
-- The _smoke_scratchpad.md file will be auto-reverted by the eval chain — this is EXPECTED
+- The _smoke_scratchpad.md file will be auto-reverted by the eval chain — this is EXPECTED autonomous recovery
 Self-audit: before commit, confirm docstring added to smoke_utils.py only; do NOT commit the scratchpad file
 Tests: python3 -c \"import scripts.smoke_utils; assert scripts.smoke_utils.__doc__ is not None; print('OK')\"
 Commit: docs: add module docstring to smoke_utils
@@ -592,16 +629,24 @@ Diff cap: if >20 net lines, STOP and report.
 Do NOT push to main — commit to worktree branch only."
 ```
 
-#### Card 5 — Verification and Artifact Check
+#### Card 5 — Verification and Remediation
 plan_id: kanban-standard-smoke-test
 type: verification-local
 wave: 5
 wave_parent: card4
+assignee: kanban-advanced-orchestrator
+estimated_lines: 0
 Acceptance:
-- 1. Run token report: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test
-- 2. Generate postmortem: python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test
-- 3. Verify KPI artifacts exist
-- 4. Run reconciliation per kanban-advanced:kanban-reconciliation skill
+- 1. Run test suite: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
+- 2. Run final audit: python3 scripts/final_audit_sanity.py --plan-id kanban-standard-smoke-test --tier all
+- 3. If audit exit 1: python3 scripts/final_audit_sanity.py --plan-id kanban-standard-smoke-test --spawn-remediation
+     Wait for all remediation cards to reach done (hermes kanban list). Re-run step 2.
+- 4. If audit exit 2: BLOCK — script error. Do NOT proceed. Investigate.
+- 5. Generate token report: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test
+- 6. Generate postmortem: python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test
+- 7. Verify artifacts: ls .hermes/kanban/reports/kanban-standard-smoke-test_*.md .hermes/kanban/reports/kanban-standard-smoke-test_kpi.json
+- 8. Run reconciliation per kanban-advanced:kanban-reconciliation skill
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
 Commit: N/A (verification only)
 Mode: read-only
+```
