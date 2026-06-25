@@ -72,7 +72,26 @@ def format_tokens(n: int) -> str:
 
 
 def report_plan(plan_id: str, entries: list[dict]):
+    # Scope to most recent run only (same logic as generate_postmortem.py)
     plan_entries = [e for e in entries if e.get("plan_id") == plan_id]
+    # Find the most recent planning-complete or decompose-complete checkpoint
+    planning_ts = None
+    decompose_ts = None
+    for e in plan_entries:
+        status = str(e.get("status") or e.get("extra", {}).get("checkpoint", "")).strip()
+        ts = str(e.get("timestamp") or "")
+        if not ts:
+            continue
+        if status == "planning-complete":
+            if planning_ts is None or ts > planning_ts:
+                planning_ts = ts
+        elif status == "decompose-complete":
+            if decompose_ts is None or ts > decompose_ts:
+                decompose_ts = ts
+    boundary_ts = planning_ts or decompose_ts
+    if boundary_ts:
+        plan_entries = [e for e in plan_entries if str(e.get("timestamp") or "") >= boundary_ts]
+
     if not plan_entries:
         print(f"No token data found for plan '{plan_id}'")
         return

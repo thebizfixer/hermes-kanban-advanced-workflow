@@ -153,6 +153,46 @@ def _scope_violations_path() -> Path:
     return _project_root() / ".hermes" / "kanban" / "logs" / "scope_violations.jsonl"
 
 
+_RUN_BOUNDARY_STATUSES = frozenset({"planning-complete", "decompose-complete"})
+
+
+def _scope_to_latest_run(
+    entries: list[dict[str, Any]], plan_id: str
+) -> list[dict[str, Any]]:
+    """Filter token entries to only the most recent run for plan_id.
+
+    Uses the most recent planning-complete checkpoint as the run boundary
+    (it is the earliest checkpoint of a run). Falls back to decompose-complete
+    if no planning-complete is found. If no boundary checkpoint is found,
+    returns all entries (backward-compatible — pre-checkpoint runs are unscoped).
+    """
+    if not entries:
+        return entries
+
+    # Find the most recent planning-complete (preferred) and decompose-complete (fallback)
+    planning_ts: str | None = None
+    decompose_ts: str | None = None
+    for entry in entries:
+        status = str(entry.get("status") or entry.get("extra", {}).get("checkpoint", "")).strip()
+        if status not in _RUN_BOUNDARY_STATUSES:
+            continue
+        ts = str(entry.get("timestamp") or "")
+        if not ts:
+            continue
+        if status == "planning-complete":
+            if planning_ts is None or ts > planning_ts:
+                planning_ts = ts
+        elif status == "decompose-complete":
+            if decompose_ts is None or ts > decompose_ts:
+                decompose_ts = ts
+
+    boundary_ts = planning_ts or decompose_ts
+    if boundary_ts is None:
+        return entries  # No checkpoint found — return all (backward compatible)
+
+    return [e for e in entries if str(e.get("timestamp") or "") >= boundary_ts]
+
+
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -234,7 +274,7 @@ def _classify_token_waste(entries: list[dict[str, Any]], total_tokens: int) -> d
     waste = 0
     seen: set[tuple[str, str]] = set()
     
-    for entry in sorted(entries, key=lambda e: e.get("timestamp", "")):
+    for entry in sorted(entries, key=lambda e: str(e.get("timestamp", ""))):
         tid = entry.get("task_id", "")
         tests = entry.get("tests_cmd", entry.get("tests", ""))
         source = entry.get("source", "")
@@ -1794,6 +1834,10 @@ def main(argv: list[str] | None = None) -> int:
             if key not in seen:
                 token_entries.append(entry)
                 seen.add(key)
+
+    # Scope to most recent run only — avoids aggregating across multiple decompositions
+    token_entries = _scope_to_latest_run(token_entries, plan_id)
+
     intervention_count = read_intervention_count(interventions_path)
     intervention_log = [
         entry
