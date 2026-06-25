@@ -610,6 +610,8 @@ Coding agent fails
 # Required before any kanban_complete on a code-gen card:
 python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace>
 # Must return: EVALUATION CHAIN PASSED
+# For retry-safe verification (no auto-block): add --check-only
+python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace> --check-only
 ```
 
 If no coding agent ran (worker-direct or orchestrator-direct), log tokens with the appropriate source:

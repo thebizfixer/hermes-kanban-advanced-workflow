@@ -362,10 +362,32 @@ The evaluation chain runs deterministic steps (AEP DAL pattern). Each returns AL
 
 **Lattice memory (AEP attractor pattern):** After successful completion, the chain writes a lattice memory entry with files + tests hash. Subsequent workers with matching attractor_hash skip cold-path validation for steps 1, 3, and 4. Steps 2, 5, and 6 always run — scope enforcement and token attribution are never cached.
 
-If the chain returns DENY, the task is blocked. Use `kanban_recover.py` for automated recovery:
+**Retry-safe verification (--check-only pattern):**
+
+Run the evaluation chain with `--check-only` first to avoid premature blocking:
+
 ```bash
-python hermes-kanban-advanced-workflow/scripts/kanban_recover.py <task_id> <error_code>
+python3 scripts/kanban_evaluation_chain.py <task_id> <workspace> --check-only
 ```
+
+**Retry ladder (up to 3 attempts — matches `kanban.failure_limit` default of 2 + initial):**
+1. First run → DENY: diagnose the error code, apply fix, retry.
+2. Second run → DENY: deeper diagnosis, apply fix, retry.
+3. Third run → DENY: `kanban_block` with the final error code. Do NOT retry further.
+
+On ALLOW at any attempt: call `kanban_complete` with summary and metadata.
+
+**STOP AFTER BLOCKING:** Once `kanban_block` is called, the worker session MUST stop. Do not continue troubleshooting a blocked card — the orchestrator handles blocked cards via the board keeper and escalation pipeline.
+
+| Error | Retryable? | Fix before retry |
+|-------|-----------|------------------|
+| E001  | Yes | Widen baseline or stamp Commit: |
+| E003  | Yes | Fix import path, test command, or deps |
+| E004  | Yes | Amend commit message |
+| E006  | Yes | Check worktree, auth, prompt |
+| E018  | Yes | Capture agent JSON; write token log |
+| E020  | Yes | Re-dispatch with JSON capture |
+| E023  | NO | Escalate immediately — repeated identical error |
 
 If the chain script is missing (E013), block the task immediately — governance cannot proceed.
 

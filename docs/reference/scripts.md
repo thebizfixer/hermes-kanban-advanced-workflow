@@ -219,8 +219,14 @@ Governed card creation from a plan file.  Reads the plan, extracts workstreams, 
 ## Evaluation chain (`kanban_evaluation_chain.py`)
 
 ```bash
+# Standard invocation (auto-complete on pass, auto-block on fail):
 python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace> --baseline HEAD~1
+
+# Check-only mode (no side effects — returns exit 0/1, no block/complete):
+python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace> --check-only
 ```
+
+`--check-only` runs all eval steps and reports pass/fail via exit code without calling `hermes kanban block` or `hermes kanban complete`. Workers use this for retry-safe verification (retry up to 3× before blocking, matching `kanban.failure_limit`). Without `--check-only`, the existing auto-block/auto-complete behavior is preserved.
 
 9-step Deterministic Adjudication Lattice (AEP DAL pattern). Each step returns ALLOW/DENY with canonical error code:
 

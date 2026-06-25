@@ -69,6 +69,26 @@ python3 scripts/kanban_recover.py <task_id> E003   # example
 
 Do **not** use recover for auth (`[escalation:coding_agent:auth]`) or E021 (fix worktree first).
 
+## Retry pattern (--check-only)
+
+**The eval chain now supports `--check-only` flag** (`eval-chain-retry-hardening` plan, 2026-06-25). Use it to verify pass/fail without triggering block/complete side effects:
+
+```bash
+python3 scripts/kanban_evaluation_chain.py <task_id> <workspace> --check-only
+```
+
+If `--check-only` passes (exit 0), call `kanban_complete` directly — the chain passed, no block needed.
+
+If `--check-only` fails (exit 1), apply the recovery for the error code, then retry `--check-only`. Only call `kanban_block` after all retries are exhausted (max 3 — matches `kanban.failure_limit` default of 2 + initial).
+
+**Error code retryability:**
+| Code | --check-only safe | Notes |
+|------|-------------------|-------|
+| E001-E020 | Yes | Fix and retry up to 3x |
+| E023 | Yes (first run) | If E023 fires, block immediately — repeated identical error |
+
+**Without `--check-only`:** the eval chain retains its existing auto-block/auto-complete behavior for backward compatibility with cards dispatched before this fix.
+
 ## Pitfalls (short)
 
 - **`[unauthenticated]` in logs** — cosmetic Cursor indexer; use `coding_agent_invoke.sh smoke`.

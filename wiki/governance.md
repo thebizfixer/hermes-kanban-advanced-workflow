@@ -280,9 +280,16 @@ bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
 ### 4. Evaluation chain (worker-side)
 
 Before a worker can call `kanban_complete`, it must pass the evaluation chain:
+
 ```bash
+# Standard invocation (auto-complete/auto-block):
 python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace>
+
+# Check-only mode (retry-safe — exit 0/1, no side effects):
+python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace> --check-only
 ```
+
+`--check-only` (added 2026-06-25) runs all eval steps and reports pass/fail without calling `kanban block` or `kanban complete`. Workers retry up to 3× with `--check-only` before blocking (matches `kanban.failure_limit`). See `eval-chain-retry-hardening` plan.
 
 **Cold path (coding cards):**
 
