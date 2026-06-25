@@ -90,15 +90,27 @@ _dispatch_and_log() {
 _dispatch_hermes_and_meter() {
   # For the 'hermes' coding agent, tokens are metered via Hermes insights
   # delta rather than agent self-reporting. Hermes records token usage from
-  # provider response headers — this is authoritative, not estimated.
-  #
+  # provider response headers (not from agent output), so this is
+  # non-self-reporting and authoritative.
   # Flow: snapshot → dispatch → delta → log authoritative counts
   local -a agent_args=("$@")
   local out_file
   out_file="$(mktemp)"
 
-  # Snapshot current Hermes token state (errors go to stderr for debugging)
-  python3 "$SCRIPT_DIR/hermes_token_meter.py" snapshot || true
+  # Clean up stale baseline on interrupt (SIGTERM/SIGINT) so next run starts clean.
+  # BASELINE_FILE path matches hermes_token_meter.py's tempfile.gettempdir() location.
+  local baseline_file
+  baseline_file="$(python3 -c "import tempfile; from pathlib import Path; print(Path(tempfile.gettempdir()) / 'hermes_token_meter_baseline.json')")"
+  trap 'rm -f "$baseline_file" 2>/dev/null' EXIT INT TERM
+
+  # Snapshot current Hermes token state (errors go to stderr for debugging).
+  # Do NOT use || true — silent failures cause estimated fallback instead of
+  # authoritative hermes_insights. Capture exit code explicitly and warn.
+  local snapshot_ok=true
+  python3 "$SCRIPT_DIR/hermes_token_meter.py" snapshot || snapshot_ok=false
+  if ! $snapshot_ok; then
+    echo "[WARNING] Token snapshot failed — will attempt delta with existing baseline (if any)" >&2
+  fi
 
   local rc=0
   if run_with_coding_agent_auth_lock "$BINARY" "${agent_args[@]}" >"$out_file" 2>&1; then
@@ -108,9 +120,8 @@ _dispatch_hermes_and_meter() {
   fi
 
   # Log authoritative token delta from Hermes insights.
-  # Remove 2>/dev/null so errors are visible in worker output — critical for
-  # diagnosing why token metering might fail. Keep || true so a metering
-  # failure doesn't block the card from completing.
+  # Errors are visible in worker output — critical for diagnosing metering issues.
+  # Keep || meter_rc=$? so a metering failure doesn't block the card from completing.
   local meter_rc=0
   HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
   HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
@@ -119,14 +130,16 @@ _dispatch_hermes_and_meter() {
       --task-id "${HERMES_KANBAN_TASK:-}" \
       --source hermes_insights || meter_rc=$?
 
-  # Only run log_invoke_tokens.py as fallback if hermes_token_meter.py failed
-  # (exit code != 0). When hermes_token_meter succeeds it always writes an
-  # entry — even for zero delta — so a fallback estimated entry would be a
-  # duplicate.
-  if [ "$meter_rc" -ne 0 ]; then
+  # Only run log_invoke_tokens.py as fallback when BOTH snapshot and delta failed.
+  # If snapshot failed but delta succeeded (baseline from prior run), the delta
+  # result is authoritative — do not overwrite with estimated.
+  if [ "$meter_rc" -ne 0 ] && ! $snapshot_ok; then
+    echo "[WARNING] Both snapshot and delta failed — falling back to estimated metering" >&2
     HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
     HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
       python3 "$SCRIPT_DIR/log_invoke_tokens.py" --output-file "$out_file" || true
+  elif [ "$meter_rc" -ne 0 ]; then
+    echo "[WARNING] Token delta failed but snapshot was OK — baseline/delta mismatch, check hermes insights" >&2
   fi
 
   # Output captured content to stdout (worker captures this)

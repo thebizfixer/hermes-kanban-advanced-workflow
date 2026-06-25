@@ -27,7 +27,7 @@ if git_usr_bin:
     env['PATH'] = git_usr_bin + os.pathsep + env.get('PATH', '')
 
 r = subprocess.run(f'"{GIT_BASH}" "{script}" {args}', shell=True,
-                   capture_output=True, text=True, timeout=60, env=env)
+                   capture_output=True, text=True, encoding="utf-8", timeout=60, env=env)
 if r.stdout:
     print(r.stdout, end='')
 if r.stderr:

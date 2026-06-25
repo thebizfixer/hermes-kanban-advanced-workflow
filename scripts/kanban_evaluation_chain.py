@@ -257,6 +257,11 @@ def step_1_file_compliance(
 
 def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, task_id: str = "") -> Tuple[bool, Optional[str]]:
     """Any modified file not in Files: gets reverted."""
+    def _normalize_path(p: str) -> str:
+        """Normalize to forward-slash repo-relative path for cross-platform comparison."""
+        return p.replace("\\", "/").strip("/")
+
+    files_normalized = {_normalize_path(f) for f in files}
     diff_range = _diff_range(baseline, workspace)
     result = subprocess.run(
         ["git", "diff", "--name-only", diff_range],
@@ -267,7 +272,7 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
     unlisted = []
     for f in result.stdout.strip().split("\n"):
         f = f.strip()
-        if f and f not in files and not f.startswith(".hermes/"):
+        if f and _normalize_path(f) not in files_normalized and not f.startswith(".hermes/"):
             unlisted.append(f)
     if unlisted:
         revert_failures = []
@@ -295,7 +300,7 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
         )
         still_unlisted = [
             f.strip() for f in result2.stdout.strip().split("\n")
-            if f.strip() and f.strip() not in files and not f.strip().startswith(".hermes/")
+            if f.strip() and _normalize_path(f.strip()) not in files_normalized and not f.strip().startswith(".hermes/")
         ]
         if still_unlisted:
             print(f"[E002] DENY: {len(still_unlisted)} unlisted file(s) remain after revert: {still_unlisted}")

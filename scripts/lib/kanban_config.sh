@@ -20,6 +20,25 @@ resolve_project_root() {
         return 0
     fi
 
+    # Try git root before CWD walk — cron context may have different CWD than repo root.
+    # git rev-parse always outputs forward slashes on all platforms.
+    local git_root
+    if git_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+        printf '%s\n' "$git_root"
+        return 0
+    fi
+
+    # Fall back to $HERMES_HOME parent directory (project containing .hermes/)
+    if [ -n "${HERMES_HOME:-}" ]; then
+        local hermes_parent
+        hermes_parent="$(cd "$HERMES_HOME/.." 2>/dev/null && pwd)" || true
+        if [ -n "$hermes_parent" ] && [ -f "$hermes_parent/.hermes/kanban-overrides/kanban-config.yaml" ]; then
+            printf '%s\n' "$hermes_parent"
+            return 0
+        fi
+    fi
+
+    # Last resort: walk up from start_dir (original CWD-based behavior)
     local dir
     dir="$(cd "$start_dir" && pwd)"
     local config_hit="" git_hit="" env_hit=""
@@ -79,6 +98,7 @@ _load_branch_config() {
     if [ -z "$CONFIG_FILE" ] || [ ! -f "$CONFIG_FILE" ]; then
         echo "[kanban-governance] ERROR: config not found" >&2
         echo "[kanban-governance] Run: hermes kanban-advanced init" >&2
+        echo "[kanban-governance] If running as cron: check 'hermes cron list' for workdir vs actual CWD" >&2
         return 1
     fi
 

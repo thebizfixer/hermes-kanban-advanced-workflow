@@ -75,7 +75,30 @@ export KANBAN_TEMP="$TEMP"  # override if needed
 
 ### Worktree paths
 
-Worktree paths in card bodies use absolute paths. On Windows:
+Worktree paths in card bodies use absolute paths. The decomposer (`kanban_decompose.py`)
+generates paths using `tempfile.gettempdir()` with an `os.path.isabs()` guard:
+
+```python
+tmp = Path(tempfile.gettempdir()).as_posix()
+if not os.path.isabs(tmp):
+    win_tmp = os.environ.get("TEMP") or os.environ.get("TMP") or ""
+    if win_tmp and os.path.isabs(win_tmp):
+        tmp = Path(win_tmp).as_posix()
+    else:
+        tmp = (Path.home() / "tmp").as_posix()
+workspace = f"worktree:{tmp}/wt-{plan_id}-{card_key}"
+```
+
+On Linux/macOS, `os.path.isabs("/tmp")` returns `True` — the guard is a no-op.
+On Windows MSYS/Git Bash, `os.path.isabs("/tmp")` returns `False` — the guard
+falls back to the Windows-native `TEMP`/`TMP` env vars or `Path.home() / "tmp"`.
+This replaces the previous `/tmp` string-match guard which only caught one specific
+MSYS override pattern.
+
+Per Python docs, `tempfile.gettempdir()` resolves: `TMPDIR` → `TEMP` → `TMP` →
+platform-specific → CWD. MSYS/Git Bash may override `TEMP`/`TMP` to `/tmp`.
+
+On Windows, resulting paths look like:
 
 ```
 --workspace "worktree:/tmp/wt-<plan>-<card>"         # Git Bash (maps /tmp → %TEMP%)
@@ -168,9 +191,11 @@ sequences. Apply these conventions:
    `board_keeper.sh`, `kanban_lifecycle_notify.sh`) must not die on missing lib files.
    Guard with `2>/dev/null || true`.
 
-6. **Gate script (`PREFLIGHT_SKIP_CODING_AGENT_CLI`):** Set `PREFLIGHT_SKIP_CODING_AGENT_CLI=1`
-   to skip the coding-agent CLI smoke check on Windows (often hangs in non-interactive
-   contexts).
+6. **Gate script (`PREFLIGHT_SKIP_CODING_AGENT_CLI`):** `kanban_handoff.py` sets
+   `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` unconditionally when invoking the pre-dispatch
+   gate (L453–455). This skips the coding-agent CLI smoke check which often hangs in
+   non-interactive contexts on Windows. Manual gate invocation may need it set
+   explicitly.
 
 7. **Import paths:** Use `from lib.card_body` (not `from card_body`) in Python scripts.
    The decomposer adds `scripts/` to `sys.path` but not `scripts/lib/`.

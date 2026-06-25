@@ -324,11 +324,19 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
                 # "worktree" alone is rejected by the dispatcher — must have :<path>.
                 # Use platform-appropriate temp dir (C:\Users\...\Temp on Windows, /tmp on Unix).
                 tmp = Path(tempfile.gettempdir()).as_posix()
-                # Guard: when gettempdir() returns MSYS-style /tmp/ on Windows,
-                # the Hermes dispatcher rejects it as non-absolute. Fall back to
-                # the Windows-native TEMP env var (C:/Users/.../AppData/Local/Temp).
-                if tmp == "/tmp" or tmp.startswith("/tmp/"):
-                    tmp = Path(os.environ.get("TEMP", os.environ.get("TMP", tmp))).as_posix()
+                # Guard: MSYS/Git Bash may return /tmp which is not absolute on Windows.
+                # Use os.path.isabs() instead of string-matching /tmp — catches all
+                # non-absolute paths regardless of the specific MSYS override value.
+                # Per Python docs, gettempdir() resolves: TMPDIR → TEMP → TMP →
+                # platform-specific → CWD. MSYS overrides TEMP/TMP to /tmp.
+                if not os.path.isabs(tmp):
+                    # Try Windows-native TEMP/TMP env vars first
+                    win_tmp = os.environ.get("TEMP") or os.environ.get("TMP") or ""
+                    if win_tmp and os.path.isabs(win_tmp):
+                        tmp = Path(win_tmp).as_posix()
+                    else:
+                        # Final fallback: Path.home() is always absolute on all platforms
+                        tmp = (Path.home() / "tmp").as_posix()
                 workspace = f"worktree:{tmp}/wt-{plan_id}-{card_key}"
             branch = card.get("branch") or f"kanban/{plan_id}/{card_key}"
             cmd.extend(["--workspace", workspace])
@@ -366,11 +374,29 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
 
         # Block immediately to beat the dispatcher (claims 'ready' cards in <1s).
         if block_after:
-            _, b_err, b_rc = hermes("kanban", "block", task_id,
-                                    "Awaiting dependency gate (auto_unblock when parents done)")
-            if b_rc != 0:
-                print(f"  WARN: block {task_id} failed: {b_err[:200]}", file=sys.stderr)
-                print(f"  WARN: block manually: hermes kanban block {task_id}", file=sys.stderr)
+            import time as _time
+            block_reason = "Awaiting dependency gate (auto_unblock when parents done)"
+            blocked = False
+            for attempt in range(1, 4):
+                _, b_err, b_rc = hermes("kanban", "block", task_id, block_reason)
+                if b_rc == 0:
+                    # Verify the card is actually blocked
+                    show_out, _, show_rc = hermes("kanban", "show", task_id)
+                    if show_rc == 0 and "status:    blocked" in show_out:
+                        blocked = True
+                        break
+                    else:
+                        print(f"  WARN: block {task_id} reported success but status not 'blocked' (attempt {attempt}/3)", file=sys.stderr)
+                else:
+                    print(f"  WARN: block {task_id} failed (attempt {attempt}/3): {b_err[:200]}", file=sys.stderr)
+                if attempt < 3:
+                    backoff = 2 ** (attempt - 1)  # 1s, 2s, 4s
+                    print(f"  RETRY: block {task_id} in {backoff}s (attempt {attempt + 1}/3)", file=sys.stderr)
+                    _time.sleep(backoff)
+            if not blocked:
+                print(f"  ERROR: block {task_id} failed after 3 attempts — card creation aborted", file=sys.stderr)
+                print(f"  ERROR: block manually: hermes kanban block {task_id}", file=sys.stderr)
+                return None
         return task_id
     finally:
         os.unlink(tmpfile)
@@ -819,6 +845,40 @@ def main():
                         links_created += 1
         # audit was already blocked on create; auto_unblock releases it once
         # every implementation parent is done.
+
+    # Cap verification card parents to max 2 (gate + last impl card).
+    # Verification cards only need to gate on the gate and their immediate
+    # predecessor — not all siblings. This prevents triple-parent situations
+    # from remediation or wave-chain edge cases.
+    for card in impl_cards:
+        if card.get("type", "").startswith("verification"):
+            child_id = card_ids.get(card["key"])
+            if not child_id:
+                continue
+            # Determine which parent links to keep: gate + highest-ordinal impl parent
+            keep_parents = set()
+            if gate_id:
+                keep_parents.add(gate_id)
+            # Find the highest-ordinal impl parent from wave_parent or ordinal_parent
+            impl_parent = card.get("wave_parent") or card.get("ordinal_parent")
+            if impl_parent and impl_parent in card_ids:
+                keep_parents.add(card_ids[impl_parent])
+            # Remove any impl→verification links not in the keep set
+            # (audit links are impl→audit, not affected)
+            for other_card in impl_cards:
+                if other_card["key"] == card["key"]:
+                    continue
+                other_id = card_ids.get(other_card["key"])
+                if other_id and other_id not in keep_parents:
+                    # Check if this link exists and remove it
+                    link_key = f"{other_card['key']}->{card['key']}"
+                    if link_key in seen_links:
+                        # Unlink via hermes kanban unlink if not dry-run
+                        if not args.dry_run:
+                            hermes("kanban", "unlink", other_id, child_id)
+                        seen_links.discard(link_key)
+                        links_created -= 1
+                        print(f"  unlinked excess parent: {other_card['key']} -> {card['key']} (verification cap)")
 
     # Complete root card immediately
     root_id = card_ids.get("root")
