@@ -160,9 +160,15 @@ def generate_attestation(plan_id: str, repo_root: str,
     return attestation
 
 
-def verify_attestation(attestation_dir: str) -> tuple:
+def verify_attestation(attestation_dir: str, plan_id: str = "") -> tuple:
     """Check if a valid attestation exists and is fresh. Returns (valid: bool, reason: str)."""
-    attestation_path = os.path.join(attestation_dir, "attestation.yaml")
+    # Try namespaced file first, fall back to legacy
+    attestation_path = os.path.join(attestation_dir, f"attestation-{plan_id}.yaml") if plan_id else os.path.join(attestation_dir, "attestation.yaml")
+    if not os.path.exists(attestation_path) and plan_id:
+        # Legacy fallback
+        legacy = os.path.join(attestation_dir, "attestation.yaml")
+        if os.path.exists(legacy):
+            attestation_path = legacy
     if not os.path.exists(attestation_path):
         return False, "A001_ATTESTATION_MISSING: No attestation file found. Run kanban_attestation.py first."
 
@@ -212,7 +218,7 @@ if __name__ == "__main__":
     output_dir = args.output_dir or os.path.join(repo_root, ".hermes", "kanban")
 
     if args.verify:
-        valid, reason = verify_attestation(output_dir)
+        valid, reason = verify_attestation(output_dir, args.plan_id)
         if valid:
             print(f"PASS: {reason}")
         else:
@@ -262,7 +268,7 @@ if __name__ == "__main__":
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "attestation.yaml")
+    output_path = os.path.join(output_dir, f"attestation-{args.plan_id}.yaml")
     with open(output_path, "w", encoding="utf-8") as f:
         yaml.dump(attestation, f, default_flow_style=False, sort_keys=False)
 

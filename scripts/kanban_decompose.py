@@ -274,6 +274,15 @@ def estimate_turn_budget(card: dict) -> int:
     return (fn_count * 3) + (test_runs * 2) + (consumer_checks * 2) + (2 if lines > 80 else 0) + 2
 
 
+def _is_dispatcher_absolute(path: str) -> bool:
+    """Return True if path is absolute per Hermes dispatcher requirements.
+    On Windows, paths must start with a drive letter. On Unix, os.path.isabs() suffices."""
+    import sys, re
+    if sys.platform == 'win32':
+        return bool(re.match(r'^[A-Za-z]:[/\\\\]', path))
+    return os.path.isabs(path)
+
+
 def max_retries_for_card(card: dict) -> int:
     """Per-plan cap: always ≤2 retries for code-gen cards."""
     if card.get("type") != "code-gen":
@@ -281,7 +290,7 @@ def max_retries_for_card(card: dict) -> int:
     return 2
 
 
-def create_card(card: dict, dry_run: bool = False, block_after: bool = False) -> str | None:
+def create_card(card: dict, dry_run: bool = False, block_after: bool = False, run_ts: str = "") -> str | None:
     """Create a single kanban card. Returns task ID or None.
 
     Vanilla hermes creates cards in 'ready' status and the dispatcher claims
@@ -329,7 +338,7 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
                 # non-absolute paths regardless of the specific MSYS override value.
                 # Per Python docs, gettempdir() resolves: TMPDIR → TEMP → TMP →
                 # platform-specific → CWD. MSYS overrides TEMP/TMP to /tmp.
-                if not os.path.isabs(tmp):
+                if not _is_dispatcher_absolute(tmp):
                     # Try Windows-native TEMP/TMP env vars first
                     win_tmp = os.environ.get("TEMP") or os.environ.get("TMP") or ""
                     if win_tmp and os.path.isabs(win_tmp):
@@ -337,7 +346,7 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False) ->
                     else:
                         # Final fallback: Path.home() is always absolute on all platforms
                         tmp = (Path.home() / "tmp").as_posix()
-                workspace = f"worktree:{tmp}/wt-{plan_id}-{card_key}"
+                workspace = f"worktree:{tmp}/wt-{plan_id}-{run_ts}-{card_key}" if run_ts else f"worktree:{tmp}/wt-{plan_id}-{card_key}"
             branch = card.get("branch") or f"kanban/{plan_id}/{card_key}"
             cmd.extend(["--workspace", workspace])
             cmd.extend(["--branch", branch])
@@ -557,6 +566,10 @@ def main():
     project_root = _find_project_root(Path(input_path).resolve().parent)
     worker_profile, orchestrator_profile = _resolve_dispatch_profiles(project_root)
 
+    # Generate run timestamp once for all cards — prevents same-plan_id concurrent-run collisions
+    import datetime
+    run_ts = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S')
+
     plan_file_rel = ""
     if args.plan:
         try:
@@ -748,7 +761,7 @@ def main():
         gate_id = args.gate_id
         print(f"  Gate: {gate_id} (reusing existing — skipping auto-create)")
     else:
-        gate_id = create_card(gate_card, args.dry_run, block_after=True)
+        gate_id = create_card(gate_card, args.dry_run, block_after=True, run_ts=run_ts)
         if not gate_id:
             sys.exit("ERROR: Failed to create gate card")
         print(f"  Gate: {gate_id} (blocked — orchestrator-only control card)")
@@ -760,7 +773,7 @@ def main():
 
     created = 1  # gate counts as 1
     for card in impl_cards:
-        cid = create_card(card, args.dry_run, block_after=True)
+        cid = create_card(card, args.dry_run, block_after=True, run_ts=run_ts)
         if not cid:
             sys.exit(f"ERROR: Failed to create implementation card {card['key']}")
         card_ids[card["key"]] = cid
@@ -773,7 +786,7 @@ def main():
 
     # Also create root card if present (not blocked — completed below)
     for root_card in root_cards:
-        rid = create_card(root_card, args.dry_run, block_after=False)
+        rid = create_card(root_card, args.dry_run, block_after=False, run_ts=run_ts)
         if rid:
             card_ids[root_card["key"]] = rid
             print(f"  {root_card['key']}: {rid} (root)")
@@ -781,7 +794,7 @@ def main():
 
     # Also create audit card (blocked on create — gates on all impl cards)
     for audit in audit_cards:
-        aid = create_card(audit, args.dry_run, block_after=True)
+        aid = create_card(audit, args.dry_run, block_after=True, run_ts=run_ts)
         if aid:
             card_ids[audit["key"]] = aid
             print(f"  audit: {aid} (blocked)")

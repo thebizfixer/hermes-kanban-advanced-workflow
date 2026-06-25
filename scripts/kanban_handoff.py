@@ -875,6 +875,11 @@ def main() -> int:
         action="store_true",
         help="After operator approval, archive non-running plan cards before handoff",
     )
+    parser.add_argument(
+        "--reuse",
+        action="store_true",
+        help="Print existing open handoff card ID and exit (no creation)",
+    )
     parser.add_argument("--json", action="store_true", help="Machine-readable output")
     parser.add_argument(
         "--skip-cron-provision",
@@ -1012,6 +1017,9 @@ def main() -> int:
     # ── Idempotency ────────────────────────────────────────────────────────
     existing = _find_open_handoff(plan_id, title)
     if existing:
+        if args.reuse:
+            print(existing)
+            return 0
         emit({"ok": True, "reused": True, "id": existing, "title": title,
               "plan_id": plan_id, "cron_provision": cron_stamp})
         return 0

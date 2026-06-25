@@ -35,7 +35,11 @@ for _ in {1..6}; do
     PROJECT_ROOT="$(dirname "$PROJECT_ROOT")"
 done
 
-LOGDIR="$PROJECT_ROOT/.hermes/kanban/logs"
+if [[ -n "$PLAN_ID" ]]; then
+    LOGDIR="$PROJECT_ROOT/.hermes/kanban/logs/$PLAN_ID"
+else
+    LOGDIR="$PROJECT_ROOT/.hermes/kanban/logs"
+fi
 COUNTER="$LOGDIR/interventions.count"
 JSONL="$LOGDIR/interventions.jsonl"
 
