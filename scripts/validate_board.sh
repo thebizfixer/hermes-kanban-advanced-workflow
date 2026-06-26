@@ -19,10 +19,12 @@ BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLI_PARSE="$SCRIPT_DIR/lib/cli_output_parse.py"
 
 PROFILE_OVERRIDE=""
+PLAN_ID=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --strict) PROFILE_OVERRIDE="strict"; shift ;;
         --profile) PROFILE_OVERRIDE="${2:-}"; shift 2 ;;
+        --plan-id) PLAN_ID="${2:-}"; shift 2 ;;
         *) shift ;;
     esac
 done
