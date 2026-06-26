@@ -228,7 +228,7 @@ if [[ "$PROFILES_ONLY" -eq 1 ]]; then
   exit 0
 fi
 
-SKILLS_OUTPUT_PATH="${CONFIG[skills_output_path]:-$REPO_ROOT/.hermes/skills/devops}"
+SKILLS_OUTPUT_PATH="${CONFIG[skills_output_path]:-$HERMES_HOME/skills/kanban-advanced}"
 if [[ "$SKILLS_OUTPUT_PATH" != /* ]]; then
   SKILLS_OUTPUT_PATH="$REPO_ROOT/$SKILLS_OUTPUT_PATH"
 fi

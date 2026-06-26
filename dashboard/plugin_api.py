@@ -952,11 +952,29 @@ async def coding_agent_models(request: Request):
 
 @router.put("/profiles/{profile_name}")
 async def put_profile_settings(profile_name: str, request: Request):
-    """PUT /api/plugins/kanban-advanced/profiles/{profile_name}"""
+    """PUT /api/plugins/kanban-advanced/profiles/{profile_name}
+
+    Reads the JSON body in the async handler, then delegates all blocking
+    config/subprocess work to a sync helper so the event loop stays responsive.
+    The model probe can fire immediately after — no queuing behind save.
+    """
     profile = profile_name.strip()
     if not profile:
         raise HTTPException(status_code=400, detail="profile_name is required")
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body") from None
+    return _execute_put_profile_settings(profile, body)
 
+
+def _execute_put_profile_settings(profile: str, body: dict) -> dict:
+    """Sync helper for put_profile_settings — all blocking work runs here.
+    
+    Separated from the async handler so the event loop is never blocked during
+    config reads, subprocess calls, and config writes. FastAPI runs this in a
+    thread pool (it's a regular def called from an async handler).
+    """
     project_root = resolve_project_root()
     config = _read_config(project_root)
     worker_profile, orchestrator_profile, _ = resolve_dispatch_profiles(config)
@@ -975,11 +993,6 @@ async def put_profile_settings(profile_name: str, request: Request):
 
     if not _profile_exists_in_hermes(profile, profiles_output):
         raise HTTPException(status_code=404, detail=f"Hermes profile not found: {profile}")
-
-    try:
-        body = await request.json()
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid JSON body") from exc
 
     stdout = _profile_config_show(profile)
     existing_model = read_model_config_from_config_show(stdout)
