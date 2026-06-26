@@ -143,6 +143,7 @@ acceptance_matrix:
 
 ---
 
+<!-- skip-validate V001 -- Success Criteria: documentation references only, no work targets -->
 ## Success Criteria
 
 The smoke test **PASSES** when ALL of the following are true:
@@ -161,7 +162,6 @@ The smoke test **PASSES** when ALL of the following are true:
 - [ ] Token log (`tokens.jsonl`) has entries for all completed cards + orchestrator checkpoints
 
 The smoke test **FAILS** when ANY of the following occur:
-
 - [ ] Any card stuck in `blocked` > 10 minutes without autonomous recovery (E023 escalation, board-keeper salvage, or final-audit remediation)
 - [ ] Any card requires manual `kanban unblock` or `kanban complete` by a human
 - [ ] Gateway notification pages the operator for a non-recoverable failure
@@ -170,8 +170,11 @@ The smoke test **FAILS** when ANY of the following occur:
 
 **When the smoke test fails:** Stop the kanban. Do NOT hand-fix cards. Investigate the plugin gap that required manual intervention, harden the plugin, and re-run. The goal is unattended operation — every manual intervention is a bug to fix.
 
+<!-- /skip-validate -->
+
 ---
 
+<!-- skip-validate V001 -- Architecture Notes: documentation references only, no work targets -->
 ## Architecture Notes
 
 ### Execution Pipeline (current plugin)
@@ -218,8 +221,11 @@ The kanban-advanced plugin supports three tiers of token metering:
 
 **Orchestrator checkpoints (logged by `hermes_token_meter.py`):** planning-complete, decompose-complete, audit-start, cleanup-complete.
 
+<!-- /skip-validate -->
+
 ---
 
+<!-- skip-validate V001 -- Gate Hardening: documentation references only, no work targets -->
 ## Gate Hardening
 
 Gates are **manual, operator-executed** steps run from the default profile BEFORE decomposition. They verify infrastructure health and plan readiness. They are NOT dispatched to workers.
@@ -268,6 +274,8 @@ python3 hermes-kanban-advanced-workflow/scripts/kanban_handoff.py \
 - Exit 8 → cron provisioning failed → check `hermes` on PATH, gateway running
 
 After handoff: the orchestrator receives the card, decomposes, and dispatches Cards 1–5. The operator monitors via `hermes kanban watch` or the board keeper cron.
+
+<!-- /skip-validate -->
 
 ---
 
