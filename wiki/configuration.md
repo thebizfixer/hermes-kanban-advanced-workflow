@@ -257,3 +257,13 @@ hermes config set auxiliary.profile_describer.model "<model-name>"
 ### Removed: `auxiliary.session_search`
 
 As of v0.15.0, `session_search` no longer uses an auxiliary LLM (PR #27590). Any existing `auxiliary.session_search` block in `config.yaml` is dead config — harmless but should be cleaned up. Run `hermes config migrate` and then remove the stale block.
+
+### Worker Profile Model Selection
+
+See [docs/reference/coding-agents.md](../docs/reference/coding-agents.md#model-tier-selection-for-worker-profiles)
+for model-tier recommendations and evidence from smoke test analysis.
+
+### Known Limitations
+
+See [docs/reference/limitations.md](../docs/reference/limitations.md) for a
+consolidated list of known limitations operators should plan around.

@@ -90,6 +90,37 @@ Hermes dispatch profiles carry `model.default` for the **orchestrator/worker** s
 
 Workers log a **non-blocking** advisory when the worker profile uses a fast tier; under `policy_profile=strict`, waypoints are the primary safety rail. Orchestrator profiles may use stronger reasoning models for decomposition oversight.
 
+### Model Tier Selection for Worker Profiles
+
+The worker profile supervises an external coding agent through a 7-step
+lifecycle (orient → memory → sanity → handoff → monitor → verify → complete).
+This lifecycle requires reliable instruction-following.
+
+**Pro-tier models** (recommended for unattended execution):
+`deepseek-v4-pro`, `claude-sonnet-4`, `gemini-2.5-pro`, `gpt-4o`
+
+These models follow the full 7-step lifecycle, search for fallback paths
+when scripts aren't found, and escalate correctly on failure.
+
+**Flash-tier models** (acceptable with hardened SOUL):
+`deepseek-v4-flash`, `claude-haiku-4`, `gemini-2.5-flash`, `gpt-4o-mini`
+
+Flash models optimize for speed and may skip complex procedures when the
+first step fails.  The worker SOUL (`plugin/data/prompts/worker.md`) has
+been hardened with an explicit hardcoded fallback path and a simplified
+3-step decision tree to improve flash-tier reliability.  Flash models are
+cost-effective but increase the risk of deviation from SOP.
+
+**Evidence:** The June 26, 2026 smoke test used `deepseek-v4-flash` on the
+worker profile.  All 4 code-gen cards bypassed the dispatch pipeline —
+workers implemented code directly instead of spawning the coding agent.
+The orchestrator (using `deepseek-v4-pro`) followed the full decomposition
+SOP.  See `.hermes/plans/smoke-test-run-anomaly-analysis.plan.md` § D1/D8.
+
+**Preflight enforcement (P3.5):** A future update will add a model-tier
+warning to `preflight.sh` when a known flash-tier model is detected on
+the worker profile.  Override with `PREFLIGHT_SKIP_MODEL_TIER=1`.
+
 ## Cursor CLI (`agent`) — recommended default
 
 **List models:**
