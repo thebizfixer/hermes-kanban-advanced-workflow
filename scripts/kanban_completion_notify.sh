@@ -90,7 +90,7 @@ fi
 
 # Explicit gateway delivery for walk-away completion (non-intervention)
 if [[ "$DELIVER" != "local" ]]; then
-  # Use Hermes send_message (referenced in kanban-notify skill) for direct delivery
+  # Use Hermes send (referenced in kanban-notify skill) for direct delivery
   # Graceful fallback if subcommand or flags differ in this Hermes build
   if command -v hermes >/dev/null 2>&1; then
     hermes send "$MSG" --to "$DELIVER" 2>&1 || \

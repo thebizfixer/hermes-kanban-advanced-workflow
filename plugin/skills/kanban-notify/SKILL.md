@@ -153,7 +153,7 @@ hermes kanban notify-list
 hermes kanban notify-unsubscribe <task_id>
 ```
 
-Send a **test intervention-shaped message** through the orchestrator's gateway channel (e.g. Hermes `send_message` to the operator chat) before the operator leaves. Confirm receipt on the phone/desktop client.
+Send a **test intervention-shaped message** through the orchestrator's gateway channel (e.g. `hermes send --to <target>` to the operator chat) before the operator leaves. Confirm receipt on the phone/desktop client.
 
 ### Walk-away handoff script (orchestrator says to operator)
 

@@ -200,8 +200,10 @@ Also: `messaging` toolset removal may cause "Unknown toolsets" warnings if any p
 
 ## Remediation priority
 
-1. **Fix 9 absolute imports** → unblocks plugin loading, CLI, init, dashboard auto-start
-2. **Fix `kanban_completion_notify.sh`** → `hermes send --to` (walk-away notifications)
-3. **Add `.py` keepalive to materialization list** → permanent Windows fix
-4. **Run `hermes config migrate`** → pull in `kanban.auto_subscribe_on_create` and other new defaults
-5. **Update 88 doc references** → if CLI invocation path changes permanently
+1. ~~Fix 9 absolute imports~~ → **Resolved.** Dual-path import strategy in `script_materialize.py`; all other imports converted to relative.
+2. ~~Fix `kanban_completion_notify.sh`~~ → **Resolved.** Uses `hermes send --to` since 2026-06-25.
+3. ~~Add `.py` keepalive to materialization list~~ → **Resolved.** `dashboard_server_keepalive.py` added to `HERMES_SCRIPT_NAMES` at line 41.
+4. **Run `hermes config migrate`** → pull in `kanban.auto_subscribe_on_create` and other new defaults (operational, not a code fix)
+5. **Update 88 doc references** → if CLI invocation path changes permanently (not yet; `hermes kanban-advanced init` still works)
+
+**All code-level remediations are complete.** The plugin is v0.17.0-compatible. Remaining items are operational (config migrate) or contingent on future upstream changes.
