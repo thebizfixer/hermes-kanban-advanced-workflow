@@ -8,7 +8,9 @@ Every governance script is in `scripts/`.  All paths below use `${bundle_path}/s
 bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh <plan_id>
 ```
 
-Single gate before decomposition. Runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py`) → attestation → card policy present → plan memory seeded → DB integrity → **materialized scripts executable** (`auto_unblock.sh`, `board_keeper.sh`, `worktree_setup.sh` under `$HERMES_HOME/scripts/`) → **hermes on PATH**.  Replaces the old multi-step Steps 0a–0e.  Fails on any blocking check with a specific error.
+Single gate before decomposition. Runs in order: plan on `${working_branch}` → plan pushed → preflight → **coding-agent CLI smoke** (`check_coding_agent_cli.py`) → attestation → card policy present → plan memory seeded → DB integrity → **materialized scripts executable** → **hermes on PATH** → **gate_completion_guard** (detects resurrected gates) → **stale_tasks** (detects prior-run cards). Replaces the old multi-step Steps 0a–0e. Fails on any blocking check with a specific error.
+
+**New flags:** Set `ARCHIVE_STALE=1` to auto-archive stale tasks from prior runs. Set `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` to skip coding-agent CLI smoke (audit-noted override).
 
 After all blocking checks pass, runs **`coding_agent_auth_prewarm`**: when `KANBAN_CODING_AGENT=agent` (Cursor), pre-warm is **blocking** (FAIL stops decomposition); other binaries log WARN-only. One serialized `agent -p "echo ok" --trust` under `flock`. See `plugin/data/references/coding-agent-auth.md` § Pre-warm before decomposition.
 
@@ -21,10 +23,10 @@ When `subagent_gate.enabled` is not `false` (default **true**) and the orchestra
 ## Board validation (`validate_board.sh`)
 
 ```bash
-bash hermes-kanban-advanced-workflow/scripts/validate_board.sh [--strict] [--profile advisory|balanced|strict]
+bash hermes-kanban-advanced-workflow/scripts/validate_board.sh [--strict] [--profile advisory|balanced|strict] [--plan-id <id>]
 ```
 
-Pre-dispatch structural gate.  Run after card creation and cron provisioning, before the orchestrator completes the gate card. 13 checks:
+Pre-dispatch structural gate. Run after card creation and cron provisioning, before the orchestrator completes the gate card. **--plan-id**: when set, only validates cards belonging to that plan_id (multi-board isolation). Without --plan-id, validates all cards (backward compatible). 13 checks:
 
 | # | Check | What it catches |
 |---|-------|----------------|
@@ -65,10 +67,10 @@ Polls the board and unblocks cards whose parents are all done.  Run via cron eve
 ### `board_keeper.sh`
 
 ```bash
-bash scripts/board_keeper.sh
+bash scripts/board_keeper.sh [--plan-id <id>] [--dry-run]
 ```
 
-Proactive board manager for walk-away execution.  Runs every 180s.  Core functions:
+Proactive board manager for walk-away execution. Runs every 180s. **--plan-id**: when set, only processes cards and worktrees belonging to that plan_id (multi-board isolation). Without --plan-id, processes all boards (backward compatible). Core functions:
 1. Salvage iteration-limit cards (check worktree, commit, merge, complete)
 2. Kill orphaned agent processes from archived cards
 3. Unstick ready cards stalled >3 minutes
@@ -214,7 +216,7 @@ Port configurable via `KA_DASHBOARD_PORT` env var (default: 18900). For remote/V
 python hermes-kanban-advanced-workflow/scripts/kanban_decompose.py --plan <file> [--dry-run]
 ```
 
-Governed card creation from a plan file.  Reads the plan, extracts workstreams, creates cards with proper `Files:`/`Mode:`/`agent -p` blocks, wires parent-child dependencies. **Auto-stamps** `Parent-branches:`, `Call-sites:`, `Acceptance:`, `plan_file`, and `Iteration-budget:` from plan bundles (`scripts/lib/decompose_stamp.py`). The final audit card includes `Type: audit`, **`Audit-baseline-sha:`** (frozen `git rev-parse HEAD` at decompose), and a pointer to `final_audit_sanity.py`. **Fail-fast:** exits non-zero when `hermes kanban create` returns no task id (no silent partial boards). Exits **7** when `plan_id` cards already exist (idempotent re-decompose guard). `--max-retries 2` caps decomposition retries.
+Governed card creation from a plan file. Reads the plan, extracts workstreams, creates cards with proper `Files:`/`Mode:`/`agent -p` blocks, wires parent-child dependencies. **Auto-stamps** `Parent-branches:`, `Call-sites:`, `Acceptance:`, `plan_file`, and `Iteration-budget:` from plan bundles (`scripts/lib/decompose_stamp.py`). **Worktree paths include run timestamp** (`wt-{plan_id}-{run_ts}-{card_key}`) for same-plan_id concurrent-run collision prevention. Uses `_is_dispatcher_absolute()` for platform-aware path validation (cpython#125283-aligned). The final audit card includes `Type: audit`, **`Audit-baseline-sha:`** (frozen `git rev-parse HEAD` at decompose), and a pointer to `final_audit_sanity.py`. **Fail-fast:** exits non-zero when `hermes kanban create` returns no task id. Exits **7** when `plan_id` cards already exist. `--max-retries 2` caps decomposition retries.
 
 ## Evaluation chain (`kanban_evaluation_chain.py`)
 
@@ -251,7 +253,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id>  
 python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> --verify            # check validity
 ```
 
-Generates `$HERMES_HOME/kanban/attestation.yaml` after preflight. Records: preflight status, profile validity, agent-prompt block count. Session-scoped (120 min TTL). Error codes: A001 (missing), A002 (stale), A003 (tampered).
+Generates `$HERMES_HOME/kanban/attestation-{plan_id}.yaml` after preflight (with legacy fallback to `attestation.yaml`). Records: preflight status, profile validity, agent-prompt block count. Session-scoped (120 min TTL). Error codes: A001 (missing), A002 (stale), A003 (tampered).
 
 ## Card body policy (`kanban_card_policy.py`)
 
@@ -267,9 +269,10 @@ Validates card bodies against `policies/card-body-policy.yaml`. Error codes: P00
 ```bash
 python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md>
 python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md> --plan-id <id> --allow-offline
+python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md> --reuse   # print existing card ID, exit 0
 ```
 
-Creates one hardened, idempotent orchestrator-handoff card when a non-orchestrator profile needs to trigger decomposition without a manual session switch.  The card title is `Decompose: <plan_id>` and carries `Type: orchestrator-handoff` — a governance carve-out that exempts it from the worker code-gen rules (P001/P002/P003).  The body is SOP-only: **no `agent -p` block** (to prevent auto-decompose into stub children).
+Creates one hardened, idempotent orchestrator-handoff card. Idempotent: refuses to create a duplicate while an open card exists for the same plan_id. **--reuse** prints the existing open card ID and exits 0. **--force** creates a new card even if one exists (not recommended — may create duplicate boards).
 
 **Cron SSOT:** This script runs `provision_kanban_crons.sh --create` and `--check` in the **default profile session** before creating the handoff card. The orchestrator runbook verifies only (`--check`, with idempotent `--create` fallback). Decompose uses `--no-crons` on the handoff path.
 
@@ -395,16 +398,17 @@ Environment-neutral structural validation: directories, `bash -n` on all shell s
 bash hermes-kanban-advanced-workflow/scripts/kanban_intervention_inc.sh
 ```
 
-Increments `.hermes/kanban/logs/interventions.count`. Called once per gateway escalation. Postmortem reads this counter for intervention rate KPI.
+Increments `.hermes/kanban/logs/{plan_id}/interventions.count` when `--plan-id` is provided (per-plan scoping). Falls back to `.hermes/kanban/logs/interventions.count` for backward compat. Called once per gateway escalation. Postmortem reads this counter for intervention rate KPI.
 
 ## Git safe cleanup (`git_safe_cleanup.sh`)
 
 ```bash
 bash hermes-kanban-advanced-workflow/scripts/git_safe_cleanup.sh --audit   # read-only inventory
 bash hermes-kanban-advanced-workflow/scripts/git_safe_cleanup.sh --clean   # governed deletion
+bash hermes-kanban-advanced-workflow/scripts/git_safe_cleanup.sh --clean --plan-id <id>   # only clean worktrees for plan_id
 ```
 
-Post-execution git hygiene. `--audit` classifies every worktree/branch (protected, merged, kanban, fix, orphaned). `--clean` gates every destructive op on cleanliness + merge status. Never `--force` without `--dry-run` first.
+Post-execution git hygiene. `--audit` classifies every worktree/branch. `--clean` gates every destructive op. **--plan-id** filters worktree glob to `/tmp/wt-{plan_id}-*` for multi-board isolation (backward compatible — without it, processes all).
 
 ## Worktree audit (`worktree_audit.sh`)
 
