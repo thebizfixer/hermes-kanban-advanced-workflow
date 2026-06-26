@@ -34,6 +34,17 @@ _CREDENTIAL_WARN_RE = re.compile(
 )
 _CODE_FILE_RE = re.compile(r"\S+\.(?:py|ts|tsx|js|sh)$", re.IGNORECASE)
 
+# Matches both <!-- skip-validate --> (bare) and
+# <!-- skip-validate V001 -- reason --> (rule-specific)
+_SKIP_VALIDATE_RE = re.compile(
+    r'<!--\s*skip-validate'                            # opening marker
+    r'(?:\s+(\S+(?:\s*,\s*\S+)*))?'                   # optional rule codes
+    r'(?:\s*--\s*(.*?))?\s*-->'                        # optional reason
+    r'(.*?)'                                           # body (lazy)
+    r'<!--\s*/skip-validate\s*-->',                    # closing marker
+    re.DOTALL | re.IGNORECASE
+)
+
 
 @dataclass
 class FidelityViolation:
@@ -62,15 +73,65 @@ def _fmt_violation(v: FidelityViolation) -> str:
     return f"{prefix}: {loc}{v.message}{key} ({v.code})"
 
 
+def _strip_skip_validate_sections(text: str) -> tuple[str, list[dict]]:
+    """Strip skip-validate sections. Returns (cleaned_text, suppression_log)."""
+    log: list[dict] = []
+
+    def _replacer(m: re.Match) -> str:
+        rules_str = (m.group(1) or "").strip()
+        rules = [r.strip() for r in rules_str.split(",")] if rules_str else ["*"]
+        reason = (m.group(2) or "").strip()
+        body = m.group(3)
+        log.append({"rules": rules, "reason": reason, "len": len(body), "_body": body})
+        return ""  # strip the section
+
+    cleaned = _SKIP_VALIDATE_RE.sub(_replacer, text)
+    return cleaned, log
+
+
 def collect_plan_required_files(plan_text: str, cards: list[dict[str, Any]]) -> set[str]:
     """Files explicitly required by plan Spec / Verify / **Files:** — not card assignment union."""
     required: set[str] = set()
+    # Strip YAML frontmatter (machine-readable, not prose — should not be scanned for file refs)
+    plan_text_no_fm = plan_text
+    if plan_text.startswith("---"):
+        end_fm = plan_text.find("---", 3)
+        if end_fm != -1:
+            plan_text_no_fm = plan_text[end_fm + 3:]
+    # Strip skip-validate sections before scanning for backtick file refs
+    validated_text, suppressions = _strip_skip_validate_sections(plan_text_no_fm)
+    # Log suppressions for audit trail
+    for s in suppressions:
+        rules_label = ",".join(s["rules"])
+        reason = s.get("reason", "")
+        import logging
+        logging.getLogger(__name__).info(
+            f"skip-validate {rules_label} -- {reason} ({s['len']} chars stripped)"
+        )
+    # Unused suppression detection (ESLint reportUnusedDisableDirectives pattern)
+    for s in suppressions:
+        if "V001" in s["rules"] or "*" in s["rules"]:
+            stripped_body = s.get("_body", "")
+            file_refs_in_section = [
+                ref for ref in find_backtick_file_refs(stripped_body)
+                if _CODE_FILE_RE.search(normalize_file_path(ref))
+            ]
+            if not file_refs_in_section:
+                reason = s.get("reason", "")
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"skip-validate V001 suppresses nothing — section contains no file paths. "
+                    f"Stale marker? Reason: {reason}"
+                )
     opt = extract_optimization_section(plan_text)
     if opt:
         required.update(extract_files_from_text(opt))
     for block in split_card_blocks(plan_text):
         agent_match = re.search(r"```agent\s*\n(.*?)```", block, re.DOTALL | re.IGNORECASE)
         if not agent_match:
+            continue
+        # Skip verification-type cards — they run scripts, don't modify files
+        if re.search(r'(?i)type:\s*verification', block):
             continue
         agent = agent_match.group(1)
         spec = extract_agent_field(agent, "Spec")
@@ -83,8 +144,8 @@ def collect_plan_required_files(plan_text: str, cards: list[dict[str, Any]]) -> 
                 p = normalize_file_path(part.strip())
                 if p:
                     required.add(p)
-    # Plan-level Contracts / workstream file refs
-    for ref in find_backtick_file_refs(plan_text):
+    # Plan-level Contracts / workstream file refs — scan validated text (skip-validate sections stripped)
+    for ref in find_backtick_file_refs(validated_text):
         p = normalize_file_path(ref)
         if _CODE_FILE_RE.search(p):
             required.add(p)
@@ -260,15 +321,29 @@ def validate_parsed_cards(
             if mode != "create-only":
                 full = repo_root / norm
                 if not full.is_file():
-                    violations.append(
-                        FidelityViolation(
-                            code="V008_PATH_MISSING",
-                            severity=block_sev,
-                            message=f"Files: path not in repo: {norm}",
-                            card_key=key,
-                            plan_file=plan_label,
+                    # Cross-wave: does a prior-wave create-only card create this file?
+                    prior_creates = any(
+                        c.get("mode", "").lower() == "create-only"
+                        and norm in [
+                            normalize_file_path(str(f)) for f in c.get("files") or []
+                        ]
+                        and (
+                            int(c.get("wave", 0)) if c.get("wave") else 0
+                        ) < (
+                            int(card.get("wave", 0)) if card.get("wave") else 0
                         )
+                        for c in cards
                     )
+                    if not prior_creates:
+                        violations.append(
+                            FidelityViolation(
+                                code="V008_PATH_MISSING",
+                                severity=block_sev,
+                                message=f"Files: path not in repo: {norm}",
+                                card_key=key,
+                                plan_file=plan_label,
+                            )
+                        )
 
     return violations
 
