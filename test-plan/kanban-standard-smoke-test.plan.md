@@ -128,6 +128,7 @@ acceptance_matrix:
 
 > **Purpose:** Validate a kanban-advanced installation end-to-end on vanilla Hermes Agent kanban. Exercises the full autonomous pipeline — handoff, preflight gate, decomposition, dispatch, worker execution, eval-chain governance, autonomous error recovery (E002 auto-revert + final-audit remediation loop), and postmortem generation. The smoke test PASSES when every stage completes without manual intervention.
 
+<!-- skip-validate V001 -- Prerequisites: documentation references only, no work targets -->
 > **Prerequisites:**
 > - Hermes Agent ≥ 0.17.0
 > - `hermes kanban-advanced init` completed successfully
@@ -140,6 +141,7 @@ acceptance_matrix:
 
 > **Expected duration:** 20–40 minutes (depends on coding agent speed + remediation wave)
 > **Expected outcome:** 4 code-gen cards dispatched, 3 completed (Cards 1–3), 1 completed-or-blocked (Card 4 — E002 autonomous recovery), 1 verification card passed (Card 5 — including optional remediation wave). Zero manual interventions. Postmortem + KPI JSON generated. The smoke test validates both recovery layers: Layer 1 (E002 auto-revert) always exercised; Layer 2 (remediation cards) exercised if any latent issues exist, or via the force-trigger documented in Card 5.
+<!-- /skip-validate -->
 
 ---
 
@@ -368,7 +370,7 @@ agent -p "Add a multiply() function to test-plan/scripts/smoke_utils.py and a te
 plan_id: kanban-standard-smoke-test
 Files: test-plan/scripts/smoke_utils.py (modify-only), test-plan/scripts/test_smoke_utils.py
 Mode: modify-only
-**Before modifying test-plan/scripts/test_smoke_utils.py, rebase on Card 2's branch: git fetch origin {card2-branch} && git merge {card2-branch}.**
+**Before modifying test-plan/scripts/test_smoke_utils.py, rebase on Card 2's work: git fetch origin {card2-branch} && git merge {card2-branch}.**
 Spec:
 - Add def multiply(a: int, b: int) -> int: returns a * b to test-plan/scripts/smoke_utils.py
 - Add test_multiply_positive and test_multiply_zero to test-plan/scripts/test_smoke_utils.py
@@ -395,11 +397,13 @@ Do NOT push to main — commit to worktree branch only."
 **File:** `test-plan/scripts/smoke_utils.py`
 **Mode:** modify-only
 
+<!-- skip-validate V001 -- Workstream 4 approach: documentation references only, no work targets -->
 **Approach:** This is the **autonomous error recovery demonstration card**. It exercises two recovery layers:
 
 **Layer 1 — E002 Auto-Revert (worker-level, always tested):** The agent is instructed to do useful work (add a module docstring to `smoke_utils.py`, which IS on `Files:`) AND to intentionally create a scratchpad file (`_smoke_scratchpad.md`, which is NOT on `Files:`). The evaluation chain Step 2 (E002) detects the unlisted file and attempts to auto-revert it — without any human involvement. This proves the eval chain can autonomously recover from agent scope violations.
 
 **Layer 2 — Final-Audit Remediation Loop (orchestrator-level, tested when violations exist):** If Cards 1–4 produce any latent issues that pass the eval chain but fail plan-level checks (e.g., a file the plan expected changes in but the agent didn't touch, or a cross-card regression from Card 3 → Card 4), the final audit (`final_audit_sanity.py --tier all`) detects them at Card 5 verification time and auto-spawns remediation cards. Workers pick up and fix those remediation cards autonomously. The smoke test PASSES whether the final audit exits 0 (clean) or exit 1 → remediation → exit 0 (self-healed).
+<!-- /skip-validate -->
 
 **What "remediation cards" means here:** In the kanban-advanced plugin, autonomous error recovery happens at two layers. The worker layer (E002 auto-revert) fixes scope violations inside the eval chain. The orchestrator layer (`final_audit_sanity.py --spawn-remediation`) creates actual `Type: remediation` kanban cards that workers claim and execute to fix post-merge issues. Card 4 triggers Layer 1. Card 5 exercises Layer 2.
 
@@ -437,6 +441,7 @@ Do NOT push to main — commit to worktree branch only."
 
 **Type:** verification-local
 
+<!-- skip-validate V001 -- Workstream 5 approach: documentation references only, no work targets -->
 **Approach:** Run the full test suite, then invoke the final audit pipeline. This card exercises the **orchestrator-level autonomous recovery mechanism** — the remediation-card loop.
 
 **How the remediation loop works:**
@@ -447,6 +452,7 @@ Do NOT push to main — commit to worktree branch only."
 5. Loop repeats until exit 0 (clean) or max rounds exceeded
 
 **In a clean run** (no latent issues from Cards 1–4), the audit exits 0 immediately — the remediation pipeline is structurally validated. **In a run with issues** (agent non-determinism), the remediation loop self-heals — proving autonomous recovery.
+<!-- /skip-validate -->
 
 ### Card body
 
@@ -468,6 +474,7 @@ Commit: N/A (verification only)
 Mode: read-only
 ```
 
+<!-- skip-validate V001 -- Operator note: documentation references only, no work targets -->
 > **Operator note — how to FORCE-test the remediation loop:** If Cards 1–4 all complete perfectly and `final_audit_sanity.py --tier all` exits 0 (no violations), the remediation-card pipeline was NOT exercised. To explicitly validate it, after all cards complete but before running Card 5:  
 > 1. Delete or rename one line from `test-plan/scripts/smoke_utils.py` (e.g., remove the `greet()` function)  
 > 2. Commit the change on the working branch  
@@ -475,6 +482,7 @@ Mode: read-only
 > 4. `final_audit_sanity.py` will detect `plan_file_zero_diff` for `smoke_utils.py` against Card 1's baseline → exit 1 → spawn remediation cards → workers restore the function → re-audit exit 0.  
 > 5. This proves the remediation-card autonomous recovery pipeline end-to-end.  
 > 6. **After the test:** revert the manual change — the remediation worker already fixed it.
+<!-- /skip-validate -->
 
 ---
 
@@ -590,7 +598,7 @@ agent -p "Add a multiply() function to test-plan/scripts/smoke_utils.py and a te
 plan_id: kanban-standard-smoke-test
 Files: test-plan/scripts/smoke_utils.py (modify-only), test-plan/scripts/test_smoke_utils.py
 Mode: modify-only
-**Before modifying test-plan/scripts/test_smoke_utils.py, rebase on Card 2's branch: git fetch origin {card2-branch} && git merge {card2-branch}.**
+**Before modifying test-plan/scripts/test_smoke_utils.py, rebase on Card 2's work: git fetch origin {card2-branch} && git merge {card2-branch}.**
 Spec:
 - Add def multiply(a: int, b: int) -> int: returns a * b to test-plan/scripts/smoke_utils.py
 - Add test_multiply_positive and test_multiply_zero to test-plan/scripts/test_smoke_utils.py
