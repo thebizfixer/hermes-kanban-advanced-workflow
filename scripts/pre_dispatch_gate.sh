@@ -25,8 +25,8 @@ OVERLAY_CONFIG="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
 
 # Normalize Windows backslash paths to forward slashes (safe no-op on Linux/macOS).
 # Must happen AFTER all variables are set but BEFORE they're used in eval/interpolation.
-HERMES_HOME="${HERMES_HOME//\//}"
-REPO_ROOT="${REPO_ROOT//\//}"
+HERMES_HOME="$(echo "$HERMES_HOME" | tr '\\' '/')"
+REPO_ROOT="$(echo "$REPO_ROOT" | tr '\\' '/')"
 
 if [[ -f "$OVERLAY_CONFIG" ]]; then
   _wb="$(grep -E '^working_branch:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^working_branch: *//; s/^"//; s/"$//')"
@@ -38,7 +38,7 @@ if [[ -f "$OVERLAY_CONFIG" ]]; then
 fi
 
 # Normalize BUNDLE_PATH AFTER overlay override (backslashes from config must be converted)
-BUNDLE_PATH="${BUNDLE_PATH//\//}"
+BUNDLE_PATH="$(echo "$BUNDLE_PATH" | tr '\\' '/')"
 
 FAILURES=0
 WARNINGS=0

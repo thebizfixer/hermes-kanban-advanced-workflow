@@ -30,7 +30,7 @@ fi
 # Normalize Windows backslash paths to forward slashes.
 # Safe no-op on Linux/macOS (no backslashes in paths).
 # Prevents eval mangling, Python unicode escapes, and YAML corruption.
-HERMES_HOME="${HERMES_HOME//\\//}"
+HERMES_HOME="$(echo "$HERMES_HOME" | tr '\\' '/')"
 
 # Cross-platform temp directory.
 # On Windows (Git Bash or native), prefer $TEMP which maps to the user's temp.
