@@ -187,6 +187,10 @@ Update a dispatch profile's Hermes model and/or `agent.reasoning_effort`. Writes
 
 Invalidates cached `model_reachable` probe for that profile. Changes apply to **new** `hermes -p` sessions on that profile.
 
+**Non-blocking:** The handler reads the JSON body in the async event loop, then delegates all
+blocking config/subprocess work to `_execute_put_profile_settings()` which FastAPI runs in a
+thread pool. The model probe fires immediately after — no queuing behind a blocked save.
+
 When `config_exists` is false, the dashboard shows the bootstrap form.
 
 The status banner shows **Initialized (Up-to-date)** or **Initialized (Update Plugin)** when `plugin_can_update` is true. **Update Plugin** calls `POST /api/plugins/kanban-advanced/update` (git pull in `plugin_install_path`, then re-materialize skills and cron scripts). On success the UI applies the response plugin-git fields immediately — it does **not** re-run `GET /status?git_fetch=1`. Disabled when up to date.
@@ -337,7 +341,12 @@ Git-pull the plugin install checkout, refresh materialized skills/scripts under 
 
 When already up to date, `unchanged` is `true` and pull is skipped. Successful responses always include `plugin_up_to_date: true` so the dashboard can show **Up-to-date** without a follow-up git fetch.
 
-**Local changes in the install dir:** `plugin_install_path` is a read-only mirror of upstream on every platform (Linux, macOS, Windows native, WSL). If `git status` shows local modifications (line-ending drift, editor saves, or edits in the install tree), the update endpoint discards them with `git reset --hard` and `git clean -fd` before pull, then falls back to `git reset --hard <upstream>` if `pull --ff-only` still fails. Edit your **project** repo or fork — not the Hermes plugin install directory.
+**Non-blocking:** The endpoint is defined as a regular `def` (not `async def`) so FastAPI runs
+it in a thread pool. This prevents the git pull + materialize + profile reconcile from blocking
+the event loop, which would starve the `/status` polling endpoint and cause the frontend terminal
+log to appear stuck.
+
+**Local changes in the install dir:**
 
 **Errors:**
 - `"Plugin install is not a git checkout"` — no `.git` in install path
