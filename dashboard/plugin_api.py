@@ -1521,8 +1521,14 @@ def _execute_save(body: dict, output: list[str]) -> dict:
 
 
 @router.post("/update")
-async def update_plugin():
-    """POST /api/plugins/kanban-advanced/update — git pull plugin install + refresh materialized assets."""
+def update_plugin():
+    """POST /api/plugins/kanban-advanced/update — git pull plugin install + refresh materialized assets.
+    
+    Defined as a regular (non-async) function so FastAPI runs it in a thread pool.
+    This prevents blocking the event loop during long-running git/sync/profile operations,
+    which would starve the /status polling endpoint and cause the frontend terminal log
+    to appear stuck (requiring a page refresh to see the completed output).
+    """
     install_dir = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
     output = [f"=== Updating plugin at {install_dir} ==="]
 
