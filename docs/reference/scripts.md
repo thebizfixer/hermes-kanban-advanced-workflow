@@ -77,6 +77,8 @@ Proactive board manager for walk-away execution. Runs every 180s. **--plan-id**:
 4. Detect unmerged done cards (commits ahead of `${working_branch}`) and auto-merge when safe
 5. Flag thrash (>40 events on active cards)
 6. Report board status
+7. Inter-card health check: DB integrity (`PRAGMA integrity_check`) + disk space
+   (≥1GB free on worktree parent).  Logs warnings on failure — does not block dispatch.
 
 Event-driven complement: `plugin/hooks.py` `post_tool_call` fires `auto_unblock.sh --max-unblock 1` after each successful `kanban_complete` so the next wave can release without waiting for the cron tick.
 
@@ -218,6 +220,11 @@ python hermes-kanban-advanced-workflow/scripts/kanban_decompose.py --plan <file>
 
 Governed card creation from a plan file. Reads the plan, extracts workstreams, creates cards with proper `Files:`/`Mode:`/`agent -p` blocks, wires parent-child dependencies. **Auto-stamps** `Parent-branches:`, `Call-sites:`, `Acceptance:`, `plan_file`, and `Iteration-budget:` from plan bundles (`scripts/lib/decompose_stamp.py`). **Worktree paths include run timestamp** (`wt-{plan_id}-{run_ts}-{card_key}`) for same-plan_id concurrent-run collision prevention. Uses `_is_dispatcher_absolute()` for platform-aware path validation (cpython#125283-aligned). The final audit card includes `Type: audit`, **`Audit-baseline-sha:`** (frozen `git rev-parse HEAD` at decompose), and a pointer to `final_audit_sanity.py`. **Fail-fast:** exits non-zero when `hermes kanban create` returns no task id. Exits **7** when `plan_id` cards already exist. `--max-retries 2` caps decomposition retries.
 
+**Plan memory:** After creating cards, writes orchestrator card IDs (handoff, gate,
+root, audit) into `.hermes/kanban/memory/{plan_id}.json` under `orchestrator_task_ids`.
+This ensures `generate_postmortem.py` counts all tasks, not just the code-gen
+implementation cards visible to the decompose pass.
+
 ## Evaluation chain (`kanban_evaluation_chain.py`)
 
 ```bash
@@ -270,6 +277,7 @@ Validates card bodies against `policies/card-body-policy.yaml`. Error codes: P00
 python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md>
 python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md> --plan-id <id> --allow-offline
 python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md> --reuse   # print existing card ID, exit 0
+python hermes-kanban-advanced-workflow/scripts/kanban_handoff.py --plan <plan.md> --fresh   # auto-clean stale git state before handoff
 ```
 
 Creates one hardened, idempotent orchestrator-handoff card. Idempotent: refuses to create a duplicate while an open card exists for the same plan_id. **--reuse** prints the existing open card ID and exits 0. **--force** creates a new card even if one exists (not recommended — may create duplicate boards).
@@ -286,9 +294,15 @@ Exit codes:
 | 2 | Orchestrator profile missing | `hermes kanban-advanced init` |
 | 3 | Gateway not running | `hermes gateway run` |
 | 4 | Dispatcher off or `auto_decompose=true` | Run the printed `hermes config set …` fix |
+| 7 | Stale git state detected (branches, worktrees, attestation) | `--fresh` to auto-clean, or `bash scripts/git_safe_cleanup.sh --clean --plan-id {id}` |
 | 8 | Cron provision failed | Fix gateway/cron store; re-run handoff |
 
 `--allow-offline` bypasses exit 3/4 to create the card anyway (for deferred dispatch). `--skip-cron-provision` for tests/recovery only. Idempotency: if an open handoff card for the same `plan_id` already exists, the script exits 0 without creating a duplicate.
+
+**`--fresh`:** Before creating the handoff card, checks for stale git branches matching
+`kanban/{plan_id}/`, orphaned worktrees in `/tmp/wt-{plan_id}-*`, and leftover attestation
+files.  When passed, auto-cleans via `git_safe_cleanup.sh --clean` and re-checks.
+Without `--fresh`, stale state is reported as exit code 7 with a suggested fix command.
 
 ## Recovery (`kanban_recover.py`)
 
@@ -326,6 +340,10 @@ python hermes-kanban-advanced-workflow/scripts/final_audit_sanity.py --plan-id <
 Two-tier post-flight audit: Tier 1 plan-scope (`Acceptance:`, `Call-sites:`, `Files:` union vs git diff) and Tier 2 doc coverage. Exit codes: **0** clean, **1** violations (spawn remediation), **2** script error (do not spawn). Reports default-on to `.hermes/kanban/reports/{plan_id}_audit_tier1.json` and `tier2.json` (`--no-json` to suppress).
 
 - **`Audit-baseline-sha:`** — stamped on audit card at decompose (`kanban_decompose.py`); frozen baseline for Tier 1
+- **Baseline fallback** — when the resolved baseline SHA is not in the repo (stale
+  attestation from a rebased working branch), falls back to the `Audit-baseline-sha`
+  stamped in the audit card body and warns.  This prevents false-positive
+  `plan_file_zero_diff` violations.
 - **`Audit-round:`** — durable round counter in audit card body during remediation loop
 - **Tier 1 / E001 alignment** — `plan_file_zero_diff` reuses `find_prior_commit` from done cards' `Commit:` + `Files:` (same forgiveness as eval-chain step 1 when baseline..HEAD shows zero diff)
 - **`Tests: doc:`** — evaluated by `kanban_evaluation_chain.py` step 3 via `verify_doc_tests` (`link-check`, `symbol-grep`, `yaml-validate`); `code:` prefix runs shell remainder

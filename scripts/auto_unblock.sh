@@ -11,6 +11,7 @@
 #   bash scripts/auto_unblock.sh --max-unblock 1    (cap unblocks per tick)
 
 set -euo pipefail
+export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/kanban_logs.sh

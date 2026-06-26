@@ -11,6 +11,7 @@
 #   HERMES_KANBAN_PLAN_ID      Plan ID for token attribution
 #   HERMES_KANBAN_TASK         Task ID for token attribution
 set -euo pipefail
+export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/coding_agent_env.sh

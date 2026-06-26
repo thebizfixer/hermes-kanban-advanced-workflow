@@ -2,6 +2,7 @@
 # pre_dispatch_gate.sh — single gate before kanban decomposition
 # Usage: bash pre_dispatch_gate.sh <plan_id>
 set -euo pipefail
+export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/hermes_home.sh

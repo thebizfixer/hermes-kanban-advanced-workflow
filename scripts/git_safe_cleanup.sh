@@ -24,6 +24,7 @@
 #   3 — Usage error
 
 set -euo pipefail
+export LC_ALL=C.UTF-8
 
 # ── Startup guard: validate repo root ──────────────────────────────────
 _resolved_root=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")

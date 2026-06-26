@@ -22,6 +22,7 @@ LEGACY_ORCHESTRATOR_PROFILE = "orchestrator"
 
 PROFILE_SKILL_SETS_BY_ROLE: dict[str, frozenset[str]] = {
     "worker": frozenset({
+        "kanban-advanced",
         "kanban-git",
         "kanban-worker",
         "kanban-worker-governance",

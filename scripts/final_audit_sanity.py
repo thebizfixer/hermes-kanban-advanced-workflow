@@ -293,6 +293,20 @@ def main(argv: list[str] | None = None) -> int:
         audit_body, repo_root, resolve_working_branch(repo_root)
     )
 
+    # Fallback: if baseline SHA is not in repo (stale attestation from rebased branch),
+    # try the Audit-baseline-sha stamped directly on the audit card body.
+    if baseline:
+        result = subprocess.run(
+            ["git", "rev-parse", "--verify", f"{baseline}^{{commit}}"],
+            capture_output=True, text=True, cwd=str(repo_root)
+        )
+        if result.returncode != 0:
+            stamped = extract_field(audit_body, "Audit-baseline-sha")
+            if stamped and stamped != baseline:
+                print(f"WARNING: baseline {baseline[:12]} not in repo, "
+                      f"using audit card stamp {stamped[:12]}")
+                baseline = stamped
+
     plan_text = plan_path.read_text(encoding="utf-8", errors="replace")
     ctx = AuditContext(
         plan_id=plan_id,

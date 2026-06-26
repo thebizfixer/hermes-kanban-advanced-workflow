@@ -28,7 +28,7 @@ def _get_coding_agent_binary():
         cfg = base / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
         if cfg.exists():
             try:
-                for line in open(cfg):
+                for line in open(cfg, encoding="utf-8"):
                     if "coding_agent_binary:" in line:
                         v = line.split(":", 1)[1].strip().replace('"', '').replace("'", '')
                         if v: return v

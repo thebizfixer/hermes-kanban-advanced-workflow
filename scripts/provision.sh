@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # provision.sh — materialize kanban-advanced skills into the project's skills tree.
 set -euo pipefail
+export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/hermes_home.sh
@@ -84,7 +85,7 @@ fi
 KANBAN_WORKFLOW_DIR="$BUNDLE_PATH"
 
 declare -A PROFILE_SKILL_SETS
-PROFILE_SKILL_SETS["$WORKER_PROFILE_NAME"]="kanban-git kanban-worker kanban-worker-governance"
+PROFILE_SKILL_SETS["$WORKER_PROFILE_NAME"]="kanban-advanced kanban-git kanban-worker kanban-worker-governance"
 PROFILE_SKILL_SETS["$ORCH_PROFILE_NAME"]="kanban-advanced kanban-cleanup kanban-notify kanban-orchestrator kanban-orchestrator-governance kanban-planning kanban-postmortem kanban-preflight kanban-reconciliation"
 
 check_profile_skills() {

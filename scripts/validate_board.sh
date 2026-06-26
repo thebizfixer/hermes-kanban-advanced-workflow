@@ -13,6 +13,7 @@
 # then kanban-config.yaml policy_profile (default: balanced).
 
 set -euo pipefail
+export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUNDLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

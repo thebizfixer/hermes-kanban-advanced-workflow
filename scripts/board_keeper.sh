@@ -22,6 +22,7 @@
 export HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 
 set -euo pipefail
+export LC_ALL=C.UTF-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CLI_PARSE="$SCRIPT_DIR/lib/cli_output_parse.py"
@@ -100,6 +101,38 @@ _kanban_disk_ok() {
   [[ "${avail_mb:-0}" -ge "$threshold" ]]
 }
 
+# ── Health check (DB integrity + disk space) ──────────────────────────
+
+_health_check() {
+  local db_path="${HERMES_HOME:-$HOME/.hermes}/kanban.db"
+  local integrity
+  integrity=$(python3 -c "
+import sqlite3, sys
+try:
+    conn = sqlite3.connect(r'$db_path')
+    result = conn.execute('PRAGMA integrity_check').fetchone()[0]
+    conn.close()
+    print(result)
+except Exception as e:
+    print(f'error: {e}', file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null)
+  if [ "$integrity" != "ok" ]; then
+    echo "[board_keeper] DB INTEGRITY FAILED: $integrity" >&2
+    return 1
+  fi
+
+  # Check disk space on worktree parent (1GB minimum)
+  local worktree_parent="${KANBAN_WORKTREE_PARENT:-/tmp}"
+  local avail_kb
+  avail_kb=$(df "$worktree_parent" 2>/dev/null | awk 'NR==2 {print $4}')
+  if [ -n "$avail_kb" ] && [ "$avail_kb" -lt 1048576 ]; then
+    echo "[board_keeper] LOW DISK: ${avail_kb}KB available on $worktree_parent" >&2
+    return 1
+  fi
+  return 0
+}
+
 # ── Board snapshot ──────────────────────────────────────────────────────
 
 echo "=== Board Keeper @ $(date -u +%H:%M:%S) ==="
@@ -121,6 +154,8 @@ BLOCKED=$(echo "$BOARD" | grep -c '⊘' || true)
 TODO=$(echo "$BOARD" | grep -c '◻' || true)
 
 echo "Summary: $DONE done · $RUNNING running · $READY ready · $BLOCKED blocked · $TODO todo"
+
+_health_check || echo "[board_keeper] Health check FAILED — consider pausing dispatch"
 
 # ── 1. Detect orphaned agents ──────────────────────────────────────────
 

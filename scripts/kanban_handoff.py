@@ -615,6 +615,44 @@ def _check_board_cleanliness(
     return False, "\n".join(lines), []
 
 
+def _check_git_freshness(plan_id: str, project_root: Path) -> tuple[bool, str]:
+    """Return (ok, message). Check for stale git branches/worktrees/attestation."""
+    import subprocess, glob
+
+    # Check for stale kanban branches
+    result = subprocess.run(
+        ["git", "branch"], capture_output=True, text=True, cwd=str(project_root)
+    )
+    stale_branches = [
+        line.strip().lstrip("* ")
+        for line in result.stdout.splitlines()
+        if f"kanban/{plan_id}/" in line
+    ]
+
+    # Check for stale worktrees
+    wt_pattern = f"/tmp/wt-{plan_id}-*"
+    stale_worktrees = glob.glob(str(project_root / wt_pattern))
+
+    # Check for stale attestation
+    attestation = project_root / ".hermes" / "kanban" / f"attestation-{plan_id}.yaml"
+
+    issues = []
+    if stale_branches:
+        issues.append(f"  git branches: {', '.join(stale_branches[:5])}")
+    if stale_worktrees:
+        issues.append(f"  worktrees: {', '.join(stale_worktrees[:5])}")
+    if attestation.exists():
+        issues.append(f"  attestation: {attestation}")
+
+    if issues:
+        return False, (
+            f"Stale state from prior run detected for plan_id {plan_id}:\n"
+            + "\n".join(issues)
+            + f"\nRun: bash scripts/git_safe_cleanup.sh --clean --plan-id {plan_id}"
+        )
+    return True, ""
+
+
 # ── Plan id + body ───────────────────────────────────────────────────────────
 
 def _derive_plan_id(plan_path: Path, explicit: str | None) -> str | None:
@@ -880,6 +918,11 @@ def main() -> int:
         action="store_true",
         help="Print existing open handoff card ID and exit (no creation)",
     )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="Auto-clean stale git state (branches, worktrees, attestation) before handoff",
+    )
     parser.add_argument("--json", action="store_true", help="Machine-readable output")
     parser.add_argument(
         "--skip-cron-provision",
@@ -930,6 +973,33 @@ def main() -> int:
             "detail": board_msg,
             "plan_id": plan_id,
             "fix": "Confirm with operator, archive listed cards, or re-run with --force",
+        })
+        return 7
+
+    # Git freshness check (stale branches, worktrees, attestation from prior runs)
+    git_ok, git_msg = _check_git_freshness(plan_id, project_root)
+    if args.fresh and not git_ok:
+        subprocess.run(
+            ["bash", str(bundle_root / "scripts" / "git_safe_cleanup.sh"),
+             "--clean", "--plan-id", plan_id],
+            cwd=str(project_root)
+        )
+        git_ok, git_msg = _check_git_freshness(plan_id, project_root)
+        if not git_ok:
+            emit({
+                "ok": False,
+                "error": "git_cleanup_failed",
+                "detail": git_msg,
+                "plan_id": plan_id,
+            })
+            return 7
+    elif not git_ok:
+        emit({
+            "ok": False,
+            "error": "git_state_not_clean",
+            "detail": git_msg,
+            "plan_id": plan_id,
+            "fix": "Run: bash scripts/git_safe_cleanup.sh --clean --plan-id " + plan_id,
         })
         return 7
 

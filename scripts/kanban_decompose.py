@@ -959,6 +959,22 @@ def main():
             len(impl_cards),
             {k: v for k, v in card_ids.items() if k not in ("gate", "root", "audit")},
         )
+        # Also register orchestrator cards (handoff, gate, root, audit)
+        # so generate_postmortem.py counts all tasks, not just impl cards.
+        all_task_ids = {
+            "handoff": os.environ.get("HERMES_KANBAN_TASK", ""),
+            "gate": gate_id,
+            "root": card_ids.get("root", ""),
+            "audit": card_ids.get("audit", ""),
+        }
+        orchestrator_ids = {k: v for k, v in all_task_ids.items() if v}
+        if orchestrator_ids:
+            import json
+            mem = repo_root / ".hermes" / "kanban" / "memory" / f"{plan_id_for_cron}.json"
+            if mem.exists():
+                data = json.loads(mem.read_text())
+                data.setdefault("orchestrator_task_ids", {}).update(orchestrator_ids)
+                mem.write_text(json.dumps(data, indent=2))
         try:
             from lib.orchestrator_token_checkpoint import maybe_log_orchestrator_checkpoint  # noqa: E402
 
