@@ -643,12 +643,18 @@ def _git_resolve_upstream(install_dir: Path, git_exe: str) -> str | None:
 def _git_behind_count(
     install_dir: Path, git_exe: str, *, fetch: bool = True
 ) -> int | None:
-    """Commits the checkout is behind its upstream."""
+    """Commits the checkout is behind its upstream.
+
+    Checks the cache first — even when *fetch* is True, returns a cached
+    value within _TTL_GIT_BEHIND (300s) to avoid a blocking 15s git fetch
+    on every dashboard page load.  Only fetches when the cache is stale or
+    empty.
+    """
     cache_key = f"git_behind:{install_dir}"
-    if not fetch:
-        cached = _cache_get(cache_key, _TTL_GIT_BEHIND)
-        if cached is not None:
-            return cached  # type: ignore[return-value]
+    # Always consult cache first — don't re-fetch within the TTL window
+    cached = _cache_get(cache_key, _TTL_GIT_BEHIND)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
 
     if fetch:
         _git_fetch_origin(install_dir, git_exe)
