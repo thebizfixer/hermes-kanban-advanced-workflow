@@ -193,6 +193,41 @@ grep -nE '<[A-Za-z_/]' .hermes/kanban/plans/your-plan.plan.md && echo "FIX: use 
 bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh --plan .hermes/kanban/plans/your-plan.plan.md
 ```
 
+## Validator suppression markers
+
+Use `<!-- skip-validate [RULE] -- <reason> -->` / `<!-- /skip-validate -->` to mark plan sections whose file references are documentation only — not work targets. The validator strips these sections before scanning for Spec files.
+
+```markdown
+<!-- skip-validate V001 -- Architecture Notes: documentation references only, no work targets -->
+## Architecture Notes
+... pipeline diagram referencing `preflight.sh`, `kanban_handoff.py`, etc ...
+<!-- /skip-validate -->
+```
+
+**Rules:**
+- `RULE` — optional rule code (e.g., `V001`). When omitted, suppresses all rules.
+- `-- reason` — required justification explaining why the section is suppressed.
+- Section-level scope — opening marker starts suppression, closing marker ends it.
+- The validator logs every suppressed section for auditability.
+- The validator warns when a suppressed section contains zero file paths (stale marker).
+
+## Stub file convention (cross-wave dependencies)
+
+When a `modify-only` card depends on files created by prior-wave `create-only` cards, place stub files before decomposition with a standard marker:
+
+```python
+# STUB: pre-creation placeholder for Card 1 (create-only).
+# Replaced at runtime when wave 1 completes. Do not edit.
+```
+
+**Rules:**
+- `STUB:` — standard marker, machine-parseable.
+- Names the creating card — workers know what to wait for.
+- States intent ("replaced at runtime") — distinguishes from completed work.
+- "Do not edit" — follows auto-generated file conventions (OpenAFS, Protobuf).
+
+Workers: on `modify-only` cards, check for the `STUB:` marker. If present, fetch the parent card's branch and merge before spawning the agent. Validators: the file exists on disk, so V008 (path missing) passes.
+
 ## External grounding
 
 - [GitHub Spec Kit / SDD](https://github.blog/ai-and-ml/generative-ai/spec-driven-development-with-ai-get-started-with-a-new-open-source-toolkit/) — specs as executable contracts
