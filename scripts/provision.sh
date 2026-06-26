@@ -229,7 +229,8 @@ if [[ "$PROFILES_ONLY" -eq 1 ]]; then
 fi
 
 SKILLS_OUTPUT_PATH="${CONFIG[skills_output_path]:-$HERMES_HOME/skills/kanban-advanced}"
-if [[ "$SKILLS_OUTPUT_PATH" != /* ]]; then
+# Absolute path check: Unix (/...) or Windows (C:/...)
+if [[ "$SKILLS_OUTPUT_PATH" != /* ]] && [[ ! "$SKILLS_OUTPUT_PATH" =~ ^[A-Za-z]:/ ]]; then
   SKILLS_OUTPUT_PATH="$REPO_ROOT/$SKILLS_OUTPUT_PATH"
 fi
 

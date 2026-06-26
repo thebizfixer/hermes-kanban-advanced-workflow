@@ -123,6 +123,29 @@ def _invalidate_status_cache() -> None:
         _status_cache.clear()
 
 
+def _schedule_sidecar_restart(delay: float = 2.0) -> None:
+    """Schedule a sidecar process restart after *delay* seconds.
+
+    Used after Update Plugin pulls new code: the running Python process has
+    stale modules in memory (PROFILE_SKILL_SETS_BY_ROLE, script_materialize
+    lists, etc.). Restarting ensures the next request uses updated code.
+
+    The delay lets the current HTTP response flush before the process exits.
+    The keepalive cron (if running) or the operator's next dashboard visit
+    will start a fresh sidecar.
+    """
+    import threading
+
+    def _restart():
+        import time as _time
+        import os as _os
+        _time.sleep(delay)
+        _os._exit(0)
+
+    t = threading.Thread(target=_restart, daemon=True)
+    t.start()
+
+
 def _parse_bool_query(value: str | None, *, default: bool = False) -> bool:
     if value is None:
         return default
@@ -1610,6 +1633,13 @@ def update_plugin():
 
     output.append("OK Plugin updated")
     _invalidate_status_cache()
+
+    # After pulling new code, the running sidecar process has stale Python
+    # modules in memory (e.g., PROFILE_SKILL_SETS_BY_ROLE from config_overlay).
+    # Schedule a restart in a background thread so the next request uses the
+    # updated code. The 2s delay lets the HTTP response flush before exit.
+    _schedule_sidecar_restart()
+
     return {
         "success": True,
         "unchanged": False,
