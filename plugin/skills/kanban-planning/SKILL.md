@@ -1,7 +1,7 @@
 ---
 name: kanban-planning
-description: How to write implementation plans optimized for Kanban decomposition — file-level granularity, section structure, agent-prompt blocks, ordinal card body templates, and dependency graphs. Distinguishes Harden (WHAT — content completeness, sanity check, gap closure) from Optimize (HOW — formatting for decomposition, agent blocks, budgets, graphs).
-version: 5.3.0
+description: How to write implementation plans — file-level granularity, section structure, agent-prompt blocks, ordinal card body templates, and dependency graphs. Planning = content (WHAT). Optimization = formatting (HOW), with two paths: Kanban decomposition or direct execution.
+version: 5.4.0
 metadata:
   hermes:
     tags: [kanban, planning, decomposition, governance]
@@ -68,7 +68,7 @@ The planning phase proceeds through five stages in this exact order. Do not skip
 | **Sanity check** | `"Do a sanity check"` or `"sanity check the plan"` | Read-only audit: run `audit_anchors.py` + `verify_anchors.py` on declared pins; cross-reference code claims; identify gaps; flag prose-only `L` refs; note when plan is not in canonical `.hermes/kanban/plans/` (copy is Harden, not sanity). No edits ? output is a findings list. | Gap report (what needs hardening) |
 | **Harden** | `"Harden the plan"` | Apply the hardening checklist to close gaps discovered during sanity check (or self-discovered). Tier-gated pass: Critical -> Important -> Nice-to-have. | Hardened plan (content-complete) |
 | **Revise** | `"Revise section X"` | Edit in-place, return to review — conversational updates to plan content | Revised plan |
-| **Optimize** | `"Optimize for Kanban"` | Close execution-formatting gaps: add agent-prompt blocks, draw dependency graph, estimate iteration budgets, add Files:/Mode: lines, plan same-provider staggering, pre-write commit messages. See §Optimize checklist below. | Decomposition-ready plan |
+| **Optimize** | `"Optimize for Kanban"` or `"Optimize for direct execution"` | Close execution-formatting gaps. **Kanban path:** add agent-prompt blocks, draw dependency graph, estimate iteration budgets, add Files:/Mode: lines, plan same-provider staggering, pre-write commit messages. See §Optimize checklist below. **Direct execution path:** verify agent blocks are self-contained and executable; skip card headers, wave metadata, dependency graphs, and `## Kanban optimization` section. | Decomposition-ready plan (Kanban) or directly executable plan |
 | **Execute** | `"Execute the plan"` | **Default profile:** confirm `notify_lifecycle` / `walk_away_mode` with operator, then `python3 scripts/kanban_handoff.py --plan <plan.md>` (provisions crons + stamps overlay). Orchestrator profile decomposes via handoff runbook (verify crons only). **Fallback only** (no gateway): `hermes -p orchestrator chat`. See `plugin/data/references/profile-switching.md`. | Decomposed board |
 
 ### Execute checklist (default profile — before handoff)
@@ -80,6 +80,17 @@ The planning phase proceeds through five stages in this exact order. Do not skip
 5. **Orchestrator** — Gate → `provision_kanban_crons.sh --check` → `kanban_decompose.py --no-crons` (use `--archive-prior` if re-decomposing after operator archives).
 
 **Critical ordering rule:** Sanity check, Harden, and Revise iterate BEFORE Optimize. Sanity check is read-only — it finds gaps. Harden closes them. Optimize formats for execution. The interaction model is: **Draft -> Sanity check -> Harden -> Revise -> repeat -> Optimize -> execute**. Never Optimize before Harden — formatting a plan with content gaps wastes tokens on cards that will be blocked or produce wrong code.
+
+**Boundary enforcement — what belongs WHERE:**
+
+| Concern | Stage | Examples |
+|----------|-------|----------|
+| Content correctness | **Harden** | Code claims vs HEAD, line number accuracy, test strategy, edge cases, research validation, scope appropriateness |
+| Content completeness | **Harden** | Missing sections, uncovered failure modes, undeclared dependencies, anchor point verification |
+| Formatting / policy compliance | **Optimize** | `Parent-branches:`, `wave_parent`, card body policy (P001-P014), dependency graph edges, `Files:`/`Mode:` lines, iteration budget estimates, diff caps, agent block structure |
+| Execution readiness | **Optimize** | Agent block self-containment, commit messages, `optimization_checklist` attestation, `## Kanban optimization` section |
+
+**Sanity check NEVER flags formatting gaps.** If a plan has every `Anchor:`, correct line numbers, validated claims, and complete edge cases — it passes sanity even if `Parent-branches:` is missing or the dependency graph is a prose paragraph. Those are Optimize concerns. Flagging them in sanity confuses content review with formatting review and wastes hardening cycles on metadata.
 
 **Walk-away point:** After drafting but before execute. After Harden, the canonical copy sits in `.hermes/kanban/plans/` ? the user can return hours or days later and say "execute this plan."
 
@@ -101,9 +112,9 @@ Run this during the Harden stage, after the initial sanity check. These items ve
 11. **Simplification scan** — After verifying anchor points but before the tier-gated hardening pass, scan every plan todo item and ask: "Could this be simpler than the plan describes?" Look for: (a) analysis steps that `grep` renders unnecessary (e.g., "trace finalize paths" when the function doesn't write the field), (b) multi-step fixes where the first step invalidates later steps (e.g., discovering a constant is already 0 makes the gate logic moot), (c) prose descriptions that overstate complexity. For each simplification found, update the todo content to the minimal change and add a note explaining what was compacted.
 12. **Holistic vs Surgical classification** — Every fix must be explicitly classified as **holistic** (addresses a problem globally, minimal blast radius, few files, no schema changes) or **surgical** (complex, scoped to a specific owner, may affect event buses or cross-cutting concerns). This classification guides decomposition ordering: holistic fixes run first because they unblock surgical work and reduce the blast radius for later cards. Add a classification column to the signal map or a dedicated classification section.
 
-### Optimize checklist (HOW — kanban execution readiness)
+### Optimize checklist (HOW — execution readiness)
 
-Run this during the Optimize stage, after the plan content is hardened. These items verify the plan is formatted for decomposition and dispatch. A plan that passes Harden but fails Optimize has correct content that can't be executed.
+Run this during the Optimize stage, after the plan content is hardened. These items verify the plan is formatted for decomposition and dispatch. **For direct execution, skip items 6-8, 10-11, 13-14, 23-24** (dependency graph, card ordering, wave metadata, same-file graphs, attestation — only needed when decomposing into Kanban cards). A plan that passes Harden but fails Optimize has correct content that can't be executed.
 
 1. **Agent prompt blocks present** — Every code-generation workstream section includes an executable `agent -p` fenced code block. Verify: `grep -c '```agent' <plan>.md` equals the number of code workstreams. Plans without these blocks are rejected at the orchestrator's attestation gate (P002).
 2. **No `--model` in card bodies** — Agent-prompt blocks must not include `--model` when the assignee profile has model preferences in `config.yaml` (i.e., `model.default` is set). The profile determines the model; the card body specifies only the task. Card body policy P005 blocks cards that override profile model config at dispatch.

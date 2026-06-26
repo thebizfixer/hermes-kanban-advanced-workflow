@@ -243,8 +243,16 @@ test -f "$WP/.no-bundled-skills"
 head -1 "$WP/SOUL.md"              # # Worker Prompt
 
 # 2b. Hermes kanban dispatcher config (set at bootstrap)
-hermes config show | grep -E 'kanban\.(auto_decompose|dispatch_stale_timeout_seconds)'
-# Expect: auto_decompose false, dispatch_stale_timeout_seconds 14400
+# Note: hermes config show does NOT surface kanban keys — read config.yaml directly.
+python3 -c "
+import yaml, os
+with open(os.path.join(os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')), 'config.yaml')) as f:
+    cfg = yaml.safe_load(f)
+kb = cfg.get('kanban', {})
+print(f\"auto_decompose: {kb.get('auto_decompose', 'NOT SET')}\")
+print(f\"dispatch_stale_timeout_seconds: {kb.get('dispatch_stale_timeout_seconds', 'NOT SET')}\")
+"
+# Expect: auto_decompose: False, dispatch_stale_timeout_seconds: 14400
 
 # 3. Orchestrator profile home
 OP=$(hermes profile show kanban-advanced-orchestrator | awk '/^Path:/ {print $2}')

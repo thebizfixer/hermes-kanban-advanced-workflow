@@ -950,6 +950,9 @@ def main() -> int:
         emit({"ok": False, "error": "could not determine plan_id"})
         return 5
 
+    # Export for preflight.sh plan backup check
+    os.environ["KANBAN_PLAN_ID"] = plan_id
+
     project_root = _find_project_root(plan_path.parent)
     overlay = _read_overlay(project_root)
     orchestrator_profile = overlay.get("orchestrator_profile", "kanban-advanced-orchestrator")

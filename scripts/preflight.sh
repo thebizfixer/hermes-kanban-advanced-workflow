@@ -548,8 +548,18 @@ check_token_log() {
       "Token log path $token_path is not writable — set KANBAN_TOKEN_LOG"
   fi
 
-  # Verify token_tracker.py is importable from the repo root
+  # Verify token_tracker.py is importable from repo root OR bundle scripts dir
+  local token_ok=false
   if python3 -c "import sys; sys.path.insert(0, '.'); from scripts.token_tracker import log_token_run, log_from_env, log_from_agent_output" 2>/dev/null; then
+    token_ok=true
+  elif python3 -c "
+import sys
+sys.path.insert(0, sys.argv[1])
+from token_tracker import log_token_run, log_from_env, log_from_agent_output
+" "$SCRIPT_DIR" 2>/dev/null; then
+    token_ok=true
+  fi
+  if [[ "$token_ok" == true ]]; then
     record_check "token_tracker_import" "pass" "degraded" \
       "scripts/token_tracker.py is importable — token reporting will work"
   else
@@ -638,12 +648,27 @@ check_kanban_auto_decompose() {
   if ! command -v hermes >/dev/null 2>&1; then
     return
   fi
-  local cfg_out
-  cfg_out="$(hermes config show 2>/dev/null || true)"
-  if echo "$cfg_out" | grep -qE 'kanban\.auto_decompose:\s*true'; then
+  local cfg_path="${HERMES_HOME}/config.yaml"
+  local val=""
+  if [[ -f "$cfg_path" ]]; then
+    # Try yaml parse first, grep fallback if unavailable
+    val="$(python3 -c "
+import yaml, sys
+try:
+    with open(sys.argv[1]) as f:
+        cfg = yaml.safe_load(f)
+    print(str(cfg.get('kanban', {}).get('auto_decompose', 'NOT_FOUND')).lower())
+except Exception:
+    print('not_found')
+" "$cfg_path" 2>/dev/null || true)"
+    if [[ "$val" == "not_found" ]]; then
+      val="$(grep -E '^[[:space:]]*auto_decompose:' "$cfg_path" 2>/dev/null | head -1 | sed 's/.*: *//; s/^\"//; s/\"$//' || true)"
+    fi
+  fi
+  if [[ "$val" == "true" ]]; then
     record_check "kanban_auto_decompose" "fail" "blocking" \
       "kanban.auto_decompose is true — manual decomposition will duplicate cards; run: hermes config set kanban.auto_decompose false"
-  elif echo "$cfg_out" | grep -qE 'kanban\.auto_decompose:\s*false'; then
+  elif [[ "$val" == "false" ]]; then
     record_check "kanban_auto_decompose" "pass" "degraded" \
       "kanban.auto_decompose is false (required for kanban-advanced manual decompose)"
   else
@@ -656,12 +681,26 @@ check_kanban_dispatch_stale_timeout() {
   if ! command -v hermes >/dev/null 2>&1; then
     return
   fi
-  local cfg_out
-  cfg_out="$(hermes config show 2>/dev/null || true)"
-  if echo "$cfg_out" | grep -qE 'kanban\.dispatch_stale_timeout_seconds:\s*0\b'; then
+  local cfg_path="${HERMES_HOME}/config.yaml"
+  local val=""
+  if [[ -f "$cfg_path" ]]; then
+    val="$(python3 -c "
+import yaml, sys
+try:
+    with open(sys.argv[1]) as f:
+        cfg = yaml.safe_load(f)
+    print(cfg.get('kanban', {}).get('dispatch_stale_timeout_seconds', 'NOT_FOUND'))
+except Exception:
+    print('NOT_FOUND')
+" "$cfg_path" 2>/dev/null || true)"
+    if [[ "$val" == "NOT_FOUND" ]]; then
+      val="$(grep -E '^[[:space:]]*dispatch_stale_timeout_seconds:' "$cfg_path" 2>/dev/null | head -1 | sed 's/.*: *//; s/^\"//; s/\"$//' || true)"
+    fi
+  fi
+  if [[ "$val" == "0" ]]; then
     record_check "kanban_dispatch_stale_timeout" "degraded" "degraded" \
       "kanban.dispatch_stale_timeout_seconds is 0 (disabled) — re-run init or: hermes config set kanban.dispatch_stale_timeout_seconds 14400"
-  elif echo "$cfg_out" | grep -qE 'kanban\.dispatch_stale_timeout_seconds:\s*[1-9][0-9]*'; then
+  elif [[ "$val" =~ ^[1-9][0-9]*$ ]]; then
     record_check "kanban_dispatch_stale_timeout" "pass" "degraded" \
       "kanban.dispatch_stale_timeout_seconds is set (stale reclaim enabled)"
   else
