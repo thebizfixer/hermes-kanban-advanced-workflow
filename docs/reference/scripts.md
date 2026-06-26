@@ -185,7 +185,7 @@ bash hermes-kanban-advanced-workflow/scripts/provision.sh          # materialize
 bash hermes-kanban-advanced-workflow/scripts/provision.sh --check  # verify no drift
 ```
 
-Syncs canonical skill files from `plugin/skills/` to `$HERMES_HOME/skills/kanban-advanced/`.  Applies overlay patches from `.hermes/kanban-overrides/patches/`.  Also syncs governance scripts to `$HERMES_HOME/scripts/`:
+Syncs canonical skill files from `plugin/skills/` to `$HERMES_HOME/skills/kanban-advanced/`.  Applies overlay patches from `.hermes/kanban-overrides/patches/`.  Also syncs governance scripts to `$HERMES_HOME/scripts/`.  In **apply** mode, also seeds profile-specific skills (worker: `kanban-advanced kanban-git kanban-worker kanban-worker-governance`; orchestrator: all 9 kanban skills) into `$HERMES_HOME/profiles/` — repairing missing or stale skills automatically.  **--check** verifies no drift across scripts, lib, and profile skills.
 
 | Top-level | `lib/` |
 |-----------|--------|

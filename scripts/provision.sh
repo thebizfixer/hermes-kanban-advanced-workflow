@@ -138,6 +138,79 @@ check_profile_skills() {
   done < <(find "$profile_skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
 }
 
+# ── Seed profile skills (repair missing/stale) ─────────────────────────
+
+seed_profile_skills() {
+  local profile="$1"
+  local expected_str="${PROFILE_SKILL_SETS[$profile]:-}"
+  local profile_home="$HERMES_HOME/profiles/$profile"
+  local profile_skills="$profile_home/skills"
+
+  [[ -d "$profile_home" ]] || return 0
+  mkdir -p "$profile_skills"
+
+  read -ra expected_arr <<< "$expected_str"
+  local skill src_dir dst_dir count=0
+
+  for skill in "${expected_arr[@]}"; do
+    src_dir="$BUNDLE_PATH/plugin/skills/$skill"
+    dst_dir="$profile_skills/$skill"
+
+    if [[ ! -d "$src_dir" ]]; then
+      echo "[provision]   !  skill source missing: $src_dir (bundle may be incomplete)"
+      continue
+    fi
+
+    # Copy if missing or stale
+    if [[ ! -f "$dst_dir/SKILL.md" ]]; then
+      cp -r "$src_dir" "$dst_dir"
+      echo "[provision]   + $profile: seeded missing skill $skill"
+      count=$((count + 1))
+    elif [[ -f "$src_dir/SKILL.md" ]] && \
+         [ "$(hash_file "$src_dir/SKILL.md")" != "$(hash_file "$dst_dir/SKILL.md")" ]; then
+      cp -r "$src_dir"/* "$dst_dir/"
+      echo "[provision]   ↻ $profile: refreshed stale skill $skill"
+      count=$((count + 1))
+    fi
+
+    # For kanban-advanced skill: also sync data references from plugin/data/references/
+    if [[ "$skill" == "kanban-advanced" ]]; then
+      refs_src="$KANBAN_WORKFLOW_DIR/plugin/data/references"
+      refs_dst="$dst_dir/references"
+      if [[ -d "$refs_src" ]]; then
+        mkdir -p "$refs_dst"
+        local ref_count=0
+        for ref in "$refs_src"/*.md; do
+          [[ -f "$ref" ]] || continue
+          ref_base="$(basename "$ref")"
+          if [[ ! -f "$refs_dst/$ref_base" ]] || \
+             [ "$(hash_file "$ref")" != "$(hash_file "$refs_dst/$ref_base")" ]; then
+            cp "$ref" "$refs_dst/$ref_base"
+            ref_count=$((ref_count + 1))
+          fi
+        done
+        [[ $ref_count -gt 0 ]] && echo "[provision]     ↻ $profile: synced $ref_count reference(s) for kanban-advanced"
+      fi
+    fi
+  done
+
+  # Remove unexpected skills (stale built-in)
+  while IFS= read -r -d '' skill_dir; do
+    local skill_name found=0
+    skill_name="$(basename "$skill_dir")"
+    for expected in "${expected_arr[@]}"; do
+      [[ "$skill_name" == "$expected" ]] && found=1 && break
+    done
+    if [[ $found -eq 0 ]]; then
+      rm -rf "$skill_dir"
+      echo "[provision]   - $profile: removed unexpected skill '$skill_name'"
+      count=$((count + 1))
+    fi
+  done < <(find "$profile_skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+
+  [[ $count -gt 0 ]] || echo "[provision]   OK $profile: skills up to date"
+}
+
 run_profile_skill_checks() {
   echo "[provision] Checking profile skill isolation..."
   check_profile_skills "$WORKER_PROFILE_NAME"
@@ -292,6 +365,7 @@ copy_bootstrap() {
 write_manifest() {
   [[ "$MODE" == "apply" ]] || return
   local manifest="$SKILLS_OUTPUT_PATH/provision-manifest.json"
+  mkdir -p "$(dirname "$manifest")" 2>/dev/null || true
   local ts config_hash
   ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   config_hash="none"
@@ -405,7 +479,11 @@ if [ -f "$WORKER_SKILL" ] && [[ "$MODE" == "apply" || "$MODE" == "check" ]]; the
     fi
 fi
 
-if [[ "$MODE" == "check" || "$MODE" == "apply" ]]; then
+if [[ "$MODE" == "apply" ]]; then
+  echo "[provision] Seeding profile skills..."
+  seed_profile_skills "$WORKER_PROFILE_NAME"
+  seed_profile_skills "$ORCH_PROFILE_NAME"
+elif [[ "$MODE" == "check" ]]; then
   run_profile_skill_checks
 fi
 
