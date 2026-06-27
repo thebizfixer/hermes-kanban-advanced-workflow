@@ -174,7 +174,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_attestation.py <plan_id> -
 
 **Also check `scripts/lib/`:** `coding_agent_invoke.sh` and `worktree_setup.sh` source helpers from `$HERMES_HOME/scripts/lib/` (`coding_agent_env.sh`, `coding_agent_auth_lock.sh`, `kanban_bundle.sh`, `worktree_include.sh`, `kanban_config.sh`, …). Older plugin versions materialized only top-level scripts, causing exit 127 in workers. **Update Plugin**, `hermes kanban-advanced init`, or `provision.sh` sync the full list in `plugin/script_materialize.py`.
 
-**Worktree provisioning (`.worktreeinclude`):** Card worktrees under `/tmp/wt-*` only contain tracked git files. Init merges **kanban** paths into `.worktreeinclude` (overlay, memory, invoke scripts). **Application** paths (`.env`, `.venv/`, `node_modules/`) are **operator responsibility** — add them yourself based on what cards run. See [operator-provisioning.md](../plugin/data/references/operator-provisioning.md). Symptom: worker resolves `bundle_path` from overlay yaml but `coding_agent_invoke.sh` or `kanban-config.yaml` is missing inside the worktree → exit 127. **Chicken-and-egg:** `worktree_setup.sh` must be invoked from `$HERMES_HOME/scripts/` or the main repo bundle — not a cwd-relative path inside an empty worktree. Fix: re-run **Bootstrap** / `hermes kanban-advanced init`, commit `.worktreeinclude`, **Update Plugin**, restart gateway.
+**Worktree provisioning (`.worktreeinclude`):** Card worktrees under `<repo>/.worktrees/` only contain tracked git files. Init merges **kanban** paths into `.worktreeinclude` (overlay, memory, invoke scripts). **Application** paths (`.env`, `.venv/`, `node_modules/`) are **operator responsibility** — add them yourself based on what cards run. See [operator-provisioning.md](../plugin/data/references/operator-provisioning.md). Symptom: worker resolves `bundle_path` from overlay yaml but `coding_agent_invoke.sh` or `kanban-config.yaml` is missing inside the worktree → exit 127. **Chicken-and-egg:** `worktree_setup.sh` must be invoked from `$HERMES_HOME/scripts/` or the main repo bundle — not a cwd-relative path inside an empty worktree. Fix: re-run **Bootstrap** / `hermes kanban-advanced init`, commit `.worktreeinclude`, **Update Plugin**, restart gateway.
 
 **Fix (reset provisioning — pause dispatch first):**
 
@@ -457,7 +457,7 @@ cd ~/projects/<repo-name>
 
 ### "Dual-clone worktree drift" (WSL)
 
-**Symptom:** `git worktree list` on Windows shows prunable `/tmp/wt-*` entries from a kanban run. Branches exist in the DrvFS clone but not the Linux clone.
+**Symptom:** `git worktree list` on Windows shows prunable worktree entries (legacy `/tmp/wt-*` or `.worktrees/wt-*`) from a kanban run. Branches exist in the DrvFS clone but not the Linux clone.
 
 **Root cause:** The kanban dispatcher resolved a cross-mount checkout as its repo, while the orchestrator ran from a native clone. Workers created worktrees registered in a different `.git`.
 
