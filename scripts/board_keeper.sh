@@ -218,7 +218,7 @@ for tid in $BLOCKED_IDS; do
                             echo "  → Merged to $INTEGRATION_BRANCH"
                             hermes kanban --board "${KANBAN_BOARD:-default}" complete "$tid" --summary "$CARD_NAME shipped (salvaged from iteration limit by board keeper)." 2>/dev/null
                             echo "  → Card completed"
-                            ((SALVAGE_COUNT++))
+                            SALVAGE_COUNT=$((SALVAGE_COUNT + 1))
                         fi
                         git remote remove "wt-$tid" 2>/dev/null || true
                     fi
@@ -321,7 +321,7 @@ for tid in $READY_IDS; do
         if [ -n "$CREATED_EPOCH" ] && [ $((NOW_EPOCH - CREATED_EPOCH)) -gt 180 ]; then
             CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
             echo "STUCK: $tid — $CARD_NAME — ready for $(((NOW_EPOCH - CREATED_EPOCH) / 60))min"
-            ((STUCK_COUNT++))
+            STUCK_COUNT=$((STUCK_COUNT + 1))
         fi
     fi
 done
@@ -347,7 +347,7 @@ for tid in $ALL_CARD_IDS; do
     if [ "$MAX_RETRIES" -gt 2 ] 2>/dev/null || [ "$MAX_RETRIES" -eq 0 ] 2>/dev/null; then
         CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
         warn "Card $tid ($CARD_NAME) has max-retries=$MAX_RETRIES (should be ≤2)"
-        ((RETRY_ISSUES++))
+        RETRY_ISSUES=$((RETRY_ISSUES + 1))
     fi
 done
 [ $RETRY_ISSUES -eq 0 ] && pass "All cards have max-retries ≤2"
@@ -395,7 +395,7 @@ PY
     [[ -z "$tid" ]] && continue
     CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
     warn "Card $tid ($CARD_NAME) has $evcount events (>40) — possible thrash before iteration limit"
-    ((THRASH_COUNT++))
+    THRASH_COUNT=$((THRASH_COUNT + 1))
   done <<< "$THRASH_IDS"
 fi
 [ $THRASH_COUNT -eq 0 ] && pass "No thrash outliers (>40 events on active cards)"
@@ -420,7 +420,7 @@ for tid in $DONE_IDS; do
     if [ "${BEHIND:-0}" -gt 0 ] 2>/dev/null; then
         CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
         echo "  UNMERGED: $tid ($CARD_NAME) — $BEHIND commits ahead of $INTEGRATION_BRANCH in $WS"
-        ((UNMERGED++))
+        UNMERGED=$((UNMERGED + 1))
         if [[ "$DRY_RUN" == false && "$DISK_OK" == true ]]; then
             BRANCH=$(cd "$WS" && git branch --show-current 2>/dev/null || true)
             if [[ -n "$BRANCH" ]]; then
@@ -428,7 +428,7 @@ for tid in $DONE_IDS; do
                 git remote add "wt-$tid" "$WS" 2>/dev/null || true
                 if git fetch "wt-$tid" 2>/dev/null && git merge "wt-$tid/$BRANCH" --no-edit 2>/dev/null; then
                     echo "  → Auto-merged $tid to $INTEGRATION_BRANCH"
-                    ((MERGED_COUNT++))
+                    MERGED_COUNT=$((MERGED_COUNT + 1))
                     ((UNMERGED--)) || true
                 else
                     warn "  Auto-merge failed for $tid — manual review required"
@@ -464,7 +464,7 @@ for wt in "${KANBAN_TEMP:-/tmp}/wt-${PLAN_ID:-}"*; do
             if [ "$DRY_RUN" = false ]; then
                 git -C "$REPO_ROOT" worktree remove "$wt" --force 2>/dev/null && echo "  → removed" || echo "  → could not remove (may have uncommitted changes)"
             fi
-            ((STALE_WTS++))
+            STALE_WTS=$((STALE_WTS + 1))
         fi
     fi
 done
