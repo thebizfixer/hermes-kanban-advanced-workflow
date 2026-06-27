@@ -45,9 +45,9 @@ echo "Governance profile: $GOVERNANCE_PROFILE"
 OVERLAY_CONFIG="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
 if [[ -f "$OVERLAY_CONFIG" ]]; then
   _wp="$(grep -E '^worker_profile:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^worker_profile: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
-  [[ -n "$_wp" ]] && WORKER_PROFILE="$_wp"
-  _op="$(grep -E '^orchestrator_profile:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^orchestrator_profile: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
-  [[ -n "$_op" ]] && ORCHESTRATOR_PROFILE="$_op"
+  [[ -n "$_wp" ]] && WORKER_PROFILE="$_wp" || true
+  _op="$(grep -E '^orchestrator_profile:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^orchestrator_profile: *//; s/^"//; s/"$//; s/^'"'"'//; s/'"'"'$//')"
+  [[ -n "$_op" ]] && ORCHESTRATOR_PROFILE="$_op" || true
 fi
 
 red()  { echo -e "\033[31m$*\033[0m"; }

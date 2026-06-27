@@ -645,6 +645,26 @@ def resolve_coding_agent_model(
     return DEFAULT_CODING_AGENT_MODEL
 
 
+def resolve_coding_agent_provider(
+    project_root: Path,
+    *,
+    coding_agent_provider: str | None = None,
+    env: dict[str, str] | None = None,
+) -> str:
+    """Resolve the coding-agent provider from overlay or env.
+
+    Priority: explicit arg > overlay coding_agent_provider > env KANBAN_CODING_AGENT_PROVIDER.
+    Returns empty string when not configured (hermes inherits profile provider).
+    """
+    if coding_agent_provider is not None:
+        return coding_agent_provider
+    existing = read_overlay_config(overlay_path(project_root))
+    if existing.get("coding_agent_provider"):
+        return existing["coding_agent_provider"]
+    env = env or {}
+    return env.get("KANBAN_CODING_AGENT_PROVIDER", "")
+
+
 def build_overlay_yaml(
     *,
     working_branch: str,

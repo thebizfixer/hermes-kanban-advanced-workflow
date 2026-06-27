@@ -28,13 +28,13 @@ cd "$REPO_ROOT"
 OVERLAY_CONFIG="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
 if [[ -f "$OVERLAY_CONFIG" ]]; then
   _pf="$(grep -E '^preflight_profiles:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^preflight_profiles: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
-  [[ -n "$_pf" ]] && PREFLIGHT_PROFILES="$_pf"
-  _wp="$(grep -E '^worker_profile:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^worker_profile: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
-  [[ -n "$_wp" ]] && WORKER_PROFILE="$_wp"
-  _rs="$(grep -E '^required_secrets:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^required_secrets: *//; s/["'\'']//g')"
-  [[ -n "$_rs" ]] && PREFLIGHT_REQUIRED_SECRETS="$_rs"
-  _api="$(grep -E '^preflight_api_url:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^preflight_api_url: *//; s/^"//; s/"$//')"
-  [[ -n "$_api" ]] && PREFLIGHT_API_URL="$_api"
+  [[ -n "$_pf" ]] && PREFLIGHT_PROFILES="$_pf" || true
+  _wp="$(grep -E '^worker_profile:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^worker_profile: *//; s/^"//; s/"$//; s/^'"'"'//; s/'"'"'$//')"
+  [[ -n "$_wp" ]] && WORKER_PROFILE="$_wp" || true
+  _rs="$(grep -E '^required_secrets:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^required_secrets: *//; s/"//g; s/'"'"'//g')" || true
+  [[ -n "$_rs" ]] && PREFLIGHT_REQUIRED_SECRETS="$_rs" || true
+  _api="$(grep -E '^preflight_api_url:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^preflight_api_url: *//; s/^"//; s/"$//')" || true
+  [[ -n "$_api" ]] && PREFLIGHT_API_URL="$_api" || true
 fi
 
 if [[ -f "$REPO_ROOT/.env" ]]; then
@@ -272,7 +272,7 @@ check_coding_agent_cli_reachability() {
 
   if [[ -f "$OVERLAY_CONFIG" ]]; then
     _cab="$(grep -E '^coding_agent_binary:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^coding_agent_binary: *//; s/^"//; s/"$//; s/^'\''//; s/'\''$//')"
-    [[ -n "$_cab" ]] && binary="$_cab"
+    [[ -n "$_cab" ]] && binary="$_cab" || true
   fi
   binary="${binary:-agent}"
 
@@ -380,7 +380,7 @@ check_environment_parity() {
       ;;
   esac
 
-  _allowed_envs="$(grep -E '^allowed_environments:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^allowed_environments: *//; s/["'\'']//g' || true)"
+  _allowed_envs="$(grep -E '^allowed_environments:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^allowed_environments: *//; s/"//g; s/'"'"'//g' || true)"
   if [[ -n "$_allowed_envs" ]]; then
     IFS=',' read -ra _env_list <<< "$_allowed_envs"
     _env_ok=false

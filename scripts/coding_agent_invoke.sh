@@ -26,6 +26,7 @@ MODE="${1:-smoke}"
 PROMPT="${2:-say ok}"
 BINARY="${KANBAN_CODING_AGENT:-agent}"
 MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
+PROVIDER="${KANBAN_CODING_AGENT_PROVIDER:-}"
 REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 model_is_auto() {
@@ -52,6 +53,14 @@ append_model_args() {
   fi
   # All known binaries support --model
   _out+=(--model "$MODEL")
+}
+
+append_provider_args() {
+  local -n _out=$1
+  if [[ -z "${PROVIDER:-}" ]]; then
+    return 0
+  fi
+  _out+=(--provider "$PROVIDER")
 }
 
 # ── Unified dispatch: capture, log tokens, output to stdout ────────────
@@ -288,6 +297,7 @@ case "$BINARY" in
     export KANBAN_CODING_AGENT_CHILD=1
     args=( chat -q "$PROMPT" --yolo )
     append_model_args args
+    append_provider_args args
     if [[ "$MODE" == "dispatch" ]]; then
       _dispatch_hermes_and_meter "${args[@]}"
       exit $?

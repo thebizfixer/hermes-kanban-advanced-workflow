@@ -740,20 +740,17 @@ Then attestation + coding_agent_auth_prewarm serially (same as parallel-subagent
 
 
 def _create_plan_board(plan_id: str) -> str:
-    """Create a per-plan kanban board (idempotent). Returns board slug."""
+    """Create a per-run kanban board with a timestamp suffix. Every handoff
+    gets a fresh board — no stale cards from prior runs. Returns board slug."""
     import re as _re
-    slug = _re.sub(r'[^a-z0-9-]', '-', plan_id.lower())[:64].strip('-') or plan_id
-    # Check if board already exists
-    result = subprocess.run(
-        ["hermes", "kanban", "boards", "list"],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=10,
-    )
-    if slug in result.stdout:
-        return slug
+    import datetime as _dt
+    base = _re.sub(r'[^a-z0-9-]', '-', plan_id.lower())[:48].strip('-') or plan_id
+    ts = _dt.datetime.now(datetime.timezone.utc).strftime("%Y%m%d-%H%M%S")
+    slug = f"{base}-{ts}"
+    name = f"{plan_id} — {ts}"
     # Create board
     create = subprocess.run(
-        ["hermes", "kanban", "boards", "create", slug, "--name", plan_id],
+        ["hermes", "kanban", "boards", "create", slug, "--name", name],
         capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=15,
     )

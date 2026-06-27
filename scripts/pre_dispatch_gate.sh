@@ -31,11 +31,11 @@ REPO_ROOT="$(echo "$REPO_ROOT" | tr '\\' '/')"
 
 if [[ -f "$OVERLAY_CONFIG" ]]; then
   _wb="$(grep -E '^working_branch:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^working_branch: *//; s/^"//; s/"$//')"
-  [[ -n "$_wb" ]] && WORKING_BRANCH="$_wb"
+  [[ -n "$_wb" ]] && WORKING_BRANCH="$_wb" || true
   _pm="$(grep -E '^plan_memory_path:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^plan_memory_path: *//; s/^"//; s/"$//')"
-  [[ -n "$_pm" ]] && PLAN_MEMORY_PATH="$_pm"
+  [[ -n "$_pm" ]] && PLAN_MEMORY_PATH="$_pm" || true
   _bp="$(grep -E '^bundle_path:' "$OVERLAY_CONFIG" 2>/dev/null | head -1 | sed 's/^bundle_path: *//; s/^"//; s/"$//')"
-  [[ -n "$_bp" ]] && BUNDLE_PATH="$_bp"
+  [[ -n "$_bp" ]] && BUNDLE_PATH="$_bp" || true
 fi
 
 # Normalize BUNDLE_PATH AFTER overlay override (backslashes from config must be converted)
