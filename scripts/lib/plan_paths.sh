@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUNDLE_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+BUNDLE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # Platform-native path separator — colon on Linux, semicolon on Windows.
 _PY_SEP="$("python3" -c "import os; print(os.pathsep)" 2>/dev/null || echo ':')"
 # On Windows (Git Bash), pwd returns /c/Users/... format which native

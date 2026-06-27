@@ -8,7 +8,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/hermes_home.sh"
 
 KANBAN_WORKFLOW_DIR="${KANBAN_WORKFLOW_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
-REPO_ROOT="${REPO_ROOT:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+# shellcheck source=lib/kanban_config.sh
+source "$SCRIPT_DIR/lib/kanban_config.sh" 2>/dev/null || true
+REPO_ROOT="${REPO_ROOT:-$(resolve_project_root "$SCRIPT_DIR" 2>/dev/null || echo "$KANBAN_WORKFLOW_DIR/..")}"
 HERMES_PROJECT_OVERLAY="${HERMES_PROJECT_OVERLAY:-$REPO_ROOT/.hermes/kanban-overrides}"
 KANBAN_CONFIG_FILE="${KANBAN_CONFIG_FILE:-$HERMES_PROJECT_OVERLAY/kanban-config.yaml}"
 

@@ -24,7 +24,7 @@ REPO_ROOT="${REPO_ROOT:-$PWD}"
 if [ -z "$REPO_ROOT" ] || [ ! -d "$REPO_ROOT" ]; then
   REPO_ROOT="${REPO_ROOT:-$PWD}"
   if [ -z "$REPO_ROOT" ] || [ ! -d "$REPO_ROOT" ]; then
-    REPO_ROOT="$(cd \"$SCRIPT_DIR/../..\" && pwd)"
+    REPO_ROOT="$(resolve_project_root "$SCRIPT_DIR" 2>/dev/null || echo "$SCRIPT_DIR/../..")"
   fi
 fi
 
