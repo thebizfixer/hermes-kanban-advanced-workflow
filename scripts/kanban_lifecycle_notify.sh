@@ -4,6 +4,7 @@
 # Usage: bash scripts/kanban_lifecycle_notify.sh [--plan-id ID]
 # Config: notify_lifecycle in kanban-config.yaml (default true) or NOTIFY_LIFECYCLE=true
 set -euo pipefail
+export PYTHONIOENCODING=utf-8
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/kanban_logs.sh
