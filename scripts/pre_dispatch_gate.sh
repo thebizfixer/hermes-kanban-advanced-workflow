@@ -104,8 +104,9 @@ warn "card_policy_script" \
 check "plan_memory" \
   "test -f ${PLAN_MEMORY_PATH}/${PLAN_ID}.json"
 
+source "${BUNDLE_PATH}/scripts/lib/kanban_db_path.sh" 2>/dev/null || KANBAN_DB_PATH="${HERMES_HOME:-$HOME/.hermes}/kanban.db"
 check "kanban_db" \
-  "python3 -c \"import sqlite3, os; db_path = os.path.join(os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')), 'kanban.db'); db=sqlite3.connect(db_path); assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'\" 2>/dev/null"
+  "python3 -c \"import sqlite3, os; db_path=os.environ.get('KANBAN_DB_PATH', os.path.join(os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')), 'kanban.db')); db=sqlite3.connect(db_path); assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'\" 2>/dev/null"
 
 if [[ -n "$PLAN_REL" && -f "${BUNDLE_PATH}/scripts/validate_card_bodies.py" ]]; then
   check "card_bodies_fidelity" \
@@ -139,7 +140,7 @@ fi
 check "stale_tasks" \
   "python3 -c \"
 import sqlite3, os, sys
-db_path = os.path.join(os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')), 'kanban.db')
+db_path = os.environ.get('KANBAN_DB_PATH', os.path.join(os.environ.get('HERMES_HOME', os.path.expanduser('~/.hermes')), 'kanban.db'))
 if not os.path.exists(db_path):
     print('PASS: no kanban.db')
     sys.exit(0)

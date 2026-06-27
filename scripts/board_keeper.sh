@@ -104,7 +104,8 @@ _kanban_disk_ok() {
 # ── Health check (DB integrity + disk space) ──────────────────────────
 
 _health_check() {
-  local db_path="${HERMES_HOME:-$HOME/.hermes}/kanban.db"
+  source "${SCRIPT_DIR}/lib/kanban_db_path.sh" 2>/dev/null || true
+  local db_path="${KANBAN_DB_PATH:-${HERMES_HOME:-$HOME/.hermes}/kanban.db}"
   local integrity
   integrity=$(python3 -c "
 import sqlite3, sys
@@ -356,8 +357,8 @@ done
 echo ""
 echo "--- Thrash outliers ---"
 THRASH_COUNT=0
-if [[ -f "${HERMES_HOME}/kanban.db" ]]; then
-  THRASH_IDS=$(python3 - "$HERMES_HOME/kanban.db" <<'PY' 2>/dev/null || true
+if [[ -f "${KANBAN_DB_PATH:-${HERMES_HOME}/kanban.db}" ]]; then
+  THRASH_IDS=$(python3 - "$KANBAN_DB_PATH" <<'PY' 2>/dev/null || true
 import sqlite3, sys
 db = sqlite3.connect(sys.argv[1])
 cols = {r[1].lower(): r[1] for r in db.execute("PRAGMA table_info(tasks)").fetchall()}

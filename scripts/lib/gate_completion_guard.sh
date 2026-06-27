@@ -9,7 +9,11 @@ source "$SCRIPT_DIR/hermes_home.sh" 2>/dev/null || {
     HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 }
 
-DB="${HERMES_HOME}/kanban.db"
+source "$SCRIPT_DIR/kanban_db_path.sh" 2>/dev/null || {
+    HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
+    KANBAN_DB_PATH="${HERMES_HOME}/kanban.db"
+}
+DB="${KANBAN_DB_PATH}"
 if [[ ! -f "$DB" ]]; then
     echo "PASS: no kanban.db (no gates to resurrect)"
     exit 0

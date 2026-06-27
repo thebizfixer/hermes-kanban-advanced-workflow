@@ -65,6 +65,13 @@ def _hermes_home() -> Path:
     return Path.home() / ".hermes"
 
 
+def _resolve_kanban_db() -> Path:
+    board = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
+    if board and board != "default":
+        return _hermes_home() / "kanban" / "boards" / board / "kanban.db"
+    return _hermes_home() / "kanban.db"
+
+
 def _load_cards_from_db(plan_id: str, db_path: Path) -> list[dict[str, Any]]:
     import sqlite3
 
@@ -280,7 +287,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: plan file not found for plan_id={plan_id}", file=sys.stderr)
         return 2
 
-    db_path = _hermes_home() / "kanban.db"
+    db_path = _resolve_kanban_db()
     try:
         cards = _load_cards_from_db(plan_id, db_path)
     except RuntimeError as exc:

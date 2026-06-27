@@ -19,6 +19,9 @@ WORKER_PROFILE="${WORKER_PROFILE:-kanban-advanced-worker}"
 # shellcheck source=lib/kanban_config.sh
 source "$SCRIPT_DIR/lib/kanban_config.sh"
 
+# shellcheck source=lib/kanban_db_path.sh
+source "$SCRIPT_DIR/lib/kanban_db_path.sh" 2>/dev/null || true
+
 REPO_ROOT="$(resolve_project_root "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
@@ -507,7 +510,7 @@ check_kanban_db_integrity() {
       "Skipped by PREFLIGHT_SKIP_DB_CHECK=1 (audit-noted override)"
     return
   fi
-  local db="${HERMES_HOME}/kanban.db"
+  local db="${KANBAN_DB_PATH:-${HERMES_HOME}/kanban.db}"
   local lock="${db}.init.lock"
   if [[ -f "$lock" ]]; then
     rm -f "$lock" 2>/dev/null || true
@@ -517,7 +520,7 @@ check_kanban_db_integrity() {
       "kanban.db not found at $db (gateway may create on first run)"
     return
   fi
-  if python3 -c "import sqlite3, os; db_path=os.path.join(os.environ.get('HERMES_HOME',''),'kanban.db'); c=sqlite3.connect(db_path); r=c.execute('PRAGMA integrity_check').fetchone()[0]; assert r=='ok', r; c.close()"; then
+  if python3 -c "import sqlite3, os; db_path=os.environ.get('KANBAN_DB_PATH', os.path.join(os.environ.get('HERMES_HOME',''),'kanban.db')); c=sqlite3.connect(db_path); r=c.execute('PRAGMA integrity_check').fetchone()[0]; assert r=='ok', r; c.close()"; then
     record_check "kanban_db_integrity" "pass" "blocking" "kanban.db integrity ok at $db"
   else
     record_check "kanban_db_integrity" "fail" "blocking" "kanban.db integrity check failed at $db"

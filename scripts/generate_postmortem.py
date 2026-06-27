@@ -134,7 +134,9 @@ def _kanban_db_path() -> Path:
     env = os.environ.get("KANBAN_DB", "").strip()
     if env:
         return Path(env).expanduser()
-    # Kanban tasks live in $HERMES_HOME/kanban.db, not ~/.hermes/state.db
+    board = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
+    if board and board != "default":
+        return _hermes_home() / "kanban" / "boards" / board / "kanban.db"
     return _hermes_home() / "kanban.db"
 
 
