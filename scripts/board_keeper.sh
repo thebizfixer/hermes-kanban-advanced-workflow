@@ -445,7 +445,7 @@ done
 echo ""
 echo "--- Stale worktrees ---"
 STALE_WTS=0
-for wt in /tmp/wt-*; do
+for wt in /tmp/wt-${PLAN_ID:-}*; do
     [ -d "$wt" ] || continue
     # Check if this worktree corresponds to an active card
     WT_NAME=$(basename "$wt")
