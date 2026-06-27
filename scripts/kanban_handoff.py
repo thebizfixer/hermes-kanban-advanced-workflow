@@ -732,9 +732,34 @@ Then attestation + coding_agent_auth_prewarm serially (same as parallel-subagent
 **Do not proceed to Step 2 until gate passes.**"""
 
 
+def _create_plan_board(plan_id: str) -> str:
+    """Create a per-plan kanban board (idempotent). Returns board slug."""
+    import re as _re
+    slug = _re.sub(r'[^a-z0-9-]', '-', plan_id.lower())[:64].strip('-') or plan_id
+    # Check if board already exists
+    result = subprocess.run(
+        ["hermes", "kanban", "boards", "list"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=10,
+    )
+    if slug in result.stdout:
+        return slug
+    # Create board
+    create = subprocess.run(
+        ["hermes", "kanban", "boards", "create", slug, "--name", plan_id],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=15,
+    )
+    if create.returncode != 0:
+        print(f"[kanban_handoff] WARNING: board creation failed, using default: {create.stderr.strip()}", file=sys.stderr)
+        return "default"
+    return slug
+
+
 def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: str,
                 orchestrator_profile: str,
                 bundle_root: Path,
+                kanban_board: str = "default",
                 cards_yaml_path: Path | None = None,
                 gate_status: str = "UNKNOWN (not run)",
                 gate_script: Path | None = None,
@@ -802,6 +827,8 @@ notify_lifecycle: {notify_lifecycle}
 walk_away_mode: {walk_away_mode}
 notify_deliver_resolved: {notify_deliver}
 cron_provision: {cron_provision}
+kanban_board: {kanban_board}
+board_cmd: hermes kanban --board {kanban_board}
 
 ## FIRST ACTION (execute in order — do not read the Plan file)
 
@@ -818,8 +845,14 @@ SOP-only, no `agent -p` block, not a coding task.
 **Do not read the full Plan file — execute this runbook only.** Use `Plan:` for metadata.
 **Post-exec branch on stamped `walk_away_mode`** (`{walk_away_mode}`) — not live overlay.
 
-### Step 0 — Gateway
+### Step 0 — Board + Gateway
 
+This handoff runs on board `{kanban_board}`. Export before all commands:
+```bash
+export KANBAN_BOARD="{kanban_board}"
+```
+
+Gateway check:
 ```bash
 hermes gateway status
 ```
@@ -837,21 +870,21 @@ Crons were provisioned in the **default profile session** before this handoff wa
 
 ```bash
 # Idempotency: reuse existing gate for this plan_id (re-spawn guard)
-GATE_ID=$(hermes kanban list 2>/dev/null | while IFS= read -r line; do
+GATE_ID=$(hermes kanban --board "$KANBAN_BOARD" list 2>/dev/null | while IFS= read -r line; do
   tid=$(echo "$line" | awk '{{print $1}}')
   [[ "$tid" == t_* ]] || continue
-  hermes kanban show "$tid" 2>/dev/null | grep -qF "plan_id: {plan_id}" && echo "$tid" && break
+  hermes kanban --board "$KANBAN_BOARD" show "$tid" 2>/dev/null | grep -qF "plan_id: {plan_id}" && echo "$tid" && break
 done)
 if [[ -z "$GATE_ID" ]]; then
-  hermes kanban create "Gate — {plan_id}" --assignee {orchestrator_profile} --body "{gate_body_escaped}"
-  GATE_ID=$(hermes kanban list 2>/dev/null | while IFS= read -r line; do
+  hermes kanban --board "$KANBAN_BOARD" create "Gate — {plan_id}" --assignee {orchestrator_profile} --body "{gate_body_escaped}"
+  GATE_ID=$(hermes kanban --board "$KANBAN_BOARD" list 2>/dev/null | while IFS= read -r line; do
     tid=$(echo "$line" | awk '{{print $1}}')
     [[ "$tid" == t_* ]] || continue
-    hermes kanban show "$tid" 2>/dev/null | grep -qF "plan_id: {plan_id}" && echo "$tid" && break
+    hermes kanban --board "$KANBAN_BOARD" show "$tid" 2>/dev/null | grep -qF "plan_id: {plan_id}" && echo "$tid" && break
   done)
 fi
 echo "Gate: $GATE_ID"
-hermes kanban block "$GATE_ID" "Gate — awaiting links"
+hermes kanban --board "$KANBAN_BOARD" block "$GATE_ID" "Gate — awaiting links"
 bash {bundle}/scripts/provision_kanban_crons.sh --check
 ```
 
@@ -884,7 +917,7 @@ Fix every structural failure before proceeding.
 ### Step 5 — Complete gate
 
 ```bash
-hermes kanban complete <gate_id> --summary "Gate complete. Auto-unblock: <cron1_id>. Board-keeper: <cron2_id>. N cards dispatched."
+hermes kanban --board "$KANBAN_BOARD" complete <gate_id> --summary "Gate complete. Auto-unblock: <cron1_id>. Board-keeper: <cron2_id>. N cards dispatched."
 ```
 
 Then perform ongoing orchestrator duties (monitor, reconcile, final audit).
@@ -895,7 +928,7 @@ Then perform ongoing orchestrator duties (monitor, reconcile, final audit).
 infrastructure itself, block this card and notify the operator to run decomposition
 manually.
 
-When done, complete this card: `hermes kanban complete <this_card_id> --summary "Decomposed <plan_id>: gate=<gate_id>, N impl cards."`
+When done, complete this card: `hermes kanban --board "$KANBAN_BOARD" complete <this_card_id> --summary "Decomposed {plan_id}: gate=<gate_id>, N impl cards."`
 """
 
 
@@ -970,6 +1003,10 @@ def main() -> int:
         bundle_root = project_root / "hermes-kanban-advanced-workflow"
 
     cards_yaml_path = _discover_cards_yaml(plan_id, plan_path, project_root, overlay)
+
+    # Create per-plan board (idempotent)
+    kanban_board = _create_plan_board(plan_id)
+    os.environ["HERMES_KANBAN_BOARD"] = kanban_board
 
     board_ok, board_msg, archived = _check_board_cleanliness(
         plan_id, force=args.force
@@ -1083,6 +1120,7 @@ def main() -> int:
     body = _build_body(
         plan_id, plan_path, project_root, working_branch,
         orchestrator_profile,
+        kanban_board=kanban_board,
         bundle_root=bundle_root,
         cards_yaml_path=cards_yaml_path,
         gate_status=gate_status,
