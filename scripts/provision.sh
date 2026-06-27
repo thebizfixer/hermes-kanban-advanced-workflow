@@ -8,9 +8,29 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/hermes_home.sh"
 
 KANBAN_WORKFLOW_DIR="${KANBAN_WORKFLOW_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
-# shellcheck source=lib/kanban_config.sh
-source "$SCRIPT_DIR/lib/kanban_config.sh" 2>/dev/null || true
-REPO_ROOT="${REPO_ROOT:-$(resolve_project_root "$SCRIPT_DIR" 2>/dev/null || echo "$KANBAN_WORKFLOW_DIR/..")}"
+# Resolve REPO_ROOT by walking up from SCRIPT_DIR looking for the overlay config.
+# Do NOT use git rev-parse — the plugin install dir has its own .git which would
+# resolve to ~/.hermes/plugins/kanban-advanced/ instead of the project repo.
+_resolve_repo_root() {
+  local dir
+  dir="$(cd "$SCRIPT_DIR" && pwd)"
+  while [[ "$dir" != "/" && "$dir" != "" ]]; do
+    if [[ -f "$dir/.hermes/kanban-overrides/kanban-config.yaml" ]]; then
+      printf '%s\n' "$dir"
+      return 0
+    fi
+    dir="$(dirname "$dir")"
+  done
+  # Fallback: parent of plugin install dir (plugins/.. = hermes home parent)
+  dir="$(cd "$KANBAN_WORKFLOW_DIR/../.." 2>/dev/null && pwd)" || true
+  if [[ -n "$dir" && -f "$dir/.hermes/kanban-overrides/kanban-config.yaml" ]]; then
+    printf '%s\n' "$dir"
+    return 0
+  fi
+  printf '%s\n' "$KANBAN_WORKFLOW_DIR/.."
+  return 1
+}
+REPO_ROOT="${REPO_ROOT:-$(_resolve_repo_root)}"
 HERMES_PROJECT_OVERLAY="${HERMES_PROJECT_OVERLAY:-$REPO_ROOT/.hermes/kanban-overrides}"
 KANBAN_CONFIG_FILE="${KANBAN_CONFIG_FILE:-$HERMES_PROJECT_OVERLAY/kanban-config.yaml}"
 
@@ -80,8 +100,11 @@ hash_file() {
 
 WORKER_PROFILE_NAME="${CONFIG[worker_profile]:-kanban-advanced-worker}"
 ORCH_PROFILE_NAME="${CONFIG[orchestrator_profile]:-kanban-advanced-orchestrator}"
-BUNDLE_PATH="${CONFIG[bundle_path]:-hermes-kanban-advanced-workflow}"
-if [[ "$BUNDLE_PATH" != /* ]]; then
+BUNDLE_PATH="${CONFIG[bundle_path]:-$KANBAN_WORKFLOW_DIR}"
+# Normalize backslashes to forward slashes (Windows config may use either)
+BUNDLE_PATH="${BUNDLE_PATH//\\//}"
+# Absolute path check: Unix (/...) or Windows (C:/...)
+if [[ "$BUNDLE_PATH" != /* ]] && [[ ! "$BUNDLE_PATH" =~ ^[A-Za-z]: ]]; then
   BUNDLE_PATH="$REPO_ROOT/$BUNDLE_PATH"
 fi
 KANBAN_WORKFLOW_DIR="$BUNDLE_PATH"
@@ -231,6 +254,8 @@ if [[ "$PROFILES_ONLY" -eq 1 ]]; then
 fi
 
 SKILLS_OUTPUT_PATH="${CONFIG[skills_output_path]:-$HERMES_HOME/skills/kanban-advanced}"
+# Normalize backslashes to forward slashes (Windows config may use either)
+SKILLS_OUTPUT_PATH="${SKILLS_OUTPUT_PATH//\\//}"
 # Absolute path check: Unix (/...) or Windows (C:/...)
 if [[ "$SKILLS_OUTPUT_PATH" != /* ]] && [[ ! "$SKILLS_OUTPUT_PATH" =~ ^[A-Za-z]:/ ]]; then
   SKILLS_OUTPUT_PATH="$REPO_ROOT/$SKILLS_OUTPUT_PATH"
