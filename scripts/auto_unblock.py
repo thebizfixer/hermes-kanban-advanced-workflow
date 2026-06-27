@@ -26,6 +26,10 @@ env = os.environ.copy()
 if git_usr_bin:
     env['PATH'] = git_usr_bin + os.pathsep + env.get('PATH', '')
 
+# Pass board scope if set (for multi-board isolation)
+if os.environ.get('HERMES_KANBAN_BOARD'):
+    env['KANBAN_BOARD'] = os.environ['HERMES_KANBAN_BOARD']
+
 r = subprocess.run(f'"{GIT_BASH}" "{script}" {args}', shell=True,
                    capture_output=True, text=True, encoding="utf-8", timeout=60, env=env)
 if r.stdout:
