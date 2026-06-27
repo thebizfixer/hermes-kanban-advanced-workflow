@@ -187,6 +187,15 @@ _walk_away_mode_enabled() {
 _resolve_active_plan_id() {
     local repo_root="${1:-}"
     local plan_id="${HERMES_KANBAN_PLAN_ID:-}"
+    # Read from plan memory (per-plan tracking) — take first active plan
+    if [[ -z "$plan_id" && -n "$repo_root" ]]; then
+        for f in "$repo_root/.hermes/kanban/memory/"*.json; do
+            [[ -f "$f" ]] || continue
+            plan_id="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('plan_id',''))" "$f" 2>/dev/null || true)"
+            [[ -n "$plan_id" ]] && break
+        done
+    fi
+    # Fallback to legacy singleton file
     if [[ -z "$plan_id" && -n "$repo_root" && -f "$repo_root/.hermes/kanban/logs/lifecycle_plan_id" ]]; then
         plan_id="$(<"$repo_root/.hermes/kanban/logs/lifecycle_plan_id")"
     fi

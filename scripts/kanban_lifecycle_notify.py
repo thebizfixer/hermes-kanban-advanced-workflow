@@ -9,13 +9,13 @@ GIT_BASH = "C:/Program Files/Git/usr/bin/bash.exe"
 script_dir = os.path.dirname(os.path.abspath(__file__))
 script = os.path.join(script_dir, 'kanban_lifecycle_notify.sh').replace('\\', '/')
 
-# Find repo root: look for lifecycle_plan_id marker up from known locations
+# Find repo root: look for plan memory marker up from known locations
 repo_root = None
 for start in [Path(os.getcwd()), Path.home()]:
     try:
         for p in [start] + list(start.parents)[:6]:
-            marker = p / '.hermes' / 'kanban' / 'logs' / 'lifecycle_plan_id'
-            if marker.is_file():
+            marker = p / '.hermes' / 'kanban' / 'memory'
+            if marker.is_dir() and any(marker.glob('*.json')):
                 repo_root = str(p.resolve())
                 break
     except Exception:

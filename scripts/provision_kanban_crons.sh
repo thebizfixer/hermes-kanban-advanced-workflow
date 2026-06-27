@@ -244,8 +244,8 @@ case "$ACTION" in
     if _notify_lifecycle_enabled; then
       lifecycle_id="$(_create_job "every 5m" "$LIFECYCLE_NOTIFY_NAME" "$LIFECYCLE_SCRIPT" "$LIFECYCLE_DELIVER" "--workdir $WORKDIR")"
       if [[ -n "$PLAN_ID" && "$DRY_RUN" != true ]]; then
-        mkdir -p "$REPO_ROOT/.hermes/kanban/logs"
-        printf '%s\n' "$PLAN_ID" > "$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id"
+        mkdir -p "$REPO_ROOT/.hermes/kanban/memory"
+        printf '{"plan_id":"%s","active":true}' "$PLAN_ID" > "$REPO_ROOT/.hermes/kanban/memory/${PLAN_ID}.json"
       fi
     fi
     if [[ -n "$PLAN_ID" && "$DRY_RUN" != true ]]; then

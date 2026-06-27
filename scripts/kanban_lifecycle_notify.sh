@@ -20,6 +20,14 @@ while [[ $# -gt 0 ]]; do
 done
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+# Read PLAN_ID from plan memory (per-plan tracking) or fall back to legacy singleton
+if [[ -z "$PLAN_ID" ]]; then
+  for f in "$REPO_ROOT/.hermes/kanban/memory/"*.json; do
+    [[ -f "$f" ]] || continue
+    PLAN_ID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('plan_id',''))" "$f" 2>/dev/null || true)"
+    [[ -n "$PLAN_ID" ]] && break
+  done
+fi
 if [[ -z "$PLAN_ID" && -f "$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id" ]]; then
   PLAN_ID="$(<"$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id")"
 fi
