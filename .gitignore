@@ -46,3 +46,4 @@ test-plan/scripts/smoke_utils.py
 test-plan/scripts/test_smoke_utils.py
 test-plan/scripts/__pycache__/
 test-plan/artifacts/
+.worktrees/

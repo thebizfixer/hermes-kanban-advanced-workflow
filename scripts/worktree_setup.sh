@@ -39,7 +39,7 @@ if ! _load_branch_config "$REPO_ROOT"; then
     exit 1
 fi
 
-BASE="${WORKTREE_BASE:-${KANBAN_TEMP:-${TMPDIR:-${TEMP:-/tmp}}}}"
+BASE="${WORKTREE_BASE:-${REPO_ROOT}/.worktrees}"
 TASK_PREFIX="$(printf '%s' "$TASK_ID" | cut -c1-8)"
 WORKTREE_PATH="${BASE}/wt-${TASK_PREFIX}"
 ALLOWED_BRANCH="wt/${TASK_ID}"

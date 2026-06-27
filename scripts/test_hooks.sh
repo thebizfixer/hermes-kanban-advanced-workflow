@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # test_hooks.sh — Manual verification of pre-push and pre-commit hooks.
-# Run after worktree_setup.sh creates /tmp/wt-t_smoke_
+# Run after worktree_setup.sh creates .worktrees/wt-t_smoke_
 # Usage: bash scripts/test_hooks.sh
 
 set -uo pipefail
 
-WT=/tmp/wt-t_smoke_
+WT=.worktrees/wt-t_smoke_
 if [ ! -d "$WT" ]; then
     echo "ERROR: worktree $WT not found. Run worktree_setup.sh first." >&2
     exit 1

@@ -635,8 +635,15 @@ def _check_git_freshness(plan_id: str, project_root: Path) -> tuple[bool, str]:
     ]
 
     # Check for stale worktrees
-    wt_pattern = f"/tmp/wt-{plan_id}-*"
-    stale_worktrees = glob.glob(str(project_root / wt_pattern))
+    # Primary: check .worktrees/ via git (post-migration to Hermes convention)
+    # Secondary (belt-and-suspenders): check temp dir for legacy worktrees
+    import os
+    tmp = os.environ.get("KANBAN_TEMP") or os.environ.get("TEMP") or "/tmp"
+    wt_pattern = os.path.join(tmp, f"wt-{plan_id}-*")
+    stale_worktrees = glob.glob(wt_pattern)
+    # Also check .worktrees/ in repo
+    repo_wt_pattern = str(project_root / ".worktrees" / f"wt-*")
+    stale_worktrees.extend(glob.glob(repo_wt_pattern))
 
     # Check for stale attestation
     attestation = project_root / ".hermes" / "kanban" / f"attestation-{plan_id}.yaml"

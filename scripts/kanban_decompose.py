@@ -283,15 +283,6 @@ def estimate_turn_budget(card: dict) -> int:
     return (fn_count * 3) + (test_runs * 2) + (consumer_checks * 2) + (2 if lines > 80 else 0) + 2
 
 
-def _is_dispatcher_absolute(path: str) -> bool:
-    """Return True if path is absolute per Hermes dispatcher requirements.
-    On Windows, paths must start with a drive letter. On Unix, os.path.isabs() suffices."""
-    import sys, re
-    if sys.platform == 'win32':
-        return bool(re.match(r'^[A-Za-z]:[/\\\\]', path))
-    return os.path.isabs(path)
-
-
 def max_retries_for_card(card: dict) -> int:
     """Per-plan cap: always ≤2 retries for code-gen cards."""
     if card.get("type") != "code-gen":
@@ -338,24 +329,10 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False, ru
             card_key = card.get("key", "card")
             workspace = card.get("workspace")
             if not workspace or workspace == "worktree":
-                # Auto-generate worktree path when plan doesn't specify one.
-                # "worktree" alone is rejected by the dispatcher — must have :<path>.
-                # Use platform-appropriate temp dir (C:\Users\...\Temp on Windows, /tmp on Unix).
-                tmp = Path(tempfile.gettempdir()).as_posix()
-                # Guard: MSYS/Git Bash may return /tmp which is not absolute on Windows.
-                # Use os.path.isabs() instead of string-matching /tmp — catches all
-                # non-absolute paths regardless of the specific MSYS override value.
-                # Per Python docs, gettempdir() resolves: TMPDIR → TEMP → TMP →
-                # platform-specific → CWD. MSYS overrides TEMP/TMP to /tmp.
-                if not _is_dispatcher_absolute(tmp):
-                    # Try Windows-native TEMP/TMP env vars first
-                    win_tmp = os.environ.get("TEMP") or os.environ.get("TMP") or ""
-                    if win_tmp and os.path.isabs(win_tmp):
-                        tmp = Path(win_tmp).as_posix()
-                    else:
-                        # Final fallback: Path.home() is always absolute on all platforms
-                        tmp = (Path.home() / "tmp").as_posix()
-                workspace = f"worktree:{tmp}/wt-{plan_id}-{run_ts}-{card_key}" if run_ts else f"worktree:{tmp}/wt-{plan_id}-{card_key}"
+                # Let Hermes resolve worktree path per its convention:
+                # <repo>/.worktrees/<task-id> (kanban_db.py:5394).
+                # Requires board default_workdir to be set.
+                workspace = "worktree"
             branch = card.get("branch") or f"kanban/{plan_id}/{card_key}"
             cmd.extend(["--workspace", workspace])
             cmd.extend(["--branch", branch])

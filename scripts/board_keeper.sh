@@ -445,7 +445,10 @@ done
 echo ""
 echo "--- Stale worktrees ---"
 STALE_WTS=0
-for wt in /tmp/wt-${PLAN_ID:-}*; do
+# Source hermes_home.sh for KANBAN_TEMP (cross-platform temp dir)
+source "$SCRIPT_DIR/lib/hermes_home.sh" 2>/dev/null || true
+
+for wt in "${KANBAN_TEMP:-/tmp}/wt-${PLAN_ID:-}"*; do
     [ -d "$wt" ] || continue
     # Check if this worktree corresponds to an active card
     WT_NAME=$(basename "$wt")

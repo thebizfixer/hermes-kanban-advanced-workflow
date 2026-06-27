@@ -58,7 +58,7 @@ MODE="audit"
 DRY_RUN=false
 STAGING_BRANCH="$WORKING_BRANCH"
 PLAN_ID=""
-WORKTREE_PATTERN="${KANBAN_WORKTREE_PATTERN:-/tmp/wt-*}"
+WORKTREE_PATTERN="${KANBAN_WORKTREE_PATTERN:-${REPO_ROOT}/.worktrees/wt-*}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -75,7 +75,7 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo ".")
 cd "$REPO_ROOT"
 
 # Filter worktree pattern by plan_id for multi-board isolation
-[[ -n "$PLAN_ID" ]] && WORKTREE_PATTERN="/tmp/wt-${PLAN_ID}-*"
+[[ -n "$PLAN_ID" ]] && WORKTREE_PATTERN="${REPO_ROOT}/.worktrees/wt-${PLAN_ID}-*"
 
 red()    { echo -e "\033[31m$*\033[0m"; }
 yellow() { echo -e "\033[33m$*\033[0m"; }

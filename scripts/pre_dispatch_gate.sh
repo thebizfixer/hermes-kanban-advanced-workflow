@@ -50,6 +50,19 @@ WARNINGS=0
 echo -n "[GATE] worktree_prune ... "
 git worktree prune --expire=now 2>/dev/null && echo "PASS" || echo "WARN (non-blocking)"
 
+# Sweep .worktrees/ for stale plan worktrees (three-tier removal)
+echo -n "[GATE] worktree_sweep ... "
+SWEPT=0
+if [ -d ".worktrees" ]; then
+    for wt in .worktrees/wt-*; do
+        [ -d "$wt" ] || continue
+        git worktree remove "$wt" 2>/dev/null && SWEPT=$((SWEPT+1)) && continue
+        git worktree remove --force "$wt" 2>/dev/null && SWEPT=$((SWEPT+1)) && continue
+        { rm -rf "$wt" && git worktree prune 2>/dev/null && SWEPT=$((SWEPT+1)); }
+    done
+fi
+echo "${SWEPT:-0} removed"
+
 check() {
   local name="$1" cmd="$2"
   echo -n "[GATE] $name ... "
