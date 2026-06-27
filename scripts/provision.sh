@@ -115,125 +115,58 @@ PROFILE_SKILL_SETS["$ORCH_PROFILE_NAME"]="kanban-advanced kanban-cleanup kanban-
 
 check_profile_skills() {
   local profile="$1"
-  local expected_str="${PROFILE_SKILL_SETS[$profile]:-}"
   local profile_home="$HERMES_HOME/profiles/$profile"
-  local profile_skills="$profile_home/skills"
+  local config_file="$profile_home/config.yaml"
 
-  if [[ -z "$expected_str" ]]; then
-    echo "[provision] SKIP profile $profile: no skill set configured"
-    return
+  [[ -d "$profile_home" ]] || { echo "[provision] SKIP profile $profile: home not found"; return; }
+  [[ -f "$config_file" ]] || { echo "[provision] DRIFT profile $profile: config.yaml missing"; DRIFT_FILES+=("$config_file"); return; }
+
+  if ! python3 -c "
+import yaml
+with open('$config_file') as f:
+    config = yaml.safe_load(f)
+dirs = config.get('skills', {}).get('external_dirs', [])
+assert any('skills/kanban-advanced' in d for d in dirs)
+" 2>/dev/null; then
+    echo "[provision] DRIFT profile $profile: external_dirs missing kanban-advanced"
+    DRIFT_FILES+=("$config_file")
   fi
-  if [[ ! -d "$profile_home" ]]; then
-    echo "[provision] SKIP profile $profile: home not found ($profile_home)"
-    return
-  fi
-  if [[ ! -d "$profile_skills" ]]; then
-    echo "[provision] DRIFT profile $profile: skills dir missing ($profile_skills)"
-    DRIFT_FILES+=("$profile_skills")
-    return
-  fi
-
-  read -ra expected_arr <<< "$expected_str"
-
-  for skill in "${expected_arr[@]}"; do
-    local src_file="$BUNDLE_PATH/plugin/skills/$skill/SKILL.md"
-    local dst_file="$profile_skills/$skill/SKILL.md"
-    if [[ ! -f "$dst_file" ]]; then
-      echo "[provision] DRIFT profile $profile: missing skill $skill"
-      DRIFT_FILES+=("$dst_file")
-    elif [[ -f "$src_file" ]]; then
-      if [ "$(hash_file "$src_file")" != "$(hash_file "$dst_file")" ]; then
-        echo "[provision] DRIFT profile $profile: stale skill $skill"
-        DRIFT_FILES+=("$dst_file")
-      fi
-    fi
-  done
-
-  while IFS= read -r -d '' skill_dir; do
-    local skill_name
-    skill_name="$(basename "$skill_dir")"
-    local found=0
-    for expected in "${expected_arr[@]}"; do
-      [[ "$skill_name" == "$expected" ]] && found=1 && break
-    done
-    if [[ $found -eq 0 ]]; then
-      echo "[provision] DRIFT profile $profile: unexpected skill '$skill_name' (stale built-in?)"
-      DRIFT_FILES+=("$skill_dir")
-    fi
-  done < <(find "$profile_skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
 }
 
-# ── Seed profile skills (repair missing/stale) ─────────────────────────
+# ── Seed profile skills (ensure external_dirs config) ─────────────────
 
 seed_profile_skills() {
   local profile="$1"
-  local expected_str="${PROFILE_SKILL_SETS[$profile]:-}"
   local profile_home="$HERMES_HOME/profiles/$profile"
-  local profile_skills="$profile_home/skills"
+  local config_file="$profile_home/config.yaml"
+  local count=0
 
   [[ -d "$profile_home" ]] || return 0
-  mkdir -p "$profile_skills"
+  [[ -f "$config_file" ]] || { echo "[provision]   !  $profile: no config.yaml — cannot set external_dirs"; return 0; }
 
-  read -ra expected_arr <<< "$expected_str"
-  local skill src_dir dst_dir count=0
+  # Ensure external_dirs includes the kanban-advanced global skill directory
+  if ! python3 -c "
+import yaml
+with open('$config_file') as f:
+    config = yaml.safe_load(f)
+dirs = config.get('skills', {}).get('external_dirs', [])
+assert any('skills/kanban-advanced' in d for d in dirs)
+" 2>/dev/null; then
+    python3 -c "
+import yaml
+with open('$config_file') as f:
+    config = yaml.safe_load(f)
+existing = config.get('skills', {}).get('external_dirs', [])
+config.setdefault('skills', {})['external_dirs'] = \
+    existing + ['\${HERMES_HOME}/skills/kanban-advanced']
+with open('$config_file', 'w') as f:
+    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+" 2>/dev/null
+    echo "[provision]   + $profile: set external_dirs → \${HERMES_HOME}/skills/kanban-advanced"
+    count=$((count + 1))
+  fi
 
-  for skill in "${expected_arr[@]}"; do
-    src_dir="$BUNDLE_PATH/plugin/skills/$skill"
-    dst_dir="$profile_skills/$skill"
-
-    if [[ ! -d "$src_dir" ]]; then
-      echo "[provision]   !  skill source missing: $src_dir (bundle may be incomplete)"
-      continue
-    fi
-
-    # Copy if missing or stale
-    if [[ ! -f "$dst_dir/SKILL.md" ]]; then
-      cp -r "$src_dir" "$dst_dir"
-      echo "[provision]   + $profile: seeded missing skill $skill"
-      count=$((count + 1))
-    elif [[ -f "$src_dir/SKILL.md" ]] && \
-         [ "$(hash_file "$src_dir/SKILL.md")" != "$(hash_file "$dst_dir/SKILL.md")" ]; then
-      cp -r "$src_dir"/* "$dst_dir/"
-      echo "[provision]   ↻ $profile: refreshed stale skill $skill"
-      count=$((count + 1))
-    fi
-
-    # For kanban-advanced skill: also sync data references from plugin/data/references/
-    if [[ "$skill" == "kanban-advanced" ]]; then
-      refs_src="$KANBAN_WORKFLOW_DIR/plugin/data/references"
-      refs_dst="$dst_dir/references"
-      if [[ -d "$refs_src" ]]; then
-        mkdir -p "$refs_dst"
-        local ref_count=0
-        for ref in "$refs_src"/*.md; do
-          [[ -f "$ref" ]] || continue
-          ref_base="$(basename "$ref")"
-          if [[ ! -f "$refs_dst/$ref_base" ]] || \
-             [ "$(hash_file "$ref")" != "$(hash_file "$refs_dst/$ref_base")" ]; then
-            cp "$ref" "$refs_dst/$ref_base"
-            ref_count=$((ref_count + 1))
-          fi
-        done
-        [[ $ref_count -gt 0 ]] && echo "[provision]     ↻ $profile: synced $ref_count reference(s) for kanban-advanced"
-      fi
-    fi
-  done
-
-  # Remove unexpected skills (stale built-in)
-  while IFS= read -r -d '' skill_dir; do
-    local skill_name found=0
-    skill_name="$(basename "$skill_dir")"
-    for expected in "${expected_arr[@]}"; do
-      [[ "$skill_name" == "$expected" ]] && found=1 && break
-    done
-    if [[ $found -eq 0 ]]; then
-      rm -rf "$skill_dir"
-      echo "[provision]   - $profile: removed unexpected skill '$skill_name'"
-      count=$((count + 1))
-    fi
-  done < <(find "$profile_skills" -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
-
-  [[ $count -gt 0 ]] || echo "[provision]   OK $profile: skills up to date"
+  [[ $count -gt 0 ]] || echo "[provision]   OK $profile: external_dirs already set"
 }
 
 run_profile_skill_checks() {
