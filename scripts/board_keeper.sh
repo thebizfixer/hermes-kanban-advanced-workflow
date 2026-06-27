@@ -168,9 +168,10 @@ for tid in $ORPHANS; do
         PID=$(ps aux | grep "$tid" | grep -v grep | awk '{print $2}' | head -1)
         echo "ORPHAN: agent for archived card $tid (PID $PID)"
         if [ "$DRY_RUN" = false ]; then
-            kill "$PID" 2>/dev/null && echo "  → killed PID $PID"
+            kill "$PID" 2>/dev/null || taskkill //PID "$PID" //F 2>/dev/null
+            echo "  → killed PID $PID"
         fi
-        ((ORPHAN_COUNT++))
+        ORPHAN_COUNT=$((ORPHAN_COUNT + 1))
     fi
 done
 [ $ORPHAN_COUNT -eq 0 ] && echo "(none)"

@@ -101,7 +101,18 @@ _dispatch_hermes_and_meter() {
   # Clean up stale baseline on interrupt (SIGTERM/SIGINT) so next run starts clean.
   # BASELINE_FILE path matches hermes_token_meter.py's tempfile.gettempdir() location.
   local baseline_file
-  baseline_file="$(python3 -c "import tempfile; from pathlib import Path; print(Path(tempfile.gettempdir()) / 'hermes_token_meter_baseline.json')")"
+  baseline_file="$(python3 -c "
+import tempfile, os
+from pathlib import Path
+tmp = Path(tempfile.gettempdir()).as_posix()
+if not os.path.isabs(tmp):
+    win_tmp = os.environ.get('TEMP') or os.environ.get('TMP') or ''
+    if win_tmp and os.path.isabs(win_tmp):
+        tmp = Path(win_tmp).as_posix()
+    else:
+        tmp = (Path.home() / 'tmp').as_posix()
+print(Path(tmp) / 'hermes_token_meter_baseline.json')
+")"
   trap 'rm -f "$baseline_file" 2>/dev/null' EXIT INT TERM
 
   # Snapshot current Hermes token state (errors go to stderr for debugging).

@@ -76,20 +76,20 @@ kanban_auto_unblock_tick() {
 
   for tid in $blocked_list; do
     if kanban_card_gave_up "$tid"; then
-      ((skipped++)) || true
+      skipped=$((skipped + 1))
       continue
     fi
 
     local detail parents all_done=true pstatus
     detail="$(hermes kanban show "$tid" 2>/dev/null || true)"
     if [[ -z "$detail" ]]; then
-      ((errors++)) || true
+      errors=$((errors + 1))
       continue
     fi
 
     parents="$(echo "$detail" | grep "parents:" | kanban_extract_task_ids)"
     if [[ -z "$parents" ]]; then
-      ((skipped++)) || true
+      skipped=$((skipped + 1))
       continue
     fi
 
@@ -103,22 +103,22 @@ kanban_auto_unblock_tick() {
     done
 
     if [[ "$all_done" != true ]]; then
-      ((skipped++)) || true
+      skipped=$((skipped + 1))
       continue
     fi
 
     if echo "$detail" | grep -qiE 'Type:[[:space:]]*audit' && _has_active_remediation_children "$tid"; then
-      ((skipped++)) || true
+      skipped=$((skipped + 1))
       continue
     fi
 
     if [[ "$dry_run" == true ]]; then
-      ((unblocked++)) || true
+      unblocked=$((unblocked + 1))
       continue
     fi
 
     if hermes kanban unblock "$tid" 2>/dev/null; then
-      ((unblocked++)) || true
+      unblocked=$((unblocked + 1))
       # Hermes #24489: link_tasks() demotes multi-parent children ready→todo
       # even when blocked. Unblock returns them to todo, not ready.
       # Detect and promote.
@@ -135,7 +135,7 @@ kanban_auto_unblock_tick() {
         break
       fi
     else
-      ((errors++)) || true
+      errors=$((errors + 1))
     fi
   done
 

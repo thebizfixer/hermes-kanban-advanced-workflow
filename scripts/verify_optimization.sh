@@ -448,8 +448,14 @@ if [[ -n "$DRAFT_PLAN" && -f "$DRAFT_PLAN" ]]; then
     DRAFT_SUM=$(tr -d '\\r' < "$DRAFT_PLAN" | md5sum | cut -d' ' -f1 2>/dev/null || true)
     if [[ -z "$CANONICAL_SUM" ]]; then
         # md5sum not available — use python
-        CANONICAL_SUM=$(python3 -c "import hashlib; print(hashlib.md5(open('$PLAN','rb').read().replace(b'\\r',b'')).hexdigest())" 2>/dev/null || echo "")
-        DRAFT_SUM=$(python3 -c "import hashlib; print(hashlib.md5(open('$DRAFT_PLAN','rb').read().replace(b'\\r',b'')).hexdigest())" 2>/dev/null || echo "")
+        CANONICAL_SUM=$(python3 -c "
+import hashlib, sys
+print(hashlib.md5(open(sys.argv[1],'rb').read().replace(b'\\r',b'')).hexdigest())
+" "$PLAN" 2>/dev/null || echo "")
+        DRAFT_SUM=$(python3 -c "
+import hashlib, sys
+print(hashlib.md5(open(sys.argv[1],'rb').read().replace(b'\\r',b'')).hexdigest())
+" "$DRAFT_PLAN" 2>/dev/null || echo "")
     fi
     if [[ "$CANONICAL_SUM" = "$DRAFT_SUM" && -n "$CANONICAL_SUM" ]]; then
         check_warn "Draft and canonical plan are byte-identical — Harden produced no semantic delta. Verify hardening was applied (see plan-hardening-methodology.md). Use plan_hardening_diff.py to inspect."
