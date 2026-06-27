@@ -4,3 +4,4 @@
 .hermes/kanban/memory/
 .hermes/kanban/preflight_cache.json
 .cursor/rules/
+.env
