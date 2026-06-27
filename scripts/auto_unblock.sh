@@ -76,8 +76,22 @@ TICK_ARGS=(--stagger-sec "$STAGGER_SEC")
 [[ "$JSON_OUT" == true ]] && TICK_ARGS+=(--json)
 [[ "$MAX_UNBLOCK" -gt 0 ]] && TICK_ARGS+=(--max-unblock "$MAX_UNBLOCK")
 
-OUTPUT="$(kanban_auto_unblock_tick "${TICK_ARGS[@]}")"
-echo "$OUTPUT"
+# When KANBAN_BOARD is unset or default, scan all non-default boards.
+# Timestamped boards (from kanban_handoff.py) don't persist the board env
+# in the cron — auto_unblock must discover them.
+if [[ -z "${KANBAN_BOARD:-}" || "$KANBAN_BOARD" == "default" ]]; then
+  ALL_BOARDS="$(hermes kanban boards list 2>/dev/null | awk '{print $1}' | grep -vE '^(SLUG|default|$)')"
+  if [[ -n "$ALL_BOARDS" ]]; then
+    for BOARD in $ALL_BOARDS; do
+      export KANBAN_BOARD="$BOARD"
+      OUTPUT="$(kanban_auto_unblock_tick "${TICK_ARGS[@]}")"
+      echo "[$BOARD] $OUTPUT"
+    done
+  fi
+else
+  OUTPUT="$(kanban_auto_unblock_tick "${TICK_ARGS[@]}")"
+  echo "$OUTPUT"
+fi
 
 UNBLOCKED="$(echo "$OUTPUT" | sed -n 's/.*"unblocked":\([0-9]*\).*/\1/p')"
 SKIPPED="$(echo "$OUTPUT" | sed -n 's/.*"skipped":\([0-9]*\).*/\1/p')"

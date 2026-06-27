@@ -134,7 +134,19 @@ except Exception as e:
   return 0
 }
 
-# ── Board snapshot ──────────────────────────────────────────────────────
+# --- Board discovery (timestamped boards don't inherit env from handoff) ---
+if [[ -z "${KANBAN_BOARD:-}" || "$KANBAN_BOARD" == "default" ]]; then
+  ALL_BOARDS=$(hermes kanban boards list 2>/dev/null | awk '{print $1}' | grep -vE '^(SLUG|default|$)')
+  if [[ -n "$ALL_BOARDS" ]]; then
+    for _BOARD in $ALL_BOARDS; do
+      export KANBAN_BOARD="$_BOARD"
+      exec bash "$0" "$@"
+    done
+    exit 0
+  fi
+fi
+
+# --- Board snapshot ---
 
 echo "=== Board Keeper @ $(date -u +%H:%M:%S) ==="
 echo ""
