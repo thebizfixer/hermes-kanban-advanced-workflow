@@ -228,8 +228,17 @@ def update_plan_memory(
 # ── Kanban operations ──────────────────────────────────────────────────────
 
 def hermes(*args, timeout: int = 30) -> tuple[str, str, int]:
-    """Run a hermes CLI command."""
-    cmd = ["hermes"] + list(args)
+    """Run a hermes CLI command. Injects --board for kanban subcommands."""
+    cmd = ["hermes"]
+    expanded = list(args)
+    if expanded and expanded[0] == "kanban" and (len(expanded) < 2 or expanded[1] != "boards"):
+        board = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
+        if board and board != "default":
+            cmd.extend(["kanban", "--board", board, *expanded[1:]])
+        else:
+            cmd.extend(expanded)
+    else:
+        cmd.extend(expanded)
     result = subprocess.run(
         cmd, capture_output=True, text=True,
         encoding="utf-8", errors="replace",

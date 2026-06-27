@@ -157,13 +157,13 @@ fi
 echo "1. --parents flag check (P008)"
 # Check for cards created with --parents by looking for cards with 
 # empty parents list but body that mentions dependency expectations.
-# In practice: run hermes kanban show on each card, check if parents
+# In practice: run hermes kanban --board "${KANBAN_BOARD:-default}" show on each card, check if parents
 # were specified at creation vs added later via link.
-PARENTLESS_CARDS=$(hermes kanban list 2>/dev/null | awk '/â–¶|â—|â—»|âŠ˜/ {print $2}')
+PARENTLESS_CARDS=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | awk '/â–¶|â—|â—»|âŠ˜/ {print $2}')
 PARENT_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
     # Check if body mentions "Depends on" but no parents in metadata
-    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     if echo "$BODY" | grep -q "Depends on\|depends on" && echo "$BODY" | grep -q "parents:.*-"; then
         : # Has deps mentioned AND parents listed â€” OK
     elif echo "$BODY" | grep -q "Depends on\|depends on"; then
@@ -177,9 +177,9 @@ done
 echo "2. Scratch workspace check (P006)"
 SCRATCH_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    WS=$(hermes kanban show "$tid" 2>/dev/null | grep "workspace:" | head -1)
+    WS=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "workspace:" | head -1)
     if echo "$WS" | grep -q "scratch"; then
-        BODY=$(hermes kanban show "$tid" 2>/dev/null)
+        BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
         if body_has_files "$BODY"; then
             fail "Code-gen card $tid has scratch workspace (zero output risk)"
             SCRATCH_ISSUES=$((SCRATCH_ISSUES + 1))
@@ -193,7 +193,7 @@ echo "3. Shared workspace check (P007)"
 declare -A WORKSPACES
 SHARED_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    WS=$(hermes kanban show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
+    WS=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
     [ -z "$WS" ] && continue
     if [[ -n "${WORKSPACES[$WS]:-}" ]]; then
         fail "Shared workspace: $tid and ${WORKSPACES[$WS]} both use $WS"
@@ -208,7 +208,7 @@ done
 echo "4. Parent link verification"
 LINK_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     PARENTS=$(echo "$BODY" | grep "parents:" | head -1)
     if echo "$BODY" | grep -q "Depends on\|depends on" && echo "$PARENTS" | grep -q "parents:.*-"; then
         : # Has deps AND parents â€” OK
@@ -223,11 +223,11 @@ done
 echo "5. Parent completion check"
 PENDING_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    STATUS=$(hermes kanban show "$tid" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}')
+    STATUS=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}')
     [[ "$STATUS" == "done" ]] && continue
-    PARENTS=$(hermes kanban show "$tid" 2>/dev/null | python3 "$CLI_PARSE" parents 2>/dev/null || true)
+    PARENTS=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | python3 "$CLI_PARSE" parents 2>/dev/null || true)
     for parent in $PARENTS; do
-        PSTATUS=$(hermes kanban show "$parent" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}')
+        PSTATUS=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$parent" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}')
         if [[ "$PSTATUS" != "done" ]]; then
             if [[ "$STATUS" == "running" || "$STATUS" == "ready" ]]; then
                 fail "Card $tid is $STATUS but parent $parent is $PSTATUS (not done)"
@@ -242,7 +242,7 @@ done
 echo "6. Iteration budget heuristic (P009)"
 BUDGET_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     FN_COUNT=$(echo "$BODY" | grep -c 'def \|async def \|class ' || true)
     if [ "$FN_COUNT" -gt 10 ]; then
         warn "Card $tid mentions ~$FN_COUNT functions/classes (>10) â€” may exceed 35-turn budget"
@@ -256,9 +256,9 @@ done
 echo "7. Max-retries â‰¤2 (mandatory)"
 RETRY_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    MAX_RETRIES=$(hermes kanban show "$tid" 2>/dev/null | python3 "$CLI_PARSE" max-retries 2>/dev/null || echo "0")
+    MAX_RETRIES=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | python3 "$CLI_PARSE" max-retries 2>/dev/null || echo "0")
     if [ "$MAX_RETRIES" -gt 2 ] 2>/dev/null || [ "$MAX_RETRIES" -eq 0 ] 2>/dev/null; then
-        CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
+        CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
         if governance_warnings_block; then
             fail "Card $tid ($CARD_NAME) has max-retries=$MAX_RETRIES (must be â‰¤2)"
         else
@@ -274,7 +274,7 @@ echo "8. Orphaned agent check"
 ORPHANS=$(ps aux | grep 'kanban task t_' | grep -v grep | awk '{print $NF}' | python3 "$CLI_PARSE" task-ids 2>/dev/null | sort -u || true)
 ORPHAN_ISSUES=0
 for tid in $ORPHANS; do
-    if ! hermes kanban show "$tid" &>/dev/null; then
+    if ! hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" &>/dev/null; then
         warn "Orphaned agent process for archived/deleted card $tid"
         ORPHAN_ISSUES=$((ORPHAN_ISSUES + 1))
     fi
@@ -285,7 +285,7 @@ done
 echo "9. Agent block presence (P002 â€” protocol violation prevention)"
 AGENT_BLOCK_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     ASSIGNEE=$(echo "$BODY" | grep "assignee:" | head -1 | awk '{print $2}')
     HAS_FILES=0
     body_has_files "$BODY" && HAS_FILES=1
@@ -301,7 +301,7 @@ done
 echo "10. Orchestrator-only card assignment"
 ORCH_ONLY_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     ASSIGNEE=$(echo "$BODY" | grep "assignee:" | head -1 | awk '{print $2}')
     HAS_AGENT=$(echo "$BODY" | grep -c '```agent' || true)
     # Gate and audit cards have no agent block â€” they're manual orchestrator steps
@@ -330,7 +330,7 @@ done
 echo "11. Tests: line presence and syntax (E003 / P014 prevention)"
 TEST_LINE_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     ASSIGNEE=$(echo "$BODY" | grep "assignee:" | head -1 | awk '{print $2}')
     HAS_TESTS=0
     body_has_tests "$BODY" && HAS_TESTS=1
@@ -354,7 +354,7 @@ done
 echo "12. Card self-sufficiency (plan_id, Acceptance, Call-sites, Parent-branches)"
 SELF_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     echo "$BODY" | grep -qi 'Type: remediation' && continue
     echo "$BODY" | grep -qi 'Type: orchestrator-handoff' && continue
     body_is_verification "$BODY" && continue
@@ -380,20 +380,20 @@ done
 echo "13. Audit remediation children (mandatory for Type: audit)"
 CHECK13_ISSUES=0
 for tid in $PARENTLESS_CARDS; do
-    BODY=$(hermes kanban show "$tid" 2>/dev/null)
+    BODY=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     echo "$BODY" | grep -qiE 'Type:[[:space:]]*audit' || continue
     STATUS=$(echo "$BODY" | grep "status:" | head -1 | awk '{print $2}')
     [[ "$STATUS" != "done" ]] && continue
     REMEDIATION_CHILDREN=""
-    REMEDIATION_CHILDREN="$(hermes kanban list --parent "$tid" 2>/dev/null | awk '/^t_/ {print $1}' || true)"
+    REMEDIATION_CHILDREN="$(hermes kanban --board "${KANBAN_BOARD:-default}" list --parent "$tid" 2>/dev/null | awk '/^t_/ {print $1}' || true)"
     USED_PARENT_LIST=false
     if [[ -n "$REMEDIATION_CHILDREN" ]]; then
         USED_PARENT_LIST=true
     else
-        REMEDIATION_CHILDREN="$(hermes kanban list 2>/dev/null | awk '/^t_/ {print $1}' || true)"
+        REMEDIATION_CHILDREN="$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | awk '/^t_/ {print $1}' || true)"
     fi
     for cid in $REMEDIATION_CHILDREN; do
-        CDETAIL=$(hermes kanban show "$cid" 2>/dev/null)
+        CDETAIL=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$cid" 2>/dev/null)
         [[ -z "$CDETAIL" ]] && continue
         echo "$CDETAIL" | grep -qiE 'Type:[[:space:]]*remediation' || continue
         if [[ "$USED_PARENT_LIST" != true ]]; then

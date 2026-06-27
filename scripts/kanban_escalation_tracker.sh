@@ -145,7 +145,7 @@ echo "$RESULT" >> "$LOG_FILE"
 case "$RESULT" in
     RETRY:*)
         # Auto-unblock below threshold — not sent to LLM stdout
-        hermes kanban unblock "$TASK_ID" \
+        hermes kanban --board "${KANBAN_BOARD:-default}" unblock "$TASK_ID" \
             --reason "auto-retry at ${RESULT#RETRY:}" 2>/dev/null || true
         echo "SILENT:$TASK_ID" >&2
         ;;

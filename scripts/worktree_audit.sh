@@ -58,8 +58,8 @@ TOTAL=0
 
 # ── Get kanban board state ──────────────────────────────────────────────
 BOARD_JSON=""
-if hermes kanban list &>/dev/null 2>&1; then
-    BOARD_JSON=$(hermes kanban list 2>/dev/null || echo "")
+if hermes kanban --board "${KANBAN_BOARD:-default}" list &>/dev/null 2>&1; then
+    BOARD_JSON=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null || echo "")
 else
     yellow "hermes CLI not available — cannot cross-reference with kanban board."
     BOARD_JSON=""
@@ -86,7 +86,7 @@ find_card_for_worktree() {
 get_card_status() {
     local task_id="$1"
     [[ -z "$task_id" ]] && echo "unknown" && return
-    hermes kanban show "$task_id" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}' || echo "unknown"
+    hermes kanban --board "${KANBAN_BOARD:-default}" show "$task_id" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}' || echo "unknown"
 }
 
 # ── Iterate worktrees ──────────────────────────────────────────────────

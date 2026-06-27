@@ -60,7 +60,7 @@ if [[ -z "$POSTMORTEM" ]]; then
 fi
 
 if [[ -z "$DONE_COUNT" ]]; then
-  DONE_COUNT="$(hermes kanban list 2>/dev/null | grep -c '^✓' || true)"
+  DONE_COUNT="$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep -c '^✓' || true)"
   if [[ -z "$DONE_COUNT" || "$DONE_COUNT" == "0" ]]; then
     DONE_COUNT="all"
   fi

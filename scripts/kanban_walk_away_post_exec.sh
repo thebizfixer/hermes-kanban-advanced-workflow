@@ -64,12 +64,12 @@ AUDIT_DONE=false
 while IFS= read -r line; do
   tid="$(echo "$line" | awk '{print $2}')"
   [[ -z "$tid" ]] && continue
-  title="$(hermes kanban show "$tid" 2>/dev/null | grep -m1 "Task $tid:" || true)"
+  title="$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep -m1 "Task $tid:" || true)"
   if echo "$title" | grep -qiE 'final[ -]audit'; then
     AUDIT_DONE=true
     break
   fi
-done < <(hermes kanban list 2>/dev/null | grep '^✓' || true)
+done < <(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep '^✓' || true)
 
 if [[ "$AUDIT_DONE" != "true" ]]; then
   echo "[kanban_walk_away_post_exec] WAIT: final audit not done (plan_id=${PLAN_ID})" >&2
@@ -78,7 +78,7 @@ fi
 
 echo "[kanban_walk_away_post_exec] plan_id=${PLAN_ID} — starting unattended post-execution"
 
-DONE_COUNT="$(hermes kanban list 2>/dev/null | grep -c '^✓' || true)"
+DONE_COUNT="$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep -c '^✓' || true)"
 REPORTS_DIR="${REPO_ROOT}/.hermes/kanban/reports"
 mkdir -p "$REPORTS_DIR"
 
@@ -134,8 +134,8 @@ if [[ "$DRY_RUN" == "false" ]]; then
   while IFS= read -r line; do
     tid="$(echo "$line" | awk '{print $2}')"
     [[ -z "$tid" ]] && continue
-    hermes kanban archive "$tid" 2>/dev/null || true
-  done < <(hermes kanban list 2>/dev/null | grep -E '^(✓|●|▶|⊘|◻)' || true)
+    hermes kanban --board "${KANBAN_BOARD:-default}" archive "$tid" 2>/dev/null || true
+  done < <(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep -E '^(✓|●|▶|⊘|◻)' || true)
 fi
 
 # 4. Git-safe cleanup (best-effort).

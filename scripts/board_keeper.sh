@@ -144,7 +144,7 @@ HEARTBEAT_FILE="${KANBAN_HEARTBEAT_FILE:-$(kanban_logs_dir "$REPO_ROOT")/board_k
 mkdir -p "$(dirname "$HEARTBEAT_FILE")" 2>/dev/null || true
 date -u +%s > "$HEARTBEAT_FILE" 2>/dev/null || true
 
-BOARD=$(hermes kanban list 2>/dev/null)
+BOARD=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null)
 echo "$BOARD"
 echo ""
 
@@ -165,7 +165,7 @@ echo "--- Orphaned agents ---"
 ORPHANS=$(ps aux 2>/dev/null | grep 'kanban task t_' | grep -v grep | python3 "$CLI_PARSE" task-ids 2>/dev/null | sort -u || true)
 ORPHAN_COUNT=0
 for tid in $ORPHANS; do
-    if ! hermes kanban show "$tid" &>/dev/null 2>&1; then
+    if ! hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" &>/dev/null 2>&1; then
         PID=$(ps aux | grep "$tid" | grep -v grep | awk '{print $2}' | head -1)
         echo "ORPHAN: agent for archived card $tid (PID $PID)"
         if [ "$DRY_RUN" = false ]; then
@@ -181,10 +181,10 @@ done
 
 echo ""
 echo "--- Blocked card salvage ---"
-BLOCKED_IDS=$(hermes kanban list 2>/dev/null | grep '⊘' | awk '{print $2}' || true)
+BLOCKED_IDS=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep '⊘' | awk '{print $2}' || true)
 SALVAGE_COUNT=0
 for tid in $BLOCKED_IDS; do
-    INFO=$(hermes kanban show "$tid" 2>/dev/null)
+    INFO=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     REASON=$(echo "$INFO" | grep -i 'Iteration\|iteration\|Latest summary' | head -1)
     if echo "$REASON" | grep -qi 'iteration'; then
         # This card hit iteration limit — check worktree for completed work
@@ -216,7 +216,7 @@ for tid in $BLOCKED_IDS; do
                         git fetch "wt-$tid" 2>/dev/null
                         if git merge "wt-$tid/$BRANCH" --no-edit 2>/dev/null; then
                             echo "  → Merged to $INTEGRATION_BRANCH"
-                            hermes kanban complete "$tid" --summary "$CARD_NAME shipped (salvaged from iteration limit by board keeper)." 2>/dev/null
+                            hermes kanban --board "${KANBAN_BOARD:-default}" complete "$tid" --summary "$CARD_NAME shipped (salvaged from iteration limit by board keeper)." 2>/dev/null
                             echo "  → Card completed"
                             ((SALVAGE_COUNT++))
                         fi
@@ -244,7 +244,7 @@ echo ""
 echo "--- Escalation triage ---"
 ESCALATION_COUNT=0
 for tid in $BLOCKED_IDS; do
-    SHOW=$(hermes kanban show "$tid" 2>/dev/null)
+    SHOW=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)
     REASON=$(echo "$SHOW" | grep -iE 'block|reason|summary' | head -1 || true)
     # Count prior "blocked" events for this card (re-block detection)
     BLOCK_COUNT=$(echo "$SHOW" | grep -c 'blocked {' || echo 0)
@@ -290,10 +290,10 @@ for tid in $BLOCKED_IDS; do
                 echo "$TRACKER_OUT"
                 ((ESCALATION_COUNT++)) || true
                 if echo "$TRACKER_OUT" | grep -q ':orchestrator'; then
-                    hermes kanban comment "$tid" \
+                    hermes kanban --board "${KANBAN_BOARD:-default}" comment "$tid" \
                         "Board-keeper escalation: $ESCALATION_REASON. Orchestrator to resolve." \
                         2>/dev/null || true
-                    hermes kanban unblock "$tid" --reason "$TRACKER_OUT" 2>/dev/null || true
+                    hermes kanban --board "${KANBAN_BOARD:-default}" unblock "$tid" --reason "$TRACKER_OUT" 2>/dev/null || true
                     echo "  → unblocked with orchestrator escalation tag"
                 fi
                 ;;
@@ -310,16 +310,16 @@ done
 
 echo ""
 echo "--- Stuck ready cards ---"
-READY_IDS=$(hermes kanban list 2>/dev/null | grep '▶' | awk '{print $2}' || true)
+READY_IDS=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep '▶' | awk '{print $2}' || true)
 STUCK_COUNT=0
 for tid in $READY_IDS; do
     # Check how long it's been ready
-    CREATED=$(hermes kanban show "$tid" 2>/dev/null | python3 "$CLI_PARSE" created 2>/dev/null || true)
+    CREATED=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | python3 "$CLI_PARSE" created 2>/dev/null || true)
     if [ -n "$CREATED" ]; then
         CREATED_EPOCH=$(date -d "$CREATED" +%s 2>/dev/null || true)
         NOW_EPOCH=$(date +%s)
         if [ -n "$CREATED_EPOCH" ] && [ $((NOW_EPOCH - CREATED_EPOCH)) -gt 180 ]; then
-            CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
+            CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
             echo "STUCK: $tid — $CARD_NAME — ready for $(((NOW_EPOCH - CREATED_EPOCH) / 60))min"
             ((STUCK_COUNT++))
         fi
@@ -340,12 +340,12 @@ fi
 
 echo ""
 echo "--- Max-retries check ---"
-ALL_CARD_IDS=$(hermes kanban list 2>/dev/null | awk '{print $2}' | grep -E '^t_' || true)
+ALL_CARD_IDS=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | awk '{print $2}' | grep -E '^t_' || true)
 RETRY_ISSUES=0
 for tid in $ALL_CARD_IDS; do
-    MAX_RETRIES=$(hermes kanban show "$tid" 2>/dev/null | python3 "$CLI_PARSE" max-retries 2>/dev/null || echo "0")
+    MAX_RETRIES=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | python3 "$CLI_PARSE" max-retries 2>/dev/null || echo "0")
     if [ "$MAX_RETRIES" -gt 2 ] 2>/dev/null || [ "$MAX_RETRIES" -eq 0 ] 2>/dev/null; then
-        CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
+        CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
         warn "Card $tid ($CARD_NAME) has max-retries=$MAX_RETRIES (should be ≤2)"
         ((RETRY_ISSUES++))
     fi
@@ -393,7 +393,7 @@ PY
 )
   while IFS=$'\t' read -r tid evcount; do
     [[ -z "$tid" ]] && continue
-    CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
+    CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
     warn "Card $tid ($CARD_NAME) has $evcount events (>40) — possible thrash before iteration limit"
     ((THRASH_COUNT++))
   done <<< "$THRASH_IDS"
@@ -404,7 +404,7 @@ fi
 
 echo ""
 echo "--- Unmerged done cards ---"
-DONE_IDS=$(hermes kanban list 2>/dev/null | grep '✓' | awk '{print $2}' || true)
+DONE_IDS=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep '✓' | awk '{print $2}' || true)
 UNMERGED=0
 MERGED_COUNT=0
 DISK_OK=true
@@ -413,12 +413,12 @@ if ! _kanban_disk_ok; then
   DISK_OK=false
 fi
 for tid in $DONE_IDS; do
-    WS=$(hermes kanban show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
+    WS=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
     [ -z "$WS" ] || [ ! -d "$WS" ] && continue
     # Check if worktree has commits not in integration branch
     BEHIND=$(cd "$WS" 2>/dev/null && git rev-list --count "${INTEGRATION_BRANCH}..HEAD" 2>/dev/null || echo "0")
     if [ "${BEHIND:-0}" -gt 0 ] 2>/dev/null; then
-        CARD_NAME=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
+        CARD_NAME=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1 | sed "s/Task $tid: //")
         echo "  UNMERGED: $tid ($CARD_NAME) — $BEHIND commits ahead of $INTEGRATION_BRANCH in $WS"
         ((UNMERGED++))
         if [[ "$DRY_RUN" == false && "$DISK_OK" == true ]]; then
@@ -451,7 +451,7 @@ for wt in /tmp/wt-*; do
     WT_NAME=$(basename "$wt")
     IN_USE=false
     for tid in $ALL_CARD_IDS; do
-        WS=$(hermes kanban show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
+        WS=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "workspace:" | head -1 | sed 's/.*@ //' | xargs)
         [[ "$WS" == "$wt" ]] && IN_USE=true && break
     done
     if [ "$IN_USE" = false ]; then
@@ -511,11 +511,11 @@ fi
 
 # ── Post-final-audit: walk-away post-exec or orchestrator checkpoint signal ──
 PIPELINE_CURRENT=$(cat "$PIPELINE_STATE" 2>/dev/null || echo "")
-AUDIT_DONE_IDS=$(hermes kanban list 2>/dev/null | grep '✓' | awk '{print $2}' || true)
+AUDIT_DONE_IDS=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep '✓' | awk '{print $2}' || true)
 AUDIT_COMPLETE=false
 
 for tid in $AUDIT_DONE_IDS; do
-    TITLE=$(hermes kanban show "$tid" 2>/dev/null | grep "Task $tid:" | head -1)
+    TITLE=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep "Task $tid:" | head -1)
     if echo "$TITLE" | grep -qiE 'final[ -]audit'; then
         AUDIT_COMPLETE=true
         break

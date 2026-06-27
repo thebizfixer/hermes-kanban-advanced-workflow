@@ -8,7 +8,7 @@
 kanban_card_gave_up() {
   local tid="$1"
   local detail status summary
-  detail="$(hermes kanban show "$tid" 2>/dev/null || true)"
+  detail="$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null || true)"
   [[ -z "$detail" ]] && return 1
   status="$(echo "$detail" | grep -E '^status:' | head -1 | awk '{print $2}' || true)"
   summary="$(echo "$detail" | grep -iE 'gave_up|gave up|failure.?limit|iteration limit' | head -1 || true)"
@@ -25,15 +25,15 @@ _has_active_remediation_children() {
   local audit_tid="$1"
   local child detail status
   local children=""
-  children="$(hermes kanban list --parent "$audit_tid" 2>/dev/null | awk '/^t_/ {print $1}' || true)"
+  children="$(hermes kanban --board "${KANBAN_BOARD:-default}" list --parent "$audit_tid" 2>/dev/null | awk '/^t_/ {print $1}' || true)"
   local used_parent_list=false
   if [[ -n "$children" ]]; then
     used_parent_list=true
   else
-    children="$(hermes kanban list 2>/dev/null | awk '/^t_/ {print $1}' || true)"
+    children="$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | awk '/^t_/ {print $1}' || true)"
   fi
   for child in $children; do
-    detail="$(hermes kanban show "$child" 2>/dev/null || true)"
+    detail="$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$child" 2>/dev/null || true)"
     [[ -z "$detail" ]] && continue
     echo "$detail" | grep -qiE 'Type:[[:space:]]*remediation' || continue
     if [[ "$used_parent_list" != true ]]; then
@@ -65,7 +65,7 @@ kanban_auto_unblock_tick() {
 
   local unblocked=0 skipped=0 errors=0
   local blocked_list
-  blocked_list="$(hermes kanban list 2>/dev/null | grep '⊘' | awk '{print $2}' || true)"
+  blocked_list="$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep '⊘' | awk '{print $2}' || true)"
 
   if [[ -z "$blocked_list" ]]; then
     if [[ "$json_out" == true ]]; then
@@ -81,7 +81,7 @@ kanban_auto_unblock_tick() {
     fi
 
     local detail parents all_done=true pstatus
-    detail="$(hermes kanban show "$tid" 2>/dev/null || true)"
+    detail="$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null || true)"
     if [[ -z "$detail" ]]; then
       errors=$((errors + 1))
       continue
@@ -95,7 +95,7 @@ kanban_auto_unblock_tick() {
 
     all_done=true
     for pid in $parents; do
-      pstatus="$(hermes kanban show "$pid" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}' || true)"
+      pstatus="$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$pid" 2>/dev/null | grep "status:" | head -1 | awk '{print $2}' || true)"
       if [[ "$pstatus" != "done" ]]; then
         all_done=false
         break
@@ -117,15 +117,15 @@ kanban_auto_unblock_tick() {
       continue
     fi
 
-    if hermes kanban unblock "$tid" 2>/dev/null; then
+    if hermes kanban --board "${KANBAN_BOARD:-default}" unblock "$tid" 2>/dev/null; then
       unblocked=$((unblocked + 1))
       # Hermes #24489: link_tasks() demotes multi-parent children ready→todo
       # even when blocked. Unblock returns them to todo, not ready.
       # Detect and promote.
       local new_status
-      new_status=$(hermes kanban show "$tid" 2>/dev/null | grep 'status:' | head -1 | awk '{print $2}')
+      new_status=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null | grep 'status:' | head -1 | awk '{print $2}')
       if [[ "$new_status" == "todo" ]]; then
-        hermes kanban promote "$tid" >/dev/null 2>&1 || true
+        hermes kanban --board "${KANBAN_BOARD:-default}" promote "$tid" >/dev/null 2>&1 || true
         echo "auto_unblock: recovered $tid from todo → ready (link_tasks demotion)" >&2
       fi
       if [[ "$stagger_sec" =~ ^[0-9]+$ && "$stagger_sec" -gt 0 ]]; then

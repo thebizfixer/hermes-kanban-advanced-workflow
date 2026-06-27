@@ -49,7 +49,7 @@ case "$CMD" in
     _load_branch_config "$REPO_ROOT" || exit 1
     PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}"
     MEM="${REPO_ROOT}/.hermes/kanban/memory/${PLAN_ID}.json"
-    WS="$(hermes kanban show "$TASK_ID" 2>/dev/null | grep 'workspace:' | head -1 | sed 's/.*@ //' | xargs)"
+    WS="$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$TASK_ID" 2>/dev/null | grep 'workspace:' | head -1 | sed 's/.*@ //' | xargs)"
     [[ -z "$WS" || ! -d "$WS" ]] && { echo "WORKTREE missing for $TASK_ID" >&2; exit 1; }
     IFS=',' read -r -a KEYS <<< "$PARENT_KEYS"
     for key in "${KEYS[@]}"; do
@@ -79,7 +79,7 @@ except Exception:
 PY
 )"
       [[ -z "$TID" ]] && continue
-      PWS="$(hermes kanban show "$TID" 2>/dev/null | grep 'workspace:' | head -1 | sed 's/.*@ //' | xargs)"
+      PWS="$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$TID" 2>/dev/null | grep 'workspace:' | head -1 | sed 's/.*@ //' | xargs)"
       [[ -z "$PWS" || ! -d "$PWS" ]] && continue
       PB="$(cd "$PWS" && git branch --show-current 2>/dev/null || true)"
       [[ -z "$PB" ]] && continue

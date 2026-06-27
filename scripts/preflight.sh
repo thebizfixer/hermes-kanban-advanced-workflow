@@ -638,12 +638,12 @@ sys.exit(0 if len(parts) >= 3 and tuple(parts[:3]) >= need else 1)' "$ver_num"; 
         "Hermes $ver_num < 0.16.0 required ($ver_line)"
     fi
   fi
-  if hermes kanban create --help 2>/dev/null | grep -q -- '--goal'; then
+  if hermes kanban --board "${KANBAN_BOARD:-default}" create --help 2>/dev/null | grep -q -- '--goal'; then
     record_check "kanban_goal_flag" "pass" "blocking" \
-      "hermes kanban create supports --goal"
+      "hermes kanban --board "${KANBAN_BOARD:-default}" create supports --goal"
   else
     record_check "kanban_goal_flag" "fail" "blocking" \
-      "hermes kanban create missing --goal; upgrade to Hermes >= 0.16.0"
+      "hermes kanban --board "${KANBAN_BOARD:-default}" create missing --goal; upgrade to Hermes >= 0.16.0"
   fi
 }
 

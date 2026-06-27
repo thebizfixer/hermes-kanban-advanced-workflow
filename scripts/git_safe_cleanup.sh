@@ -115,7 +115,7 @@ is_worktree_in_use() {
     # Check if any process has this worktree as its cwd
     pgrep -f "$wt" &>/dev/null && return 0
     # Check if hermes kanban references this worktree
-    hermes kanban list 2>/dev/null | grep -q "$wt" && return 0
+    hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep -q "$wt" && return 0
     return 1
 }
 

@@ -311,8 +311,13 @@ def _discover_cards_yaml(
 def _hermes(*args: str, timeout: int = 15) -> subprocess.CompletedProcess:
     # Force UTF-8 decoding: hermes prints non-ASCII (table glyphs, em dashes) that
     # crash the default cp1252 reader on Windows.
+    expanded = list(args)
+    if expanded and expanded[0] == "kanban" and (len(expanded) < 2 or expanded[1] != "boards"):
+        board = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
+        if board and board != "default":
+            expanded = ["kanban", "--board", board, *expanded[1:]]
     return subprocess.run(
-        ["hermes", *args],
+        ["hermes", *expanded],
         capture_output=True,
         text=True,
         encoding="utf-8",
