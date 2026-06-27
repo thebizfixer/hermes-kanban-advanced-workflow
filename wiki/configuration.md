@@ -19,6 +19,15 @@ cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-ove
 | `preflight_api_url` | Health endpoint for API reachability check | `http://127.0.0.1:8000/healthz` |
 | `skills_output_path` | Skill output directory (for advanced configuration) | `.hermes/skills/devops` |
 
+### Board `default_workdir` (Hermes kanban config)
+
+Worktree workspaces (`--workspace worktree`) require the board's `default_workdir` to be
+set to the repo root. Hermes resolves worktree paths to `<repo>/.worktrees/<task-id>`.
+Without this, worktree creation fails with a path resolution error.
+
+```bash
+hermes kanban boards edit <board> --default-workdir "E:/Projects/<repo>"
+
 ## Optional variables
 
 | Variable | Purpose | Default |

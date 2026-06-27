@@ -75,35 +75,26 @@ export KANBAN_TEMP="$TEMP"  # override if needed
 
 ### Worktree paths
 
-Worktree paths in card bodies use absolute paths. The decomposer (`kanban_decompose.py`)
-generates paths using `tempfile.gettempdir()` with an `os.path.isabs()` guard:
+Worktrees are stored in `<repo>/.worktrees/<task-id>` per the Hermes Agent
+convention (`kanban_db.py:5394`). The decomposer (`kanban_decompose.py`) passes
+`--workspace worktree` (no explicit path) — Hermes resolves the path to
+`.worktrees/<task-id>` using the board's `default_workdir`.
 
-```python
-tmp = Path(tempfile.gettempdir()).as_posix()
-if not os.path.isabs(tmp):
-    win_tmp = os.environ.get("TEMP") or os.environ.get("TMP") or ""
-    if win_tmp and os.path.isabs(win_tmp):
-        tmp = Path(win_tmp).as_posix()
-    else:
-        tmp = (Path.home() / "tmp").as_posix()
-workspace = f"worktree:{tmp}/wt-{plan_id}-{card_key}"
+**Prerequisite:** The kanban board must have `default_workdir` set to the repo root:
+```bash
+hermes kanban boards edit <board> --default-workdir "E:/Projects/<repo>"
 ```
 
-On Linux/macOS, `os.path.isabs("/tmp")` returns `True` — the guard is a no-op.
-On Windows MSYS/Git Bash, `os.path.isabs("/tmp")` returns `False` — the guard
-falls back to the Windows-native `TEMP`/`TMP` env vars or `Path.home() / "tmp"`.
-This replaces the previous `/tmp` string-match guard which only caught one specific
-MSYS override pattern.
+**Cleanup:** Three scripts handle stale worktree removal:
+- `pre_dispatch_gate.sh` sweeps `.worktrees/wt-*` before each decomposition
+- `board_keeper.sh` uses `git worktree list --porcelain` for detection
+- `git_safe_cleanup.sh` defaults `WORKTREE_PATTERN` to `.worktrees/`
 
-Per Python docs, `tempfile.gettempdir()` resolves: `TMPDIR` → `TEMP` → `TMP` →
-platform-specific → CWD. MSYS/Git Bash may override `TEMP`/`TMP` to `/tmp`.
+All three use a three-tier removal: `git worktree remove` → `git worktree remove --force`
+→ `rm -rf` + `git worktree prune`.
 
-On Windows, resulting paths look like:
-
-```
---workspace "worktree:/tmp/wt-<plan>-<card>"         # Git Bash (maps /tmp → %TEMP%)
---workspace "worktree:C:/temp/wt-<plan>-<card>"       # Native Windows (CMD/PowerShell)
-```
+Legacy worktrees under system temp (`/tmp/wt-*`, `%TEMP%/wt-*`) are swept as a
+belt-and-suspenders fallback using `$KANBAN_TEMP`.
 
 ### Native Windows feature support
 

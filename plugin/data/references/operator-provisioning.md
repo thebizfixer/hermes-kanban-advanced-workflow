@@ -39,7 +39,12 @@ When project-local `.hermes/` exists (typical project-scoped layout):
 .hermes/plugins/kanban-advanced/scripts/lib/
 ```
 
-`worktree_setup.sh` copies these from the **main checkout** into each card worktree (`/tmp/wt-*`). Commit `.worktreeinclude` after init.
+`worktree_setup.sh` copies these from the **main checkout** into each card worktree (under
+`<repo>/.worktrees/`). Commit `.worktreeinclude` after init.
+
+**`.gitignore`:** Add `.worktrees/` to the repo's `.gitignore` so worktrees created by the
+decomposer are never tracked. The plugin's `hermes kanban-advanced init` adds this
+automatically; verify with `grep '.worktrees/' .gitignore`.
 
 **Bootstrap path:** Workers call `worktree_setup.sh` from `$HERMES_HOME/scripts/` (materialized at init / Update Plugin) or the plugin bundle — never from inside an empty worktree. See [coding-agent-auth.md](coding-agent-auth.md) § Worktree script bootstrap.
 

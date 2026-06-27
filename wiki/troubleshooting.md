@@ -59,6 +59,43 @@ bash <bundle>/scripts/worktree_setup.sh --task-id <task_id> --repo-root <repo_ro
 
 Confirm `.worktreeinclude` lists kanban script paths and worktree has `.hermes/scripts/coding_agent_invoke.sh`.
 
+### Stale worktrees blocking dispatch
+
+**Symptom:** `pre_dispatch_gate.sh` fails on first run (exit 1), but passes on retry.
+Workers report `already registered worktree` or dispatch stalls.
+
+**Root cause:** Worktrees from prior decompositions remain on disk (`.worktrees/wt-*`)
+or in git's internal metadata. The gate's `stale_tasks` check blocks when tasks from
+previous runs exist; between gate attempts, `board_keeper.sh` cleans them up.
+
+**Fix:**
+
+```bash
+# List current worktrees (both active and phantom)
+cd <repo-root>
+git worktree list
+
+# Prune phantom registrations (path missing in git metadata)
+git worktree prune --expire=now
+
+# Remove stale worktrees (three-tier: remove, force-remove, rm -rf)
+for wt in .worktrees/wt-*; do
+    [ -d "$wt" ] || continue
+    git worktree remove "$wt" 2>/dev/null || \
+    git worktree remove --force "$wt" 2>/dev/null || \
+    { rm -rf "$wt" && git worktree prune 2>/dev/null; }
+done
+
+# Auto-archive stale tasks from prior runs (set before gate)
+export ARCHIVE_STALE=1
+bash <bundle>/scripts/pre_dispatch_gate.sh <plan_id>
+```
+
+**Prevention:** `pre_dispatch_gate.sh`, `board_keeper.sh`, and `git_safe_cleanup.sh`
+all sweep `.worktrees/` automatically. Ensure `default_workdir` is set on the board
+(`hermes kanban boards edit <board> --default-workdir <repo-root>`). The gate's
+`stale_tasks` check can auto-archive by setting `ARCHIVE_STALE=1`.
+
 ### Layout / presentation acceptance (E028 / E029)
 
 **Symptom:** Worker or evaluation chain blocks with `E028`, `layout_acceptance_failed`, or `E029` / `presentation_a11y_acceptance_failed`.
@@ -416,7 +453,7 @@ cd ~/projects/<repo-name>
 
 **Root cause:** `--workspace worktree:.` — the dispatcher rejects relative paths.
 
-**Fix:** Use absolute paths: `--workspace "worktree:/tmp/wt-<plan>-<card>"`. Archive and recreate any cards created with relative paths.
+**Fix:** Use absolute paths or the Hermes convention: `--workspace "worktree"` (no explicit path — Hermes resolves to `<repo>/.worktrees/<task-id>` using the board's `default_workdir`). Archive and recreate any cards created with relative paths.
 
 ### "Dual-clone worktree drift" (WSL)
 
