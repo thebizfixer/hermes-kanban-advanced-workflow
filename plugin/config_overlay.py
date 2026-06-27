@@ -1,4 +1,32 @@
-"""Shared helpers for .hermes/kanban-overrides/kanban-config.yaml."""
+"""Config serialization contract for .hermes/kanban-overrides/kanban-config.yaml.
+
+This module is the single source of truth for reading and writing the plugin's
+overlay config file. Every init, save, update, and handoff operation flows
+through these two functions.
+
+read_overlay_config(path) -> dict[str, str]
+    Reads flat top-level key: value pairs ONLY. Indented (nested) lines are
+    skipped -- they belong to parent blocks (escalation_max_attempts,
+    subagent_gate, ui_stack) managed elsewhere. Use yaml.safe_load() for
+    nested access (see read_plan_search_dirs_from_overlay).
+
+build_overlay_yaml(...) -> str
+    Serializes the full config. Order:
+    1. Write managed keys (schema_version, branches, profiles, coding agent,
+       paths, policy, lifecycle toggles) from current state.
+    2. Pass through any unrecognized keys from the existing config that are
+       not in _MANAGED_KEYS, _IMPOSTOR_KEYS, or escalation_max_attempts.
+    3. Write structured blocks: plan_search_dirs, escalation_max_attempts,
+       subagent_gate.
+
+_MANAGED_KEYS : frozenset
+    Top-level keys owned by init/save. Rewritten fresh on every write.
+    Everything else is operator-owned and preserved through pass-through.
+
+_IMPOSTOR_KEYS : frozenset
+    Keys that the old read_overlay_config() accidentally flattened from nested
+    YAML blocks (escalation_max_attempts children, subagent_gate children).
+    Excluded from pass-through so corrupted configs self-heal on next write."""
 
 from __future__ import annotations
 
@@ -66,6 +94,13 @@ _MANAGED_KEYS = frozenset({
     "final_audit_max_remediation_rounds",
 })
 
+# Keys that the old flat reader accidentally flattened from nested YAML blocks.
+# Excluded from build_overlay_yaml() pass-through so corrupted configs self-heal.
+_IMPOSTOR_KEYS = frozenset({
+    "coding_agent", "cron_setup", "enabled", "env_gate",
+    "infra_gate", "orchestrator", "plan_gate", "plan_parse", "worker",
+})
+
 
 def overlay_path(project_root: Path) -> Path:
     return project_root / OVERLAY_REL
@@ -76,7 +111,10 @@ def read_overlay_config(config_path: Path) -> dict[str, str]:
         return {}
     config: dict[str, str] = {}
     for line in config_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
+        if not line.strip() or line.strip().startswith("#"):
+            continue
+        if line[:1].isspace():          # skip indented (nested) lines
+            continue
         if ":" in line and not line.startswith("#"):
             key, _, val = line.partition(":")
             config[key.strip()] = val.strip().strip('"').strip("'")
@@ -683,7 +721,7 @@ def build_overlay_yaml(
         else:
             lines.append(f"{key}: {val}")
 
-    skip = _MANAGED_KEYS | {"escalation_max_attempts"}
+    skip = _MANAGED_KEYS | {"escalation_max_attempts"} | _IMPOSTOR_KEYS
     for key in sorted(existing):
         if key in skip:
             continue

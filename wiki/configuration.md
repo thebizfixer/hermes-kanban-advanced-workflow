@@ -7,6 +7,8 @@ Config lives at `.hermes/kanban-overrides/kanban-config.yaml`. Created automatic
 cp hermes-kanban-advanced-workflow/kanban-config.example.yaml .hermes/kanban-overrides/kanban-config.yaml
 ```
 
+> **How the config is read and written:** Two functions in `plugin/config_overlay.py` gate all access — `read_overlay_config()` (flat top-level keys only) and `build_overlay_yaml()` (managed keys + pass-through + structured blocks). See the [config serialization pipeline](../docs/reference/architecture.md#config-serialization-pipeline) in the architecture doc for the full read/write contract, `_MANAGED_KEYS` semantics, and the init/save/handoff call graph.
+
 ## Required variables
 
 | Variable | Purpose | Example |
