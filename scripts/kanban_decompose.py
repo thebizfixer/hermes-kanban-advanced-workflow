@@ -329,10 +329,13 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False, ru
             card_key = card.get("key", "card")
             workspace = card.get("workspace")
             if not workspace or workspace == "worktree":
-                # Let Hermes resolve worktree path per its convention:
-                # <repo>/.worktrees/<task-id> (kanban_db.py:5394).
-                # Requires board default_workdir to be set.
-                workspace = "worktree"
+                # Resolve absolute worktree path scoped to this board so
+                # we never depend on board.default_workdir being set
+                # (timestamped boards are created fresh each handoff).
+                import os as _os
+                board = _os.environ.get("HERMES_KANBAN_BOARD") or _os.environ.get("KANBAN_BOARD") or plan_id
+                repo = _find_project_root()
+                workspace = f"worktree:{repo}/.worktrees/{board}/{card_key}"
             branch = card.get("branch") or f"kanban/{plan_id}/{card_key}"
             cmd.extend(["--workspace", workspace])
             cmd.extend(["--branch", branch])
