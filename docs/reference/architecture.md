@@ -317,3 +317,276 @@ Dashboard frontend loads → GET /status
             _check_sidecar_staleness() → "a90e3a3" = "a90e3a3" → false
             → "Initialized (Up-to-date)"
 ```
+
+## Model Check & Model Selector Architecture
+
+Two independent reachability checks run before decomposition and during dashboard
+operation: **Hermes profile model reachability** and **coding-agent CLI reachability**.
+
+```mermaid
+flowchart TB
+    subgraph DASH["Dashboard (browser)"]
+        PP["Profile Model Picker"]
+        CP["Coding Agent Model Picker"]
+    end
+
+    subgraph SIDECAR["Sidecar :18900"]
+        PS["_check_profiles()"]
+        CAS["check_coding_agent_cli()"]
+        EX["Single-thread Executor\n(15s cooldown)"]
+    end
+
+    subgraph CLI["Preflight (CLI)"]
+        CMR["check_model_reachability()"]
+        CAC["check_coding_agent_cli_reachability()"]
+    end
+
+    subgraph HERMES["Hermes Profiles"]
+        W["kanban-advanced-worker"]
+        O["kanban-advanced-orchestrator"]
+    end
+
+    subgraph CODING["Coding Agent Binary"]
+        CB["hermes / grok / claude / codex"]
+    end
+
+    DASH -->|"GET /status\n(poll every 2s)"| SIDECAR
+    PS -->|"POST /profiles/:name/probe"| EX
+    CAS -->|"POST /coding-agent/probe"| EX
+    EX -->|"hermes -p <p> chat -q 'say ok'"| HERMES
+    EX -->|"check_coding_agent_cli.py"| CODING
+    CLI -->|"bash preflight.sh"| CMR
+    CLI -->|"bash preflight.sh"| CAC
+    CMR -->|"hermes -p <p> chat -q 'say ok'"| HERMES
+    CAC -->|"python3 check_coding_agent_cli.py"| CODING
+```
+
+### Part A: Hermes Profile Model Reachability
+
+Answers: "Can the worker and orchestrator profiles actually reach their configured LLM?"
+
+#### A1. Preflight check (CLI-side)
+
+`preflight.sh` — `check_model_reachability()`:
+
+For each profile in `PREFLIGHT_PROFILES`, sends a minimal chat query that never
+triggers tool calls:
+
+```
+hermes -p <profile> chat -q "say ok"  (timeout: 15s)
+→ Exit 0: model reachable → green
+→ "model not found" in output → fail
+→ "401/403/authentication" in output → auth fail
+→ Timeout → degraded (yellow)
+```
+
+This runs at preflight time before decomposition. It catches typos in model names
+and expired tokens that `hermes auth status` misses for proxy-routed providers.
+
+#### A2. Dashboard probe (sidecar-side)
+
+`dashboard/plugin_api.py` — `_check_model_reachable()`:
+
+Two-stage probe — liveness then readiness:
+
+```
+Stage 1 — Liveness (3s timeout):
+    hermes -p <profile> config show
+    → Tests: is hermes alive? Does the profile exist?
+
+Stage 2 — Readiness (120s timeout):
+    hermes -p <profile> chat -q "say ok"
+    → Tests: can the LLM respond to a query?
+```
+
+The probe runs in a **single-threaded ThreadPoolExecutor** (`_run_probe()`):
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as Sidecar API
+    participant EX as ThreadPoolExecutor
+    participant H as Hermes CLI
+
+    FE->>API: POST /profiles/worker/probe
+    API-->>FE: 202 Accepted (queued)
+    API->>EX: submit(_run_probe, "worker")
+
+    Note over EX: Serial queue
+
+    EX->>H: hermes -p worker config show (3s)
+    H-->>EX: config output
+    EX->>H: hermes -p worker chat -q "say ok" (120s)
+    H-->>EX: "ok"
+    EX->>EX: cache result + sleep 15s
+
+    Note over EX: Cooldown
+
+    EX->>H: hermes -p orch config show (3s)
+    H-->>EX: config output
+    EX->>H: hermes -p orch chat -q "say ok" (120s)
+    H-->>EX: "ok"
+    EX->>EX: cache result + sleep 15s
+
+    Note over EX: Cooldown
+
+    EX->>H: check_coding_agent_cli.py
+    H-->>EX: smoke result
+    EX->>EX: cache result
+
+    loop Poll
+        FE->>API: GET /status
+        API-->>FE: {..., probed: false}
+    end
+    FE->>API: GET /status
+    API-->>FE: {..., probed: true, model_reachable: true}
+```
+
+Probes are serialized — never concurrent. The 15-second inter-probe cooldown gives
+the gateway breathing room between sessions so sequential probes don't time out.
+
+#### A3. Status response shape
+
+`_check_profiles()` builds the per-profile status for the dashboard:
+
+```json
+{
+  "kanban-advanced-worker": {
+    "exists": true,
+    "has_model": true,
+    "model": "deepseek-v4-pro",
+    "provider": "deepseek",
+    "model_reachable": true,
+    "model_reachability_detail": "",
+    "probed": false,
+    "reasoning_effort": "medium"
+  }
+}
+```
+
+- `model_reachable`: `true` (green dot), `false` (red), `null` (yellow, not yet probed)
+- `probed`: `true` after the first probe attempt regardless of result
+- `model_reachability_detail`: "model not found", "provider auth failed", "inconclusive", "timed out"
+
+---
+
+### Part B: Coding Agent CLI Reachability
+
+Answers: "Can the external coding CLI execute code?"
+
+#### B1. Preflight check (CLI-side)
+
+`preflight.sh` — `check_coding_agent_cli_reachability()`:
+
+```
+1. Read coding_agent_binary from overlay → "hermes"
+2. command -v hermes → binary on PATH?
+3. HOME is set? (OAuth credentials)
+4. Run: python3 check_coding_agent_cli.py --timeout 15
+5. Exit 0 → pass | Exit 2 → not on PATH | Exit 124 → timeout
+```
+
+#### B2. The Python smoke test
+
+`scripts/check_coding_agent_cli.py`:
+
+```
+1. resolve_coding_agent()   → binary from overlay/config/env
+2. binary_on_path()          → shutil.which() check (exit 2 if fails)
+3. resolve_adapter()         → coding agent product label
+4. verify_binary_matches_adapter() → e.g., cursor-agent vs agent conflict
+5. audit_coding_agent_prerequisites() → HOME, auth.json, API keys
+6. smoke_test_coding_agent() → hermes chat -q "say ok" --yolo
+7. write_preflight_cache()   → cache for 30 min
+```
+
+#### B3. Dashboard probe (sidecar-side)
+
+`_run_coding_agent_probe()` — same executor, same 15s cooldown. Caches result as
+`coding_agent_smoke:<binary>:<model>`. Triggered via `POST /coding-agent/probe`.
+
+---
+
+### Part C: Dashboard Loading Sequence
+
+```mermaid
+sequenceDiagram
+    participant FE as Frontend
+    participant API as Sidecar
+
+    FE->>API: GET /status (fast, cached)
+    API-->>FE: last known probes + probed flags
+
+    FE->>API: POST /profiles/worker/probe
+    API-->>FE: 202 Accepted
+
+    FE->>API: POST /profiles/orchestrator/probe
+    API-->>FE: 202 Accepted
+
+    FE->>API: POST /coding-agent/probe
+    API-->>FE: 202 Accepted
+
+    loop Every 2s (max 90 = 180s window)
+        FE->>API: GET /status
+        API-->>FE: {..., probed: false}
+    end
+
+    FE->>API: GET /status?git_fetch=1
+    API-->>FE: updated plugin_behind + all probed: true
+```
+
+---
+
+### Part D: Model Selector (Frontend)
+
+The dashboard has two model selection surfaces:
+
+**Profile model picker** (Hermes native):
+- Opens `/api/model/options` → full provider/model catalog
+- Sets `model.default` in the profile's `config.yaml` via `hermes config set`
+- Applied on **Save** or **Bootstrap**
+- Also sets `agent.reasoning_effort` per profile
+
+**Coding agent model picker** (kanban-advanced specific):
+
+```mermaid
+flowchart LR
+    BINARY{"coding_agent_binary\n== 'hermes'?"}
+    SIDECAR["GET /coding-agent/models\n?binary=hermes"]
+    CATALOG["GET /api/model/options"]
+    MERGE["Merge: sidecar adds\n'Auto (profile config)' label"]
+    DIRECT["GET /coding-agent/models\n?binary=<name>"]
+
+    BINARY -->|yes| SIDECAR
+    BINARY -->|yes| CATALOG
+    SIDECAR --> MERGE
+    CATALOG --> MERGE
+    BINARY -->|no (grok, claude, codex)| DIRECT
+```
+
+- For **hermes**: merges the sidecar's model list (includes "Auto" label) with the
+  full dashboard model catalog for browseable provider/model selection
+- For **other binaries**: queries the binary's own model listing capability
+  (`/coding-agent/models?binary=<name>`)
+- Selected model stored in `coding_agent_model` (overlay) and
+  `KANBAN_CODING_AGENT_MODEL` (`.env`)
+
+---
+
+### Part E: Model Config Flow (Init/Save)
+
+During `_execute_init()`, for each dispatch profile that lacks model config:
+
+```
+1. copy_active_model_to_profile()
+   → hermes config set model.default <value> -p <profile>
+   → hermes config set model.provider <value> -p <profile>
+
+2. seed_default_reasoning_effort_for_profile()
+   → hermes config set agent.reasoning_effort medium -p <profile>
+```
+
+This ensures worker, orchestrator, and coder profiles have valid model config
+even on fresh installs — they inherit from the active (default) profile. The coder
+profile is only created when `coding_agent_binary == "hermes"`. After Strategy B,
+`max_turns` is also applied to all three profiles.
