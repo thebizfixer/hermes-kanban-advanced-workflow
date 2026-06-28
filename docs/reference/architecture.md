@@ -190,3 +190,130 @@ Scripts (`materialize_hermes_scripts`) are overwritten on every materialization 
 - **Config key reference:** [`wiki/configuration.md`](../../wiki/configuration.md) — every key, default, and purpose
 - **Schema:** [`schema/kanban-config.schema.json`](../../schema/kanban-config.schema.json) — JSON Schema with `additionalProperties: false`
 - **Example:** [`kanban-config.example.yaml`](../../kanban-config.example.yaml)
+
+## Sidecar Update Detection Architecture
+
+The dashboard sidecar (`scripts/dashboard_server.py`) runs as a standalone uvicorn process
+on `127.0.0.1:18900`. When plugin code is updated externally (CLI, git pull, manual edit),
+the sidecar continues running old Python modules in memory. The update detection system
+identifies this stale state and offers the user a one-click restart.
+
+### Step 1: Sidecar records its birth certificate at startup
+
+`dashboard_server.py` captures two module-level constants before any imports or routes:
+
+```
+START_TIME = time.time()           # Unix timestamp (e.g. 1751664675.348)
+COMMIT = git log -1 --format=%H    # Full SHA (e.g. "0c5f483a1b2c...")
+```
+
+These are frozen at process start. If plugin code is updated without restarting the sidecar,
+`COMMIT` remains at the old value. The `/health` endpoint exposes them:
+
+```json
+{"status":"ok","pid":31064,"started_at":1751664675.348,"commit":"0c5f483a1b2c..."}
+```
+
+### Step 2: Status endpoint compares birth certificate to plugin HEAD
+
+When the dashboard frontend loads, it calls `GET /api/plugins/kanban-advanced/status`.
+The backend runs two checks:
+
+**Plugin git status** (existing — `_check_plugin_git_status()`):
+```
+git rev-list --count HEAD..origin/main  →  behind_before
+→ plugin_update_available: true/false   (commits available to pull)
+→ plugin_up_to_date: true/false         (no commits behind)
+```
+
+**Sidecar staleness** (new — `_check_sidecar_staleness()`):
+```
+1. GET http://127.0.0.1:18900/health
+   → sidecar_commit: "0c5f483"  (recorded at sidecar startup)
+   → sidecar_started: 1751664675
+
+2. git log -1 --format=%H  (plugin install dir HEAD)
+   → current_head: "a90e3a3"  (newer commit from git pull)
+
+3. Compare hashes: "0c5f483" ≠ "a90e3a3" → sidecar_stale = true
+
+4. Also compare timestamps (fallback):
+   git log -1 --format=%ct → 1751664700
+   1751664700 > 1751664675 → sidecar_stale = true
+```
+
+### Step 3: Frontend displays three states
+
+The dashboard reads `sidecar_stale` and `plugin_update_available` from the status response:
+
+| Condition | Status Banner | Button Label | Action |
+|-----------|--------------|--------------|--------|
+| `plugin_update_available` | "Initialized (Update Plugin)" | "Update Plugin" | git pull → materialize → restart |
+| `sidecar_stale === true` | "Initialized (Restart Plugin)" | "Restart Plugin" | spawn replacement → exit |
+| `plugin_up_to_date` | "Initialized (Up-to-date)" | "Restart Plugin" | restart (still available) |
+
+The button is always enabled — the `plugin_up_to_date === true` guard was removed from
+the `pluginUpdateDisabled` condition.
+
+### Step 4: User triggers restart
+
+Both "Update Plugin" and "Restart Plugin" call `POST /api/plugins/kanban-advanced/update`.
+When there are no commits to pull (`behind_before == 0`), the endpoint still calls
+`_schedule_sidecar_restart()` — this is the new behavior.
+
+`_schedule_sidecar_restart()` spawns a replacement before exiting:
+
+```
+1. Wait 2 seconds (HTTP response flush)
+2. Spawn detached child: python3 dashboard_server.py
+   - Windows: CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
+   - Unix: start_new_session=True
+3. Verify child started (poll after 0.5s):
+   - If Popen threw exception → abort, old process stays alive
+   - If child.poll() is not None (crashed immediately) → abort
+4. os._exit(0) → old process exits, port released
+```
+
+The new sidecar starts with fresh `START_TIME` and `COMMIT`. Its birth certificate now
+matches the plugin HEAD, so `sidecar_stale` becomes `false`.
+
+### Step 5: Keepalive cron is the fallback
+
+If spawn-before-exit fails (python missing, script deleted, port conflict), the old
+process **stays alive** — the verification checks prevent it from exiting. The dashboard
+continues serving requests with the stale code, and the banner remains "Restart Plugin."
+
+If the old process is killed mid-restart (both old and new down), the keepalive cron
+(`kanban-dashboard-keepalive`) detects `/health` is unreachable and restarts within 60
+seconds. The cron is a second layer of recovery, not the primary mechanism.
+
+### Full detection chain
+
+```
+Plugin code updated (git pull / CLI / manual edit)
+        │
+        ▼
+Dashboard frontend loads → GET /status
+        │
+        ├─ _check_plugin_git_status()
+        │   └─ behind_before > 0? → "Update Plugin" banner
+        │
+        └─ _check_sidecar_staleness()
+            ├─ GET /health → commit: "0c5f483" (sidecar's birth SHA)
+            ├─ git log -1  → HEAD:  "a90e3a3" (plugin's current SHA)
+            ├─ "0c5f483" ≠ "a90e3a3" → sidecar_stale = true
+            └─ → "Restart Plugin" banner
+                    │
+                    ▼
+            User clicks button → _schedule_sidecar_restart()
+                    │
+                    ├─ Spawn new sidecar (birth SHA = "a90e3a3")
+                    ├─ Verify child started
+                    └─ os._exit(0)
+                            │
+                            ▼
+            New sidecar serves requests
+            GET /health → commit: "a90e3a3"
+            _check_sidecar_staleness() → "a90e3a3" = "a90e3a3" → false
+            → "Initialized (Up-to-date)"
+```
