@@ -15,6 +15,7 @@
 | [provider-strategy.md](provider-strategy.md) | Multi-provider fan-out, rate-limit prevention, fallback configuration |
 | [six-sigma-mapping.md](six-sigma-mapping.md) | DMAIC pipeline mapping, CTQ tree, defect reduction metrics |
 | [external-references.md](external-references.md) | Upstream docs — Hermes Agent, AGT, AEP, coding agents, platform references |
+| [`../docs/reference/architecture.md`](../docs/reference/architecture.md) | **Architecture reference** — pipeline stages, config serialization, sidecar update detection, model check/selector (with mermaid diagrams) |
 
 **Platforms:** Linux, macOS, Windows (native Git Bash + Hermes Desktop), WSL2 — [PLATFORM_NOTES.md](../PLATFORM_NOTES.md). **Coding CLIs:** `agent`, `claude`, `codex`, `grok`, `aider`, `gemini`, or custom — [coding agents](../docs/reference/coding-agents.md). **Host repo:** any project with `.hermes/kanban-overrides/kanban-config.yaml` after init; examples use neutral `hermes-kanban-advanced-workflow/` bundle path.
 

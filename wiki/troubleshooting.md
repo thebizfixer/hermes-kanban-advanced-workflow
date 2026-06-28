@@ -687,6 +687,8 @@ curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.
 
 **Restart Plugin button:** When the sidecar's commit hash differs from the plugin's HEAD (e.g., after an external update), the dashboard shows "Restart Plugin" on the status banner and button. Clicking it spawns a replacement sidecar before exiting — no dependency on the keepalive cron. The keepalive cron is a fallback only.
 
+Full architecture: [`docs/reference/architecture.md`](../docs/reference/architecture.md#sidecar-update-detection-architecture)
+
 ### Board keeper not processing all boards
 
 **Symptom:** Cards on non-default boards are never salvaged, and stale boards accumulate.
@@ -727,6 +729,7 @@ curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.
 
 **How it works (current architecture):**
 - Probes run asynchronously in a **single-threaded background executor** (`ThreadPoolExecutor(max_workers=1)`).
+- Full architecture with mermaid diagrams: [`docs/reference/architecture.md`](../docs/reference/architecture.md#model-check--model-selector-architecture)
 - The frontend submits probes via `POST /profiles/{profile}/probe` and `POST /coding-agent/probe` (202 Accepted).
 - Results are cached server-side: profiles 180s (`_TTL_MODEL_PROBE`), coding agent 180s. Cache key: `model_reachable:{profile}`.
 - The frontend polls `GET /status` every 2s until `probed: true` on all profiles + `coding_agent_cli.probed: true` (max 90 attempts = 180s window).
