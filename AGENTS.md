@@ -135,3 +135,9 @@ All skills are namespaced as `kanban-advanced:kanban-*`. Load them with `skill_v
 - Agent wiki: `wiki/` (detailed agent-facing reference)
 - Full README: `README.md`
 - LLM-friendly index: `llms.txt`
+
+## Windows-specific known issues
+
+- **Preflight memory 0MB:** MSYS2 `/proc/meminfo` lacks `MemAvailable`. Use `PREFLIGHT_SKIP_MEMORY_BUDGET=1`.
+- **Preflight coding agent not found:** Use `PREFLIGHT_SKIP_CODING_AGENT_CLI=1` or pass `--binary` with absolute path.
+- **`flock` missing:** `board_keeper.sh` falls back to running without lock. Install via MSYS2 `pacman -S util-linux` if needed.

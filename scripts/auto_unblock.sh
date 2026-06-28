@@ -80,7 +80,7 @@ TICK_ARGS=(--stagger-sec "$STAGGER_SEC")
 # Timestamped boards (from kanban_handoff.py) don't persist the board env
 # in the cron — auto_unblock must discover them.
 if [[ -z "${KANBAN_BOARD:-}" || "$KANBAN_BOARD" == "default" ]]; then
-  ALL_BOARDS="$(hermes kanban boards list 2>/dev/null | awk '{print $1}' | grep -vE '^(SLUG|default|$)')"
+  ALL_BOARDS="$(hermes kanban boards list 2>/dev/null | sed 's/^[●▶⊘✓✗○◆◇][[:space:]]*//' | awk '{print $1}' | grep -vE '^(SLUG|default|Current|Switch|$)')"
   if [[ -n "$ALL_BOARDS" ]]; then
     for BOARD in $ALL_BOARDS; do
       export KANBAN_BOARD="$BOARD"

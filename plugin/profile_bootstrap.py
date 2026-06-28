@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .config_overlay import (
+    DEFAULT_CODER_PROFILE,
     DEFAULT_ORCHESTRATOR_PROFILE,
     DEFAULT_WORKER_PROFILE,
     LEGACY_ORCHESTRATOR_PROFILE,
@@ -34,6 +35,7 @@ RunFn = Callable[..., subprocess.CompletedProcess]
 DISPATCH_PROFILE_SPECS: tuple[tuple[str, str], ...] = (
     (DEFAULT_WORKER_PROFILE, LEGACY_WORKER_PROFILE),
     (DEFAULT_ORCHESTRATOR_PROFILE, LEGACY_ORCHESTRATOR_PROFILE),
+    (DEFAULT_CODER_PROFILE, None),
 )
 
 NO_BUNDLED_SKILLS_MARKER = ".no-bundled-skills"
@@ -244,7 +246,7 @@ def ensure_dispatch_profiles(
             log(f"   OK {new_name}")
             continue
 
-        if _profile_present(profiles_output, legacy_name):
+        if legacy_name and _profile_present(profiles_output, legacy_name):
             should_rename = force or (prompt_yes_no and prompt_yes_no(
                 f"   Rename legacy profile '{legacy_name}' -> '{new_name}'?"
             ))

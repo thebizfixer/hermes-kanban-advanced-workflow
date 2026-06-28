@@ -45,6 +45,7 @@ VALID_POLICY_PROFILES = frozenset({"advisory", "balanced", "strict"})
 
 DEFAULT_WORKER_PROFILE = "kanban-advanced-worker"
 DEFAULT_ORCHESTRATOR_PROFILE = "kanban-advanced-orchestrator"
+DEFAULT_CODER_PROFILE = "kanban-advanced-coder"
 LEGACY_WORKER_PROFILE = "worker"
 LEGACY_ORCHESTRATOR_PROFILE = "orchestrator"
 
@@ -65,6 +66,10 @@ PROFILE_SKILL_SETS_BY_ROLE: dict[str, frozenset[str]] = {
         "kanban-postmortem",
         "kanban-preflight",
         "kanban-reconciliation",
+    }),
+    "coder": frozenset({
+        "kanban-coder",
+        "kanban-git",
     }),
 }
 

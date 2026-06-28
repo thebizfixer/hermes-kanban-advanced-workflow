@@ -27,6 +27,7 @@ PROMPT="${2:-say ok}"
 BINARY="${KANBAN_CODING_AGENT:-agent}"
 MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
 PROVIDER="${KANBAN_CODING_AGENT_PROVIDER:-}"
+PROFILE="${KANBAN_CODING_AGENT_PROFILE:-}"
 REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 model_is_auto() {
@@ -289,13 +290,13 @@ case "$BINARY" in
     ;;
 
   hermes)
-    # KANBAN_CODING_AGENT_CHILD=1 tells the kanban-worker skill (if loaded)
-    # that this is a coding-agent child session — it should complete the task
-    # directly, NOT re-dispatch via coding_agent_invoke.sh (recursion guard).
-    # This replaces the nuclear --ignore-rules approach which stripped ALL
-    # project context and made the agent useless on Windows.
+    # KANBAN_CODING_AGENT_CHILD=1 tells the coder profile that this is a
+    # coding-agent child session — it should complete the task directly.
     export KANBAN_CODING_AGENT_CHILD=1
     args=( chat -q "$PROMPT" --yolo )
+    if [[ -n "${PROFILE:-}" ]]; then
+        args=( -p "${PROFILE}" "${args[@]}" )
+    fi
     append_model_args args
     append_provider_args args
     if [[ "$MODE" == "dispatch" ]]; then

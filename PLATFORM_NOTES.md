@@ -239,3 +239,29 @@ No special configuration needed. All scripts run natively under `bash`.
   `UnicodeEncodeError`. Prefer `--json` when bash wrappers need counts.
   `plan_parse.py suggest-anchors` shells out to **`rg`** (ripgrep) — available in
   Hermes PortableGit / Git Bash on Windows; returns no suggestions when `rg` is absent.
+
+### Known Windows-specific issues (and their fixes)
+
+- **`flock` not available:** `board_keeper.sh` uses `flock` for single-instance locking.
+  On Windows Git Bash, `flock` is not installed. The script falls back to running without
+  a lock (same pattern as `coding_agent_auth_lock.sh`). Install `flock` via MSYS2
+  (`pacman -S util-linux`) for locking, or accept the warning.
+
+- **Preflight `memory_budget` returns 0MB:** MSYS2 provides a `/proc/meminfo`
+  compatibility layer that lacks the `MemAvailable:` field. The preflight script
+  enters the Linux branch but gets empty data. Fixed by adding a `grep -q '^MemAvailable:'`
+  guard — without it, the check falls through to `systeminfo` which correctly reports
+  available memory. Workaround: `PREFLIGHT_SKIP_MEMORY_BUDGET=1`.
+
+- **Preflight `coding_agent_cli_reachability` fails with hermes on PATH:** The
+  bash-level `command -v hermes` check succeeds, but the Python smoke test
+  (`check_coding_agent_cli.py`) uses `shutil.which` which doesn't find MSYS2
+  path-resolved binaries in the preflight subshell. Fixed by passing the absolute
+  path resolved by `command -v` via `--binary`. Workaround:
+  `PREFLIGHT_SKIP_CODING_AGENT_CLI=1`.
+
+- **Sidecar running stale code after plugin update:** The dashboard sidecar
+  may have stale Python modules in memory if the plugin was updated externally
+  (CLI, git pull). The dashboard now shows a "Restart Plugin" button when the
+  sidecar's commit hash differs from the plugin's HEAD. Clicking it spawns a
+  replacement sidecar before exiting — no dependency on the keepalive cron.

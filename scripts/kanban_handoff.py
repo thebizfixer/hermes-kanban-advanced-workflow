@@ -760,6 +760,52 @@ def _create_plan_board(plan_id: str) -> str:
     return slug
 
 
+def _archive_prior_boards(plan_id: str) -> int:
+    """Archive empty boards matching plan_id. Returns count archived."""
+    base = re.sub(r'[^a-z0-9-]', '-', plan_id.lower())[:48].strip('-')
+    if not base:
+        return 0
+    try:
+        r = subprocess.run(
+            ["hermes", "kanban", "boards", "list"],
+            capture_output=True, text=True, timeout=10
+        )
+        if r.returncode != 0:
+            return 0
+        count = 0
+        for line in r.stdout.splitlines():
+            parts = line.strip().split()
+            if not parts:
+                continue
+            slug = parts[0].lstrip('●▶⊘✓✗○◆◇').strip()
+            if not slug.startswith(base):
+                continue
+            # Only archive if board appears empty
+            if '(empty)' in line or '(no matching tasks)' in line:
+                subprocess.run(
+                    ["hermes", "kanban", "boards", "archive", slug],
+                    capture_output=True, timeout=10
+                )
+                count += 1
+        return count
+    except Exception:
+        return 0
+
+
+def _archive_board(slug: str) -> bool:
+    """Archive a kanban board by slug. Returns True on success."""
+    if not slug or slug == "default":
+        return False
+    try:
+        r = subprocess.run(
+            ["hermes", "kanban", "boards", "archive", slug],
+            capture_output=True, text=True, timeout=10
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: str,
                 orchestrator_profile: str,
                 bundle_root: Path,
@@ -1008,9 +1054,17 @@ def main() -> int:
 
     cards_yaml_path = _discover_cards_yaml(plan_id, plan_path, project_root, overlay)
 
+    # Clean up empty boards from prior failed handoff attempts
+    _archive_prior_boards(plan_id)
+
     # Create per-plan board (idempotent)
     kanban_board = _create_plan_board(plan_id)
     os.environ["HERMES_KANBAN_BOARD"] = kanban_board
+
+    def _fail(rc: int) -> int:
+        """Archive the board on failure, then return the exit code."""
+        _archive_board(kanban_board)
+        return rc
 
     board_ok, board_msg, archived = _check_board_cleanliness(
         plan_id, force=args.force
@@ -1023,7 +1077,7 @@ def main() -> int:
             "plan_id": plan_id,
             "fix": "Confirm with operator, archive listed cards, or re-run with --force",
         })
-        return 7
+        return _fail(7)
 
     # Git freshness check (stale branches, worktrees, attestation from prior runs)
     git_ok, git_msg = _check_git_freshness(plan_id, project_root)
@@ -1041,7 +1095,7 @@ def main() -> int:
                 "detail": git_msg,
                 "plan_id": plan_id,
             })
-            return 7
+            return _fail(7)
     elif not git_ok:
         emit({
             "ok": False,
@@ -1050,7 +1104,7 @@ def main() -> int:
             "plan_id": plan_id,
             "fix": "Run: bash scripts/git_safe_cleanup.sh --clean --plan-id " + plan_id,
         })
-        return 7
+        return _fail(7)
 
     # Always run serial pre_dispatch_gate at handoff time.
     # Parallel subagent gate (delegate_task) is unreliable on Windows —
@@ -1068,7 +1122,7 @@ def main() -> int:
             "error": f"orchestrator profile '{orchestrator_profile}' not found",
             "fix": f"hermes kanban-advanced init  (creates {orchestrator_profile} with role-only skills)",
         })
-        return 2
+        return _fail(2)
 
     if not args.allow_offline:
         settings = _kanban_settings()
@@ -1078,21 +1132,21 @@ def main() -> int:
                 "error": "kanban.dispatch_in_gateway is false — the gateway will not claim the handoff card",
                 "fix": "hermes config set kanban.dispatch_in_gateway true",
             })
-            return 4
+            return _fail(4)
         if settings["auto_decompose"]:
             emit({
                 "ok": False,
                 "error": "kanban.auto_decompose is true — the handoff card would be LLM-decomposed into stub children",
                 "fix": "hermes config set kanban.auto_decompose false",
             })
-            return 4
+            return _fail(4)
         if not _gateway_running():
             emit({
                 "ok": False,
                 "error": "gateway is not running — no dispatcher to claim the handoff card",
                 "fix": "hermes gateway run   (or pass --allow-offline to create the card anyway)",
             })
-            return 3
+            return _fail(3)
 
     notification_overlay = _resolve_notification_overlay(project_root, overlay)
     if args.skip_cron_provision:
@@ -1119,7 +1173,7 @@ def main() -> int:
                     f"bash {bundle_root.as_posix()}/scripts/provision_kanban_crons.sh --check"
                 ),
             })
-            return 8
+            return _fail(8)
 
     body = _build_body(
         plan_id, plan_path, project_root, working_branch,
@@ -1162,7 +1216,7 @@ def main() -> int:
     )
     if create.returncode != 0:
         emit({"ok": False, "error": "card creation failed", "stderr": create.stderr.strip()})
-        return 6
+        return _fail(6)
 
     card_id = None
     try:
@@ -1173,7 +1227,7 @@ def main() -> int:
 
     if not card_id:
         emit({"ok": False, "error": "could not parse created card id", "raw": create.stdout[:200]})
-        return 6
+        return _fail(6)
 
     emit({"ok": True, "reused": False, "id": card_id, "title": title,
           "assignee": orchestrator_profile, "plan_id": plan_id,

@@ -71,7 +71,7 @@ bash scripts/board_keeper.sh [--plan-id <id>] [--dry-run]
 ```
 
 Proactive board manager for walk-away execution. Runs every 180s. **--plan-id**: when set, only processes cards and worktrees belonging to that plan_id (multi-board isolation). Without --plan-id, processes all boards (backward compatible). Core functions:
-1. Salvage iteration-limit cards (check worktree, commit, merge, complete)
+1. Salvage blocked (`⊘`) and triage (`?`) cards with committed work in worktree — commit, merge, complete
 2. Kill orphaned agent processes from archived cards
 3. Unstick ready cards stalled >3 minutes
 4. Detect unmerged done cards (commits ahead of `${working_branch}`) and auto-merge when safe

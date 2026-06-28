@@ -86,9 +86,13 @@ LOCK_DIR="$(kanban_logs_dir "$REPO_ROOT")"
 mkdir -p "$LOCK_DIR"
 KEEPER_LOCK="${LOCK_DIR}/board_keeper${PLAN_ID:+_$PLAN_ID}.lock"
 exec 9>"$KEEPER_LOCK"
-if ! flock -n 9; then
-  echo "board_keeper: previous tick still running — skipping"
-  exit 0
+if command -v flock >/dev/null 2>&1; then
+  if ! flock -n 9; then
+    echo "board_keeper: previous tick still running — skipping"
+    exit 0
+  fi
+else
+  echo "board_keeper: flock not found — running without lock (install flock on gateway host for safety)" >&2
 fi
 
 _kanban_disk_ok() {
@@ -136,11 +140,11 @@ except Exception as e:
 
 # --- Board discovery (timestamped boards don't inherit env from handoff) ---
 if [[ -z "${KANBAN_BOARD:-}" || "$KANBAN_BOARD" == "default" ]]; then
-  ALL_BOARDS=$(hermes kanban boards list 2>/dev/null | awk '{print $1}' | grep -vE '^(SLUG|default|$)')
+  ALL_BOARDS=$(hermes kanban boards list 2>/dev/null | sed 's/^[●▶⊘✓✗○◆◇][[:space:]]*//' | awk '{print $1}' | grep -vE '^(SLUG|default|Current|Switch|$)')
   if [[ -n "$ALL_BOARDS" ]]; then
     for _BOARD in $ALL_BOARDS; do
       export KANBAN_BOARD="$_BOARD"
-      exec bash "$0" "$@"
+      bash "$0" "$@"
     done
     exit 0
   fi
@@ -193,7 +197,7 @@ done
 
 echo ""
 echo "--- Blocked card salvage ---"
-BLOCKED_IDS=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep '⊘' | awk '{print $2}' || true)
+BLOCKED_IDS=$(hermes kanban --board "${KANBAN_BOARD:-default}" list 2>/dev/null | grep '[⊘?]' | awk '{print $2}' || true)
 SALVAGE_COUNT=0
 for tid in $BLOCKED_IDS; do
     INFO=$(hermes kanban --board "${KANBAN_BOARD:-default}" show "$tid" 2>/dev/null)

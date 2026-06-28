@@ -353,6 +353,21 @@ if [[ -n "$FIX_BRANCHES" ]]; then
     done
 fi
 
+# ── 2e. Archive stale kanban boards for this plan_id ─────────────────
+if [[ -n "$PLAN_ID" ]]; then
+    PLAN_PREFIX=$(echo "$PLAN_ID" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
+    STALE_BOARDS=$(hermes kanban boards list 2>/dev/null | grep "$PLAN_PREFIX" | awk '{print $1}' | grep -v '^●')
+    for _sb in $STALE_BOARDS; do
+        [[ "$_sb" == "$PLAN_PREFIX"* ]] || continue
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo "[dry-run] Would archive board: $_sb"
+        else
+            echo "ARCHIVE board: $_sb"
+            hermes kanban boards archive "$_sb" 2>/dev/null && green "  → Archived" || yellow "  → Could not archive"
+        fi
+    done
+fi
+
 # ── 2d. Post-cleanup verification ──────────────────────────────────────
 echo ""
 blue "--- Post-Cleanup Verification ---"

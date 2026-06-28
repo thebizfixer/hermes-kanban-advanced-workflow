@@ -29,6 +29,18 @@ from pathlib import Path
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PLUGIN_ROOT))
 
+# Capture startup metadata for sidecar staleness detection
+START_TIME = time.time()
+try:
+    import subprocess as _sp
+    _r = _sp.run(
+        ["git", "log", "-1", "--format=%H"],
+        capture_output=True, text=True, cwd=str(PLUGIN_ROOT), timeout=5
+    )
+    COMMIT = _r.stdout.strip() if _r.returncode == 0 else "unknown"
+except Exception:
+    COMMIT = "unknown"
+
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -49,7 +61,7 @@ app.add_middleware(
 # ── Routes ──
 @app.get("/health")
 async def health():
-    return {"status": "ok", "pid": os.getpid()}
+    return {"status": "ok", "pid": os.getpid(), "started_at": START_TIME, "commit": COMMIT}
 
 app.include_router(router, prefix="/api/plugins/kanban-advanced")
 

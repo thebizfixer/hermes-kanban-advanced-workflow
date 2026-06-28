@@ -97,7 +97,7 @@ check_memory_budget() {
     return
   fi
 
-  if [[ -r /proc/meminfo ]]; then
+  if [[ -r /proc/meminfo ]] && grep -q '^MemAvailable:' /proc/meminfo 2>/dev/null; then
     # Linux / WSL2
     local avail_kb
     avail_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)"
@@ -281,6 +281,7 @@ check_coding_agent_cli_reachability() {
       "Coding agent binary '${binary}' not on PATH — install CLI or fix coding_agent_binary"
     return
   fi
+  binary_path="$(command -v "$binary")"
 
   if [[ -z "${HOME:-}" ]]; then
     record_check "coding_agent_cli_reachability" "fail" "blocking" \
@@ -291,7 +292,7 @@ check_coding_agent_cli_reachability() {
   local wall_timeout=$((probe_timeout + 5))
 
   out="$(run_with_timeout "$wall_timeout" sh -c \
-    "cd \"${REPO_ROOT}\" && PYTHONPATH=\"${SCRIPT_DIR}/..:${REPO_ROOT}\" python3 \"${SCRIPT_DIR}/check_coding_agent_cli.py\" --timeout \"${probe_timeout}\"" \
+    "cd \"${REPO_ROOT}\" && PYTHONPATH=\"${SCRIPT_DIR}/..:${REPO_ROOT}\" python3 \"${SCRIPT_DIR}/check_coding_agent_cli.py\" --timeout \"${probe_timeout}\" --binary \"${binary_path}\"" \
     2>&1)" \
     || rc=$?
 

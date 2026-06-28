@@ -24,6 +24,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from plugin.config_overlay import (  # noqa: E402
+    DEFAULT_CODER_PROFILE,
     DEFAULT_ORCHESTRATOR_PROFILE,
     DEFAULT_PLUGIN_NAME,
     DEFAULT_WORKER_PROFILE,
@@ -126,20 +127,35 @@ def _invalidate_status_cache() -> None:
 def _schedule_sidecar_restart(delay: float = 2.0) -> None:
     """Schedule a sidecar process restart after *delay* seconds.
 
-    Used after Update Plugin pulls new code: the running Python process has
-    stale modules in memory (PROFILE_SKILL_SETS_BY_ROLE, script_materialize
-    lists, etc.). Restarting ensures the next request uses updated code.
+    Spawns a replacement sidecar as a detached child process, verifies it
+    started, then exits. The PID file at $HERMES_HOME/run/ already handles
+    stale-PID detection.
 
-    The delay lets the current HTTP response flush before the process exits.
-    The keepalive cron (if running) or the operator's next dashboard visit
-    will start a fresh sidecar.
+    The keepalive cron is a SECOND layer of recovery, not the only layer.
     """
-    import threading
+    import threading, subprocess as _sp, time as _time, os as _os
+    from pathlib import Path
 
-    def _restart():
-        import time as _time
-        import os as _os
+    def _restart() -> None:
         _time.sleep(delay)
+        script = Path(__file__).resolve().parent.parent / "scripts" / "dashboard_server.py"
+        detach = (_sp.CREATE_NEW_PROCESS_GROUP | _sp.DETACHED_PROCESS
+                  if sys.platform == "win32" else 0)
+        try:
+            child = _sp.Popen(
+                [sys.executable, str(script)],
+                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
+                creationflags=detach if detach else 0,
+                start_new_session=(sys.platform != "win32"),
+            )
+        except Exception:
+            return  # Popen failed — stay alive, cron will retry
+
+        # Verify child started
+        _time.sleep(0.5)
+        if child.poll() is not None:
+            return  # Child exited immediately — stay alive
+
         _os._exit(0)
 
     t = threading.Thread(target=_restart, daemon=True)
@@ -837,6 +853,53 @@ def _reconcile_kanban_crons(
         return False
 
 
+def _git_HEAD_hash(install_dir: Path, git_exe: str) -> str | None:
+    """Return the full HEAD commit hash, or None."""
+    try:
+        r = _run([git_exe, "log", "-1", "--format=%H"], timeout=5, cwd=str(install_dir))
+        if r.returncode == 0:
+            return r.stdout.strip() or None
+    except Exception:
+        pass
+    return None
+
+
+def _git_last_commit_timestamp(install_dir: Path, git_exe: str) -> float | None:
+    """Return the last commit's UNIX timestamp, or None."""
+    try:
+        r = _run([git_exe, "log", "-1", "--format=%ct"], timeout=5, cwd=str(install_dir))
+        if r.returncode == 0 and r.stdout.strip():
+            return float(r.stdout.strip())
+    except Exception:
+        pass
+    return None
+
+
+def _check_sidecar_staleness(install_dir: Path, git_exe: str | None) -> bool | None:
+    """Return True if sidecar started before last plugin update, False if current, None if unknown."""
+    try:
+        import requests as _rq
+        r = _rq.get("http://127.0.0.1:18900/health", timeout=2)
+        data = r.json()
+        sidecar_commit = data.get("commit")
+        sidecar_started = data.get("started_at", 0)
+    except Exception:
+        return None
+
+    if not git_exe or not sidecar_commit:
+        return None
+
+    current_head = _git_HEAD_hash(install_dir, git_exe)
+    if current_head and current_head != sidecar_commit:
+        return True
+
+    last_commit_ts = _git_last_commit_timestamp(install_dir, git_exe)
+    if last_commit_ts and last_commit_ts > sidecar_started:
+        return True
+
+    return False
+
+
 def _check_plugin_git_status(*, fetch: bool = True) -> dict:
     """Whether the installed plugin git checkout has upstream commits to pull."""
     hermes_home = resolve_hermes_home()
@@ -961,6 +1024,10 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
             "git_fetch": git_fetch,
         },
         **_check_plugin_git_status(fetch=git_fetch),
+        "sidecar_stale": _check_sidecar_staleness(
+            resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME),
+            _resolve_git_executable(),
+        ),
     }
 
 
@@ -1218,6 +1285,8 @@ def _execute_init(body: dict, output: list[str]) -> dict:
 
     worker_profile, orchestrator_profile = dispatch_profile_names(existing_config)
     dispatch_profiles = [worker_profile, orchestrator_profile]
+    if coding_agent == "hermes":
+        dispatch_profiles.append(DEFAULT_CODER_PROFILE)
 
     # Profiles (create or rename legacy short names) — model config below needs
     # the prefixed profiles to exist; full reconcile (seed + verify) runs later.
@@ -1358,6 +1427,7 @@ def _execute_init(body: dict, output: list[str]) -> dict:
             "HERMES_ENABLE_PROJECT_PLUGINS": "true",
             "KANBAN_CODING_AGENT": coding_agent,
             "KANBAN_CODING_AGENT_MODEL": coding_agent_model,
+            "KANBAN_CODING_AGENT_PROFILE": "kanban-advanced-coder" if coding_agent == "hermes" else "",
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )
@@ -1595,6 +1665,7 @@ def update_plugin():
 
     if behind_before == 0:
         output.append("   OK Already up to date")
+        _schedule_sidecar_restart()
         _invalidate_status_cache()
         return {
             "success": True,

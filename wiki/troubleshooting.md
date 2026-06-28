@@ -685,6 +685,40 @@ curl -s http://127.0.0.1:18900/health | python3 -c "import sys,json; print(json.
 
 **Auto-recovery:** The keepalive cron (`kanban-dashboard-keepalive`) restarts the sidecar within 60 seconds if it crashes. Check with `hermes cron list | grep kanban-dashboard-keepalive`. If missing, run `hermes kanban-advanced init` to recreate it. The keepalive cron runs inside the gateway — the gateway must be running for auto-recovery.
 
+**Restart Plugin button:** When the sidecar's commit hash differs from the plugin's HEAD (e.g., after an external update), the dashboard shows "Restart Plugin" on the status banner and button. Clicking it spawns a replacement sidecar before exiting — no dependency on the keepalive cron. The keepalive cron is a fallback only.
+
+### Board keeper not processing all boards
+
+**Symptom:** Cards on non-default boards are never salvaged, and stale boards accumulate.
+
+**Root cause:** The board keeper's discovery loop used `exec bash "$0"` which terminated after the first board. Fixed by removing `exec`.
+
+**Fix:** Update to latest plugin. Verify with `KANBAN_BOARD=<board> bash scripts/board_keeper.sh --dry-run` — should show all boards.
+
+### Triage cards not salvaged
+
+**Symptom:** Cards in `triage` status with completed work (commits in worktree) are never completed by the board keeper.
+
+**Root cause:** The salvage grep only matched `⊘` (blocked). Triage cards use `?` marker.
+
+**Fix:** Update to latest plugin. The salvage grep now matches `[⊘?]`.
+
+### Provision check fails with unknown keys
+
+**Symptom:** `provision.sh --check` reports unknown keys like `coding_agent`, `cron_setup`, `enabled`, etc.
+
+**Root cause:** These are impostor keys from an older overlay config format. They're duplicates of values already in `escalation_max_attempts` and `subagent_gate` blocks.
+
+**Fix:** Click **Save** on the dashboard, or re-run `hermes kanban-advanced init`. The `_IMPOSTOR_KEYS` filter self-heals the config on next write. If Save doesn't fix it, restart the sidecar (may be running old code).
+
+### Auto-unblock cron can't discover active board
+
+**Symptom:** Cards stay blocked after gate completion even though auto-unblock cron is running.
+
+**Root cause:** The `●` marker in `hermes kanban boards list` output for the active board causes `awk '{print $1}'` to return `●` instead of the board slug.
+
+**Fix:** Update to latest plugin. Board discovery now strips status markers with `sed` before extracting slugs.
+
 **If the gateway IS accidentally killed:** The user must restart it manually (`hermes gateway run`) and then restart the sidecar. The keepalive cron will also need to be recreated if `hermes kanban-advanced init` didn't provision it after gateway restart.
 
 ### Dashboard badges show stale model/probe data

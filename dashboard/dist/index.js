@@ -723,12 +723,13 @@
     function initializedLabel() {
       if (!statusInitialized) return "Not initialized";
       if (statusProbing || probesPending) return "Initialized (Checking for updates)";
-      if (status && status.plugin_can_update && status.plugin_up_to_date === true) return "Initialized (Up-to-date)";
       if (status && status.plugin_can_update && status.plugin_update_available) return "Initialized (Update Plugin)";
+      if (status && status.plugin_can_update && status.sidecar_stale === true) return "Initialized (Restart Plugin)";
+      if (status && status.plugin_can_update && status.plugin_up_to_date === true) return "Initialized (Up-to-date)";
       return "Initialized";
     }
 
-    var pluginUpdateDisabled = !status || !status.plugin_can_update || status.plugin_up_to_date === true
+    var pluginUpdateDisabled = !status || !status.plugin_can_update
       || pluginUpdating || bootstrapping || statusProbing || probesPending;
 
     // ── Model selector ──
@@ -970,7 +971,7 @@
                     React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
                     "Updating…"
                   )
-                : "Update Plugin"
+                : (status && (status.plugin_up_to_date === true || status.sidecar_stale === true) ? "Restart Plugin" : "Update Plugin")
             ) : null
           )
         )
