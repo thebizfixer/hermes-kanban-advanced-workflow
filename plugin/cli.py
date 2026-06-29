@@ -280,6 +280,9 @@ def _handle_init(args) -> int:
     print("1. Checking profiles...")
     worker_profile, orchestrator_profile = dispatch_profile_names(existing_config)
     dispatch_profiles = [worker_profile, orchestrator_profile]
+    if resolve_coding_agent(project_root) == "hermes":
+        from plugin.config_overlay import DEFAULT_CODER_PROFILE
+        dispatch_profiles.append(DEFAULT_CODER_PROFILE)
     if not ensure_dispatch_profiles(
         _run,
         HERMES_BIN,
@@ -548,6 +551,7 @@ def _handle_init(args) -> int:
             "HERMES_ENABLE_PROJECT_PLUGINS": "true",
             "KANBAN_CODING_AGENT": coding_binary,
             "KANBAN_CODING_AGENT_MODEL": coding_model,
+            "KANBAN_CODING_AGENT_PROFILE": "kanban-advanced-coder" if coding_binary == "hermes" else "",
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )
