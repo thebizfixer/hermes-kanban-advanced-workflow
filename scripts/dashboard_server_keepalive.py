@@ -29,6 +29,13 @@ plugin_root = script_dir.parent
 server_script = plugin_root / "scripts" / "dashboard_server.py"
 
 # Start server (PID locking in Python prevents duplicates)
+# Clean stale PID lock from previous dead process
+lock_path = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes")) / "run" / f"kanban-dashboard-server-{PORT}.pid"
+if lock_path.exists():
+    try:
+        lock_path.unlink()
+    except OSError:
+        pass
 subprocess.Popen(
     [sys.executable, str(server_script)],
     cwd=str(plugin_root),
