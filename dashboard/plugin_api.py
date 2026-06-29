@@ -141,20 +141,17 @@ def _schedule_sidecar_restart(delay: float = 3.0) -> None:
     def _restart() -> None:
         _time.sleep(delay)
         script = Path(__file__).resolve().parent.parent / "scripts" / "dashboard_server.py"
-        # Use pythonw.exe on Windows to avoid flashing a console window
-        python_exe = sys.executable
-        if sys.platform == "win32" and not python_exe.lower().endswith("w.exe"):
-            pyw = Path(python_exe).with_name("pythonw.exe")
-            if pyw.is_file():
-                python_exe = str(pyw)
-        detach = (_sp.CREATE_NEW_PROCESS_GROUP | _sp.DETACHED_PROCESS | _sp.CREATE_NO_WINDOW
-                  if sys.platform == "win32" else 0)
+        creationflags = 0
+        if sys.platform == "win32":
+            # CREATE_NO_WINDOW (0x08000000) prevents console allocation for
+            # console applications. More reliable than pythonw.exe which can
+            # still flash a window during Python startup.
+            creationflags = _sp.CREATE_NO_WINDOW
         try:
             child = _sp.Popen(
-                [python_exe, str(script)],
+                [sys.executable, str(script)],
                 stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
-                creationflags=detach if detach else 0,
-                start_new_session=(sys.platform != "win32"),
+                creationflags=creationflags,
             )
         except Exception:
             return  # Popen failed — stay alive, cron will retry
