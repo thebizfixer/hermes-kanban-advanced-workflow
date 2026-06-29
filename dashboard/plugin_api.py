@@ -141,17 +141,19 @@ def _schedule_sidecar_restart(delay: float = 3.0) -> None:
     def _restart() -> None:
         _time.sleep(delay)
         script = Path(__file__).resolve().parent.parent / "scripts" / "dashboard_server.py"
-        creationflags = 0
+        kwargs: dict = {"stdout": _sp.DEVNULL, "stderr": _sp.DEVNULL}
         if sys.platform == "win32":
-            # CREATE_NO_WINDOW (0x08000000) prevents console allocation for
-            # console applications. More reliable than pythonw.exe which can
-            # still flash a window during Python startup.
-            creationflags = _sp.CREATE_NO_WINDOW
+            # STARTF_USESHOWWINDOW + SW_HIDE tells Windows to never show a
+            # window for this process. Works for both console and GUI apps.
+            # CREATE_NO_WINDOW is unreliable on some Windows/Python combos.
+            si = _sp.STARTUPINFO()
+            si.dwFlags |= _sp.STARTF_USESHOWWINDOW
+            si.wShowWindow = _sp.SW_HIDE
+            kwargs["startupinfo"] = si
         try:
             child = _sp.Popen(
                 [sys.executable, str(script)],
-                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
-                creationflags=creationflags,
+                **kwargs,
             )
         except Exception:
             return  # Popen failed — stay alive, cron will retry
