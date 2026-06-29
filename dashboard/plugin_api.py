@@ -908,7 +908,15 @@ def _current_sidecar_pid() -> int | None:
 
 
 def _check_sidecar_staleness(install_dir: Path, git_exe: str | None) -> bool | None:
-    """Return True if sidecar started before last plugin update, False if current, None if unknown."""
+    """Return True if sidecar started before last plugin update, False if current, None if unknown.
+
+    Results are cached for 60 seconds to avoid git commands on every status poll.
+    """
+    cache_key = "sidecar_stale"
+    cached = _cache_get(cache_key, 60.0)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
     try:
         import requests as _rq
         r = _rq.get("http://127.0.0.1:18900/health", timeout=2)
@@ -916,19 +924,24 @@ def _check_sidecar_staleness(install_dir: Path, git_exe: str | None) -> bool | N
         sidecar_commit = data.get("commit")
         sidecar_started = data.get("started_at", 0)
     except Exception:
+        _cache_set(cache_key, None)
         return None
 
     if not git_exe or not sidecar_commit:
+        _cache_set(cache_key, None)
         return None
 
     current_head = _git_HEAD_hash(install_dir, git_exe)
     if current_head and current_head != sidecar_commit:
+        _cache_set(cache_key, True)
         return True
 
     last_commit_ts = _git_last_commit_timestamp(install_dir, git_exe)
     if last_commit_ts and last_commit_ts > sidecar_started:
+        _cache_set(cache_key, True)
         return True
 
+    _cache_set(cache_key, False)
     return False
 
 
