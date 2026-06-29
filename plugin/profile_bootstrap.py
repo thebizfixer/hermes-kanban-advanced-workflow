@@ -370,6 +370,12 @@ def seed_dispatch_profile_skills(
         worker_profile: PROFILE_SKILL_SETS_BY_ROLE["worker"],
         orchestrator_profile: PROFILE_SKILL_SETS_BY_ROLE["orchestrator"],
     }
+    # Add coder profile to the map if it exists
+    if "coder" in PROFILE_SKILL_SETS_BY_ROLE:
+        coder_name = "kanban-advanced-coder"
+        coder_home = _profile_home(hermes_home, coder_name)
+        if coder_home.is_dir():
+            profile_map[coder_name] = PROFILE_SKILL_SETS_BY_ROLE["coder"]
     total = 0
     for profile, allowed_skills in profile_map.items():
         profile_home = _resolve_profile_home(run, hermes_bin, hermes_home, profile, env)
@@ -522,7 +528,7 @@ def reconcile_dispatch_profiles(
     if coder_home.is_dir():
         seed_dispatch_profile_skills(
             run, hermes_bin, hermes_home, skills_src,
-            coder_profile, env=env, log=log,
+            coder_profile, coder_profile, env=env, log=log,
         )
 
     issues = verify_dispatch_profiles(
