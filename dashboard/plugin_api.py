@@ -349,7 +349,7 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
 
     # Stage 2 — Readiness: can the LLM respond?
     try:
-        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=120)
+        r = _run([HERMES_BIN, "-p", profile, "chat", "-q", "say ok"], timeout=30)
         out = (r.stdout + r.stderr).lower()
         if r.returncode == 0:
             return True, ""
@@ -360,7 +360,7 @@ def _check_model_reachable(profile: str) -> tuple[bool | None, str]:
         # Non-zero exit with no diagnostic keywords — treat as unknown (yellow).
         return None, "inconclusive"
     except subprocess.TimeoutExpired:
-        return None, "timed out (20s)"
+        return None, "timed out (30s)"
     except Exception:
         return None, "inconclusive"
 
