@@ -91,6 +91,7 @@ _MANAGED_KEYS = frozenset({
     "preflight_profiles",
     "coding_agent_binary",
     "coding_agent_model",
+    "coding_agent_provider",
     "bundle_path",
     "skills_output_path",
     "plan_memory_path",
@@ -676,6 +677,7 @@ def build_overlay_yaml(
     trigger_branch: str | None,
     coding_agent: str,
     coding_agent_model: str | None = None,
+    coding_agent_provider: str | None = None,
     policy_profile: str = DEFAULT_POLICY_PROFILE,
     notify_lifecycle: str | bool | None = None,
     walk_away_mode: str | bool | None = None,
@@ -724,6 +726,11 @@ def build_overlay_yaml(
         "preflight_profiles": preflight_profiles,
         "coding_agent_binary": coding_agent,
         "coding_agent_model": model_value,
+        "coding_agent_provider": (
+            coding_agent_provider
+            if coding_agent_provider is not None
+            else existing.get("coding_agent_provider", "")
+        ),
         "bundle_path": str(bundle_path),
         "skills_output_path": str(Path(hermes_home) / "skills" / "kanban-advanced"),
         "plan_memory_path": existing.get("plan_memory_path", ".hermes/kanban/memory"),
@@ -739,8 +746,9 @@ def build_overlay_yaml(
     for key, val in managed.items():
         if key == "preflight_profiles":
             lines.append(f'preflight_profiles: "{val}"')
-        elif key in ("schema_version", "policy_profile", "coding_agent_model"):
-            lines.append(f'{key}: "{val}"')
+        elif key in ("schema_version", "policy_profile", "coding_agent_model", "coding_agent_provider"):
+            if val:
+                lines.append(f'{key}: "{val}"')
         elif key in ("notify_lifecycle", "walk_away_mode"):
             lines.append(f"{key}: {val}")
         else:

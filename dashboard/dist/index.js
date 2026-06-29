@@ -224,6 +224,7 @@
     var _useState3b = useState(""), triggerBranch = _useState3b[0], setTriggerBranch = _useState3b[1];
     var _useState4 = useState("hermes"), codingAgent = _useState4[0], setCodingAgent = _useState4[1];
     var _useState4b = useState("auto"), codingAgentModel = _useState4b[0], setCodingAgentModel = _useState4b[1];
+    var _useState4c = useState(""), codingAgentProvider = _useState4c[0], setCodingAgentProvider = _useState4c[1];
     var _useState5 = useState(""), customAgent = _useState5[0], setCustomAgent = _useState5[1];
     var _useState6 = useState(180), maxTurns = _useState6[0], setMaxTurns = _useState6[1];
     var _useState6c = useState(false), maxTurnsTouched = _useState6c[0], setMaxTurnsTouched = _useState6c[1];
@@ -247,6 +248,7 @@
     var _useState19 = useState(null), codingAgentModelOptions = _useState19[0], setCodingAgentModelOptions = _useState19[1];
     var _useState20 = useState(""), codingAgentModelQuery = _useState20[0], setCodingAgentModelQuery = _useState20[1];
     var _useState21 = useState(null), pendingCodingAgentModel = _useState21[0], setPendingCodingAgentModel = _useState21[1];
+    var _useState21b = useState(null), pendingCodingAgentProvider = _useState21b[0], setPendingCodingAgentProvider = _useState21b[1];
     var _useState22 = useState("medium"), pendingReasoningEffort = _useState22[0], setPendingReasoningEffort = _useState22[1];
     var _useState23 = useState("medium"), initialReasoningEffort = _useState23[0], setInitialReasoningEffort = _useState23[1];
     var _useState24 = useState(true), notifyLifecycle = _useState24[0], setNotifyLifecycle = _useState24[1];
@@ -292,6 +294,7 @@
 
     function codingAgentModelDisplay() {
       if (!codingAgentModel) return "(select a model)";
+      var label = codingAgentModel;
       if (codingAgentModel === "auto") {
         if (codingAgentModelOptions && codingAgentModelOptions._autoLabel) {
           return codingAgentModelOptions._autoLabel;
@@ -301,7 +304,8 @@
         }
         return "auto (profile config)";
       }
-      return codingAgentModel;
+      if (codingAgentProvider) label = codingAgentProvider + " / " + label;
+      return label;
     }
 
     function validateCodingAgentSelection() {
@@ -319,7 +323,9 @@
       if (!binary) return;
       // Default to "auto" for all binaries — the backend resolves it
       setCodingAgentModel("auto");
+      setCodingAgentProvider("");
       setPendingCodingAgentModel(null);
+      setPendingCodingAgentProvider(null);
       setCodingAgentModelQuery("");
       setCodingAgentModelOptions(null);
       // For hermes, the model catalog is loaded lazily in openCodingAgentModelPicker
@@ -337,6 +343,7 @@
 
     function onCodingAgentBinaryChange(next) {
       setCodingAgent(next);
+      setCodingAgentProvider("");
       setCodingAgentTouched(true);
       codingAgentTouchedRef.current = true;
       if (next === "__custom__") {
@@ -371,6 +378,8 @@
         }
         if (s.coding_agent_model) setCodingAgentModel(s.coding_agent_model);
         else setCodingAgentModel("auto");
+        if (s.coding_agent_provider) setCodingAgentProvider(s.coding_agent_provider);
+        else setCodingAgentProvider("");
       }
       if (s.max_turns && !maxTurnsTouchedRef.current) setMaxTurns(s.max_turns);
       if (!policyTouchedRef.current) {
@@ -564,6 +573,7 @@
         working_branch: workingBranch.trim() || (status && status.default_working_branch) || "main",
         coding_agent_binary: agent,
         coding_agent_model: (codingAgentModel || "auto").trim() || "auto",
+        coding_agent_provider: (codingAgentProvider || "").trim(),
         max_turns: parseInt(maxTurns) || 180,
         trigger_branch: triggerBranch.trim(),
         policy_profile: policyProfile,
@@ -806,6 +816,7 @@
       if (codingAgentModelSelectionBlocked()) return;
       var binary = resolvedCodingBinary();
       setPendingCodingAgentModel(codingAgentModel || null);
+      setPendingCodingAgentProvider(codingAgentProvider || null);
       setCodingAgentModelQuery("");
       setEditingCodingAgentModel(true);
       if (binary === "hermes") {
@@ -832,10 +843,12 @@
     function applyCodingAgentModelChoice() {
       if (!pendingCodingAgentModel) return;
       setCodingAgentModel(pendingCodingAgentModel);
+      if (pendingCodingAgentProvider) setCodingAgentProvider(pendingCodingAgentProvider);
       setCodingAgentTouched(true);
       codingAgentTouchedRef.current = true;
       setEditingCodingAgentModel(false);
       setPendingCodingAgentModel(null);
+      setPendingCodingAgentProvider(null);
     }
 
     function profileEffortSuffix(info) {
@@ -1409,7 +1422,7 @@
                         return React.createElement("div", {
                           key: fullId,
                           className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (isSel ? " bg-accent/10" : ""),
-                          onClick: function () { setPendingCodingAgentModel(fullId); }
+                          onClick: function () { setPendingCodingAgentModel(fullId); setPendingCodingAgentProvider(provId || ""); }
                         },
                           React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, isSel ? "✓" : ""),
                           React.createElement("span", { className: "flex-1 truncate font-mono" }, modelLabel),
@@ -1422,7 +1435,7 @@
                   var autoEntry = React.createElement("div", {
                     key: "__auto__",
                     className: "flex items-center gap-2 px-4 py-1.5 text-xs cursor-pointer hover:bg-accent/10 transition-colors" + (pendingCodingAgentModel === "auto" ? " bg-accent/10" : ""),
-                    onClick: function () { setPendingCodingAgentModel("auto"); }
+                    onClick: function () { setPendingCodingAgentModel("auto"); setPendingCodingAgentProvider(""); }
                   },
                     React.createElement("span", { className: "w-3 h-3 shrink-0 flex items-center justify-center text-[10px]" }, pendingCodingAgentModel === "auto" ? "✓" : ""),
                     React.createElement("span", { className: "flex-1 truncate font-mono" }, codingAgentModelDisplay())

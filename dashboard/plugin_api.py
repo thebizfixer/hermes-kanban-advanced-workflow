@@ -40,6 +40,7 @@ from plugin.config_overlay import (  # noqa: E402
     resolve_branch_settings,
     resolve_coding_agent,
     resolve_coding_agent_model,
+    resolve_coding_agent_provider,
     resolve_dispatch_profiles,
     resolve_hermes_home,
     resolve_notify_lifecycle,
@@ -1029,6 +1030,7 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
 
     coding_agent = resolve_coding_agent(project_root, env=env)
     coding_agent_model = resolve_coding_agent_model(project_root, env=env)
+    coding_agent_provider = resolve_coding_agent_provider(project_root, env=env)
     if probe:
         # Submit to background executor instead of blocking the status response
         if coding_agent not in _inflight_probes:
@@ -1074,6 +1076,7 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         "coding_agent": coding_agent,
         "coding_agent_binary": coding_agent,
         "coding_agent_model": coding_agent_model,
+        "coding_agent_provider": coding_agent_provider,
         "coding_agent_cli": coding_agent_cli,
         "available_coding_binaries": get_available_coding_binaries(),
         "policy_profile": resolve_policy_profile(project_root, env=env),
@@ -1438,6 +1441,7 @@ def _execute_init(body: dict, output: list[str]) -> dict:
             trigger_branch=trigger_branch,
             coding_agent=coding_agent,
             coding_agent_model=coding_agent_model,
+            coding_agent_provider=coding_agent_provider,
             policy_profile=policy_profile,
             notify_lifecycle=notify_lifecycle,
             walk_away_mode=walk_away_mode,
@@ -1580,6 +1584,10 @@ def _execute_save(body: dict, output: list[str]) -> dict:
         coding_agent_model = normalize_coding_agent_model(body.get("coding_agent_model"))
     else:
         coding_agent_model = resolve_coding_agent_model(project_root, env=env)
+    if "coding_agent_provider" in body:
+        coding_agent_provider = (body.get("coding_agent_provider") or "").strip()
+    else:
+        coding_agent_provider = resolve_coding_agent_provider(project_root, env=env)
     if "policy_profile" in body:
         policy_profile = normalize_policy_profile(body.get("policy_profile"))
     else:
@@ -1637,6 +1645,7 @@ def _execute_save(body: dict, output: list[str]) -> dict:
             trigger_branch=trigger_branch,
             coding_agent=coding_agent,
             coding_agent_model=coding_agent_model,
+            coding_agent_provider=coding_agent_provider,
             policy_profile=policy_profile,
             notify_lifecycle=notify_lifecycle,
             walk_away_mode=walk_away_mode,
@@ -1655,6 +1664,7 @@ def _execute_save(body: dict, output: list[str]) -> dict:
             "HERMES_ENABLE_PROJECT_PLUGINS": "true",
             "KANBAN_CODING_AGENT": coding_agent,
             "KANBAN_CODING_AGENT_MODEL": coding_agent_model,
+            "KANBAN_CODING_AGENT_PROVIDER": coding_agent_provider,
             "KANBAN_POLICY_PROFILE": policy_profile,
         },
     )
