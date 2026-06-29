@@ -11,6 +11,7 @@ CANONICAL_PLAN_DIR = ".hermes/kanban/plans"
 
 DEFAULT_PLAN_SEARCH_DIRS: tuple[str, ...] = (
     CANONICAL_PLAN_DIR,
+    "test-plan",
     ".agent/plans",
     ".claude/plans",
     ".codex/plans",
