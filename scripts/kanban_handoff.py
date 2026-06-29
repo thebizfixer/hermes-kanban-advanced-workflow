@@ -703,40 +703,7 @@ def _gate_card_body(plan_id: str) -> str:
     )
 
 
-def _parallel_gate_step1_block(
-    plan_id: str,
-    repo_root: Path,
-    working_branch: str,
-    bundle: str,
-    gate_script: Path | None,
-) -> str:
-    """Runbook Step 1 when parallel gate is deferred from handoff build."""
-    gate_path = (
-        gate_script.resolve().as_posix()
-        if gate_script
-        else f"{bundle}/scripts/pre_dispatch_gate.sh"
-    )
-    hermes_home = os.environ.get("HERMES_HOME", str(Path.home() / ".hermes"))
-    plan_memory = f"{repo_root.as_posix()}/.hermes/kanban/memory"
-    return f"""### Step 1 — Pre-dispatch gate (parallel default)
 
-Pre-check delegation (serial fallback when missing):
-```bash
-hermes tools list 2>/dev/null | grep -q delegation || use_serial_gate=1
-```
-
-When delegation is available, run parallel subagent gate per `skill_view` § Pre-dispatch gate:
-- Templates: `{bundle}/plugin/data/prompts/gate-subagent-plan.md`, `gate-subagent-env.md`, `gate-subagent-infra.md`
-- Substitute: REPO_ROOT={repo_root.as_posix()}, PLAN_ID={plan_id}, BUNDLE_PATH={bundle}, WORKING_BRANCH={working_branch}, PLAN_MEMORY_PATH={plan_memory}, HERMES_HOME={hermes_home}
-
-Wave 1: delegate_task plan/env/infra domains in parallel (`toolsets: ["terminal"]` only).
-Wave 2: collect JSON; on blocking fail, timeout (E022), or malformed output → serial fallback:
-```bash
-bash {gate_path} {plan_id}
-```
-
-Then attestation + coding_agent_auth_prewarm serially (same as parallel-subagent-gate.md).
-**Do not proceed to Step 2 until gate passes.**"""
 
 
 def _create_plan_board(plan_id: str) -> str:
@@ -844,9 +811,9 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
         )
         gate_skip = (
             f"pre_dispatch_gate status: {gate_status}\n\n"
-            "**Step 1:** Try parallel subagent gate when `delegation` is available "
-            "(see skill § Pre-dispatch gate). On parallel fail or when delegation is missing, "
-            f"run serial fallback:\n```bash\nbash {gate_path} {plan_id}\n```\n"
+            "**Step 1 — Pre-dispatch gate:** re-run serial gate "
+            f"(parallel subagent gate runs in handoff, not in worker session):\n"
+            f"```bash\nbash {gate_path} {plan_id}\n```\n"
             "Resolve failures before Step 2."
         )
     else:
