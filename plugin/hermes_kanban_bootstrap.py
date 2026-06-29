@@ -6,6 +6,7 @@ import subprocess
 from collections.abc import Callable
 
 DISPATCH_STALE_TIMEOUT_SECONDS = "14400"
+FAILURE_LIMIT = "5"
 
 
 def apply_hermes_kanban_bootstrap_config(
@@ -44,4 +45,21 @@ def apply_hermes_kanban_bootstrap_config(
         _log(
             "   !  Could not set kanban.dispatch_stale_timeout_seconds — set manually: "
             f"hermes config set kanban.dispatch_stale_timeout_seconds {DISPATCH_STALE_TIMEOUT_SECONDS}"
+        )
+
+    r_fl = run(
+        [
+            hermes_bin,
+            "config",
+            "set",
+            "kanban.failure_limit",
+            FAILURE_LIMIT,
+        ]
+    )
+    if r_fl.returncode == 0:
+        _log(f"   OK kanban.failure_limit = {FAILURE_LIMIT}")
+    else:
+        _log(
+            "   !  Could not set kanban.failure_limit — set manually: "
+            f"hermes config set kanban.failure_limit {FAILURE_LIMIT}"
         )

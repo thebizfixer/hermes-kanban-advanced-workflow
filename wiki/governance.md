@@ -289,7 +289,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_
 python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace> --check-only
 ```
 
-`--check-only` (added 2026-06-25) runs all eval steps and reports pass/fail without calling `kanban block` or `kanban complete`. Workers retry up to 3× with `--check-only` before blocking (matches `kanban.failure_limit`). See `eval-chain-retry-hardening` plan.
+`--check-only` (added 2026-06-25) runs all eval steps and reports pass/fail without calling `kanban block` or `kanban complete`. Workers retry up to 3× with `--check-only` before blocking (kanban-advanced sets `kanban.failure_limit` to **5** at bootstrap to allow the full retry cycle; upstream default of 2 would escalate to `triage` prematurely). See `eval-chain-retry-hardening` plan.
 
 **Cold path (coding cards):**
 

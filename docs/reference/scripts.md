@@ -235,7 +235,7 @@ python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_
 python hermes-kanban-advanced-workflow/scripts/kanban_evaluation_chain.py <task_id> <workspace> --check-only
 ```
 
-`--check-only` runs all eval steps and reports pass/fail via exit code without calling `hermes kanban block` or `hermes kanban complete`. Workers use this for retry-safe verification (retry up to 3× before blocking, matching `kanban.failure_limit`). Without `--check-only`, the existing auto-block/auto-complete behavior is preserved.
+`--check-only` runs all eval steps and reports pass/fail via exit code without calling `hermes kanban block` or `hermes kanban complete`. Workers use this for retry-safe verification (retry up to 3× before blocking; `kanban.failure_limit` is set to 5 at bootstrap to allow the full retry cycle). Without `--check-only`, the existing auto-block/auto-complete behavior is preserved.
 
 9-step Deterministic Adjudication Lattice (AEP DAL pattern). Each step returns ALLOW/DENY with canonical error code:
 

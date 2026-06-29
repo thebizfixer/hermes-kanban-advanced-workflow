@@ -240,7 +240,7 @@ Hermes Agent v0.15.0 added several kanban config keys under the `kanban:` sectio
 | `kanban.orchestrator_profile` | `""` | Profile that handles triage decomposition. Falls back to default profile. Set to your orchestrator profile name. |
 | `kanban.default_assignee` | `""` | Fallback assignee when decomposer can't match a profile. |
 | `kanban.dispatch_stale_timeout_seconds` | **`0` (disabled)** in many upstream installs — **not** read from `kanban-config.yaml` | Reclaim `running` tasks with no heartbeat for this many seconds. Bootstrap sets **`14400` (4h)**. `0` disables. Rationale: [dispatch-stale-timeout.md](../plugin/data/references/dispatch-stale-timeout.md). |
-| `kanban.failure_limit` | `2` | Auto-block after N consecutive non-success attempts (spawn_failed, timed_out, crashed). Built-in circuit-breaker. |
+| `kanban.failure_limit` | `5` | Auto-block after N consecutive non-success attempts (spawn_failed, timed_out, crashed). Built-in circuit-breaker. **kanban-advanced requires ≥ 5** — set at init/bootstrap. Lower values cause Hermes core to escalate cards to `triage` before the plugin's escalation tracker can manage retries. See `plugin/data/references/dispatch-stale-timeout.md` for the bootstrap key. |
 | `kanban.worker_log_rotate_bytes` | `2097152` | Worker log rotation size (2 MiB default). |
 | `kanban.worker_log_backup_count` | `1` | Number of rotated worker log backups to keep. |
 
