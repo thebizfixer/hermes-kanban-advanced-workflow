@@ -424,6 +424,7 @@
           keepProbeGreen: sessionGreen
         });
         setLoading(false);
+        setStatusProbing(false);  // plugin update check done — banner resolves, probes continue in background
 
         // Submit all probes immediately — the backend's single-threaded
         // executor serializes them, no need for frontend staggering.
@@ -734,17 +735,29 @@
       });
     }
 
+    // ═══════════════════════════════════════════════════════════════
+    // Banner / button state — SEPARATED from badge resolution.
+    //   statusProbing: gates the plugin update check (git fetch, ~15s).
+    //     When false, banner shows actual plugin state and Update/Restart
+    //     button is enabled. Must be set false after git status arrives.
+    //   probesPending: gates profile badge display only. Badges show
+    //     "checking…" until probes complete. Does NOT gate the banner
+    //     or the Update/Restart button. Probes resolve independently.
+    //   Do NOT re-couple these — coupling makes the banner wait for
+    //     slow model probes (minutes) before showing plugin status.
+    // ═══════════════════════════════════════════════════════════════
     function initializedLabel() {
       if (!statusInitialized) return "Not initialized";
-      if (statusProbing || probesPending) return "Initialized (Checking for updates)";
+      if (statusProbing) return "Initialized (Checking for updates)";
       if (status && status.plugin_can_update && status.plugin_update_available) return "Initialized (Update Plugin)";
       if (status && status.plugin_can_update && status.sidecar_stale === true) return "Initialized (Restart Plugin)";
       if (status && status.plugin_can_update && status.plugin_up_to_date === true) return "Initialized (Up-to-date)";
+      if (probesPending) return "Initialized";
       return "Initialized";
     }
 
     var pluginUpdateDisabled = !status || !status.plugin_can_update
-      || pluginUpdating || sidecarRestarting || bootstrapping || statusProbing || probesPending;
+      || pluginUpdating || sidecarRestarting || bootstrapping || statusProbing;
 
     // ── Model selector ──
     function openModelPicker(profileName) {

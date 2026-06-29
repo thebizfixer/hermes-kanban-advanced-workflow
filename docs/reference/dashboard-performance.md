@@ -35,6 +35,8 @@ Browser (dashboard tab)
 - `/profiles/{name}/probe` — enqueues a model reachability probe (202 Accepted, non-blocking)
 - `/coding-agent/probe` — enqueues a coding agent CLI smoke test
 
+**Banner vs badges — separated:** The plugin update check (git fetch, sidecar staleness) resolves independently from profile model badges. The status banner updates to "Up-to-date" / "Update Plugin" / "Restart Plugin" as soon as git status is fetched (~15s). Profile badges ("reachable", "configured", "checking…") resolve in the background via probes and do not block the banner or the Update/Restart button.
+
 **Probe lifecycle:**
 1. Frontend submits probe requests (fire-and-forget, 202)
 2. Backend `ThreadPoolExecutor(max_workers=1)` processes them serially
