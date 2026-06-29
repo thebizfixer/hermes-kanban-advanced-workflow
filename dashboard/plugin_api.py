@@ -606,7 +606,10 @@ def _check_profiles(
         model_cfg = read_model_config_from_config_show(stdout)
         if profile_has_model_config(model_cfg):
             coder_info["has_model"] = True
-            coder_info["model"] = model_cfg.get("default", "")
+            model = model_cfg.get("default", "")
+            if isinstance(model, dict):
+                model = model.get("default", str(model))
+            coder_info["model"] = model if isinstance(model, str) else str(model)
         if model_cfg.get("provider"):
             coder_info["provider"] = model_cfg["provider"]
         reasoning = read_reasoning_effort_from_config_show(stdout)
