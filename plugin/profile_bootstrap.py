@@ -52,6 +52,27 @@ NO_BUNDLED_SKILLS_TEXT = (
 # so operator key updates propagate to dispatch profiles on Update Plugin / re-init.
 # config.yaml is NOT synced — each profile manages its own model/max_turns config
 # through the dashboard or hermes config set.
+
+
+def _ensure_external_dirs(profile_home: Path) -> None:
+    """Ensure skills.external_dirs points to the kanban-advanced skill directory."""
+    config_file = profile_home / "config.yaml"
+    if not config_file.is_file():
+        return
+    try:
+        import yaml
+        with open(config_file) as f:
+            config = yaml.safe_load(f) or {}
+        dirs = config.get("skills", {}).get("external_dirs", [])
+        target = "${HERMES_HOME}/skills/kanban-advanced"
+        # Check if already present (as variable or absolute path)
+        already = any("skills/kanban-advanced" in str(d) for d in dirs)
+        if not already:
+            config.setdefault("skills", {})["external_dirs"] = dirs + [target]
+            with open(config_file, "w") as f:
+                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    except Exception:
+        pass
 _PROFILE_CONFIG_FILES = (".env", "auth.json")
 
 # plugin/data/prompts/*.md → profiles/<name>/SOUL.md
@@ -492,6 +513,8 @@ def reconcile_dispatch_profiles(
     coder_home = _profile_home(hermes_home, coder_profile)
     if coder_home.is_dir():
         _copy_profile_config_from_default(hermes_home, coder_profile)
+        # Ensure external_dirs is set for skill discovery
+        _ensure_external_dirs(coder_home)
     log("   OK Synced config.yaml + .env + auth.json from default profile")
 
     env = _home_env(hermes_home)
