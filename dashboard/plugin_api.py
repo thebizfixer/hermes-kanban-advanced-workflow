@@ -124,7 +124,7 @@ def _invalidate_status_cache() -> None:
         _status_cache.clear()
 
 
-def _schedule_sidecar_restart(delay: float = 2.0) -> None:
+def _schedule_sidecar_restart(delay: float = 3.0) -> None:
     """Schedule a sidecar process restart after *delay* seconds.
 
     Spawns a replacement sidecar as a detached child process, verifies it
@@ -1698,7 +1698,7 @@ def update_plugin():
     if behind_before == 0:
         output.append("   OK Already up to date")
         output.append("   ... Restarting sidecar — dashboard will reconnect in ~3 seconds")
-        old_pid = _current_sidecar_pid()
+        old_pid = os.getpid()
         _schedule_sidecar_restart()
         _invalidate_status_cache()
         return {
@@ -1747,7 +1747,7 @@ def update_plugin():
     output.append("OK Plugin updated")
     output.append("   ... Restarting sidecar — dashboard will reconnect in ~3 seconds")
     _invalidate_status_cache()
-    old_pid = _current_sidecar_pid()
+    old_pid = os.getpid()
     _schedule_sidecar_restart()
 
     return {
