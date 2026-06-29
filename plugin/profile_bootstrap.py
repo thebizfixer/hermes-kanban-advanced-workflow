@@ -481,6 +481,11 @@ def reconcile_dispatch_profiles(
     # propagate to dispatch profiles on Update Plugin / re-init.
     for profile_name in (worker_profile, orchestrator_profile):
         _copy_profile_config_from_default(hermes_home, profile_name)
+    # Also sync coder profile if it exists
+    coder_profile = "kanban-advanced-coder"
+    coder_home = _profile_home(hermes_home, coder_profile)
+    if coder_home.is_dir():
+        _copy_profile_config_from_default(hermes_home, coder_profile)
     log("   OK Synced config.yaml + .env + auth.json from default profile")
 
     env = _home_env(hermes_home)

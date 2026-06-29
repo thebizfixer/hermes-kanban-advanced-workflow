@@ -557,15 +557,9 @@ def _check_profiles(
                     else:
                         info["model_reachable"] = cached
                 elif probe_models:
-                    # Submit to background executor instead of blocking the
-                    # status response. The per-profile probe endpoint runs
-                    # probes serially (single-thread executor), avoiding
-                    # concurrent API calls. Cache is updated as probes complete;
-                    # frontend polls /status to pick up results.
                     if profile not in _inflight_probes:
                         _inflight_probes.add(profile)
                         _probe_executor.submit(_run_probe, profile)
-                    # Show last known result while probe runs (use extended TTL)
                     stale = _cache_get(cache_key, _PROBE_CIRCUIT_COOLDOWN)
                     if stale is not None:
                         info["probed"] = True
@@ -576,6 +570,34 @@ def _check_profiles(
                             info["model_reachable"] = stale
 
         result[profile] = info
+
+    # Also include coder profile when it exists (created by Strategy B)
+    coder_profile = DEFAULT_CODER_PROFILE
+    if _profile_exists_in_hermes(coder_profile, profiles_output):
+        coder_info = {
+            "exists": True,
+            "has_model": False,
+            "model": "",
+            "provider": "",
+            "model_reachable": None,
+            "model_reachability_detail": "",
+            "probed": False,
+            "reasoning_effort": "medium",
+            "reasoning_effort_configured": False,
+            "reasoning_effort_source": "default",
+            "recommended_reasoning_effort": "medium",
+        }
+        stdout = _profile_config_show(coder_profile, cached=config_show_cache.get(coder_profile))
+        model_cfg = read_model_config_from_config_show(stdout)
+        if profile_has_model_config(model_cfg):
+            coder_info["has_model"] = True
+            coder_info["model"] = model_cfg.get("default", "")
+        if model_cfg.get("provider"):
+            coder_info["provider"] = model_cfg["provider"]
+        reasoning = read_reasoning_effort_from_config_show(stdout)
+        coder_info.update(reasoning)
+        result[coder_profile] = coder_info
+
     return result
 
 
