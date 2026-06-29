@@ -783,7 +783,7 @@ def _archive_prior_boards(plan_id: str) -> int:
             # Only archive if board appears empty
             if '(empty)' in line or '(no matching tasks)' in line:
                 subprocess.run(
-                    ["hermes", "kanban", "boards", "archive", slug],
+                    ["hermes", "kanban", "boards", "rm", slug],
                     capture_output=True, timeout=10
                 )
                 count += 1
@@ -798,7 +798,7 @@ def _archive_board(slug: str) -> bool:
         return False
     try:
         r = subprocess.run(
-            ["hermes", "kanban", "boards", "archive", slug],
+            ["hermes", "kanban", "boards", "rm", slug],
             capture_output=True, text=True, timeout=10
         )
         return r.returncode == 0

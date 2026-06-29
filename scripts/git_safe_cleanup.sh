@@ -363,7 +363,7 @@ if [[ -n "$PLAN_ID" ]]; then
             echo "[dry-run] Would archive board: $_sb"
         else
             echo "ARCHIVE board: $_sb"
-            hermes kanban boards archive "$_sb" 2>/dev/null && green "  → Archived" || yellow "  → Could not archive"
+            hermes kanban boards rm "$_sb" 2>/dev/null && green "  → Archived" || yellow "  → Could not archive"
         fi
     done
 fi
