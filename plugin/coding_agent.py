@@ -307,8 +307,20 @@ def is_contested_binary_name(name: str) -> bool:
     return claimants > 1
 
 
+# ── Module-level cache for get_available_coding_binaries ──
+_binaries_cache: list | None = None
+_binaries_cache_time: float = 0.0
+
+
 def get_available_coding_binaries() -> list[dict[str, str | bool]]:
-    """Supported commands currently on PATH for init/dashboard pickers."""
+    """Supported commands currently on PATH for init/dashboard pickers.
+
+    Results are cached for 300s. Invalidated via invalidate_coding_binaries_cache().
+    """
+    global _binaries_cache, _binaries_cache_time
+    now = time.monotonic()
+    if _binaries_cache is not None and (now - _binaries_cache_time) < 300.0:
+        return _binaries_cache
     results: list[dict[str, str | bool]] = []
     seen: set[str] = set()
 
@@ -335,7 +347,16 @@ def get_available_coding_binaries() -> list[dict[str, str | bool]]:
                         "contested": False,
                     }
                 )
+    _binaries_cache = results
+    _binaries_cache_time = now
     return results
+
+
+def invalidate_coding_binaries_cache() -> None:
+    """Clear the cached coding binary list (called on init/save/update)."""
+    global _binaries_cache, _binaries_cache_time
+    _binaries_cache = None
+    _binaries_cache_time = 0.0
 
 
 def resolve_binary_executable(binary: str) -> str | None:

@@ -409,12 +409,18 @@
       // for 5 min, so repeated calls are cheap.
       setStatusProbing(true);
       setLoading(true);
-      return apiStatus().then(function (s) {
+      return Promise.all([
+        apiStatus(),
+        apiStatus("git_fetch=1")
+      ]).then(function (results) {
+        var s = results[0];
+        var gitStatus = results[1];
         var merged = cached && cached.data ? mergeStatusFields(cached.data, s) : s;
+        merged = mergeStatusFields(merged, gitStatus);
         setStatus(merged);
         if (!opts.skipApply) applyStatusToForm(merged);
         writeSessionStatus(merged, {
-          keepProbedAt: sessionGreen ? cached.probedAt : 0,
+          keepProbedAt: sessionGreen && cached ? cached.probedAt : 0,
           keepProbeGreen: sessionGreen
         });
         setLoading(false);
@@ -428,10 +434,10 @@
         });
         apiFetch("/api/plugins/kanban-advanced/coding-agent/probe", { method: "POST" });
 
-        // Start polling immediately — badges show "checking…" until
-        // every profile + coding agent has a probed result.
+        // Start polling — badges show "checking…" until every profile
+        // + coding agent has a probed result.
         var pollAttempts = 0;
-        var maxPollAttempts = 90; // 180 seconds max (3 probes × 60s typical)
+        var maxPollAttempts = 30; // 90 seconds max (3 probes × 30s typical)
         var pollInterval = setInterval(function () {
           pollAttempts++;
             apiStatus().then(function (fresh) {
@@ -462,22 +468,7 @@
                 setProbesPending(false);
               }
             });
-          }, 2000);
-
-        return apiStatus("git_fetch=1").then(function (gitStatus) {
-            var complete = mergeStatusFields(merged, gitStatus);
-            setStatus(complete);
-            if (!opts.skipApply) applyStatusToForm(complete);
-            writeSessionStatus(complete, {
-              keepProbedAt: sessionGreen && cached ? cached.probedAt : 0,
-              keepProbeGreen: sessionGreen
-            });
-            setStatusProbing(false);
-            return complete;
-          }).catch(function () {
-            setStatusProbing(false);
-            return merged;
-          });
+          }, 3000);
 
       }).catch(function (e) {
         setLoading(false);

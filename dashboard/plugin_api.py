@@ -65,6 +65,7 @@ from plugin.coding_agent import (  # noqa: E402
     SMOKE_TIMEOUT_SECONDS,
     check_coding_agent_cli,
     get_available_coding_binaries,
+    invalidate_coding_binaries_cache,
     is_contested_binary_name,
     list_models_for_binary,
     model_display_label,
@@ -122,6 +123,7 @@ def _cache_set(key: str, value: object) -> None:
 def _invalidate_status_cache() -> None:
     with _status_cache_lock:
         _status_cache.clear()
+    invalidate_coding_binaries_cache()
 
 
 def _schedule_sidecar_restart(delay: float = 3.0) -> None:
@@ -384,9 +386,10 @@ def _run_probe(profile: str) -> None:
         {"reachable": reachable, "detail": detail},
     )
 
-    # Inter-probe cooldown — gives the gateway breathing room between
-    # sequential probes so the next one doesn't time out immediately.
-    time.sleep(15)
+    # Minimal inter-probe cooldown — prevents back-to-back provider calls
+    # from triggering rate limits on the same API endpoint. 3s is sufficient
+    # to clear most per-second token budgets without adding noticeable latency.
+    time.sleep(3)
 
     _inflight_probes.discard(profile)
 
@@ -437,9 +440,8 @@ def _run_coding_agent_probe(binary: str, model: str | None) -> None:
         {"reachable": cli.get("model_reachable"), "probed": True},
     )
 
-    # Inter-probe cooldown — gives the gateway breathing room between
-    # sequential probes so the next one doesn't time out immediately.
-    time.sleep(15)
+    # Minimal inter-probe cooldown (see _run_probe for rationale)
+    time.sleep(3)
 
     _inflight_probes.discard(binary)
 
@@ -500,21 +502,31 @@ def _check_profiles(
     *,
     probe_models: bool = False,
     config_show_cache: dict[str, str] | None = None,
+    config: dict | None = None,
 ) -> dict:
     result = {}
     config_show_cache = config_show_cache or {}
     if project_root is None:
         project_root = resolve_project_root()
-    worker_profile, orchestrator_profile, _ = resolve_dispatch_profiles(
-        read_overlay_config(overlay_path(project_root))
-    )
+    if config is not None:
+        worker_profile = config.get("worker_profile") or (config.get("dispatch_profiles") or {}).get("worker", DEFAULT_WORKER_PROFILE)
+        orchestrator_profile = config.get("orchestrator_profile") or (config.get("dispatch_profiles") or {}).get("orchestrator", DEFAULT_ORCHESTRATOR_PROFILE)
+    else:
+        worker_profile, orchestrator_profile, _ = resolve_dispatch_profiles(
+            read_overlay_config(overlay_path(project_root))
+        )
     try:
-        r = _run([HERMES_BIN, "profile", "list"])
-        profiles_output = r.stdout
+        cached_profiles = _cache_get("hermes_profile_list", 60.0)
+        if cached_profiles is not None:
+            profiles_output = cached_profiles
+        else:
+            r = _run([HERMES_BIN, "profile", "list"])
+            profiles_output = r.stdout
+            _cache_set("hermes_profile_list", profiles_output)
     except Exception:
         profiles_output = ""
 
-    for profile in _dispatch_profile_list(project_root):
+    for profile in (worker_profile, orchestrator_profile):
         info: dict = {
             "exists": _profile_exists_in_hermes(profile, profiles_output),
             "has_model": False,
@@ -602,13 +614,16 @@ def _check_profiles(
 
 
 def _check_gateway() -> dict:
+    cached = _cache_get("gateway_status", 30.0)
+    if cached is not None:
+        return cached
     try:
         r = _run([HERMES_BIN, "gateway", "status"], timeout=10)
-        running = r.returncode == 0
-        outdated = "outdated" in r.stdout.lower()
-        return {"running": running, "outdated": outdated}
+        result = {"running": r.returncode == 0, "outdated": "outdated" in r.stdout.lower()}
     except Exception:
-        return {"running": False, "outdated": False}
+        result = {"running": False, "outdated": False}
+    _cache_set("gateway_status", result)
+    return result
 
 
 def _get_max_turns(
@@ -1025,10 +1040,17 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
     if configured_branch:
         detected_branch = configured_branch
     else:
-        detected_branch = detect_default_working_branch(project_root) or "main"
+        branch_cache_key = f"default_working_branch:{project_root}"
+        cached_branch = _cache_get(branch_cache_key, 600.0)
+        if cached_branch is not None:
+            detected_branch = cached_branch
+        else:
+            detected_branch = detect_default_working_branch(project_root) or "main"
+            _cache_set(branch_cache_key, detected_branch)
 
     worker_profile, orchestrator_profile, _ = resolve_dispatch_profiles(config)
     orch_config_show = _profile_config_show(orchestrator_profile)
+    worker_config_show = _profile_config_show(worker_profile)
 
     return {
         "config_exists": config_exists,
@@ -1057,7 +1079,8 @@ def _build_status(*, probe: bool = False, git_fetch: bool = False) -> dict:
         "profiles": _check_profiles(
             project_root,
             probe_models=probe,
-            config_show_cache={orchestrator_profile: orch_config_show},
+            config_show_cache={orchestrator_profile: orch_config_show, worker_profile: worker_config_show},
+            config=config,
         ),
         "dispatch_profiles": {
             "worker": worker_profile,
