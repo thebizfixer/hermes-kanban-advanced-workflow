@@ -621,7 +621,7 @@ def _handle_init(args) -> int:
             )
             if "kanban-dashboard-keepalive" not in (existing.stdout or ""):
                 subprocess.run([
-                    HERMES_BIN, "cron", "create", "60s",
+                    HERMES_BIN, "cron", "create", "every 1m",
                     "--name", "kanban-dashboard-keepalive",
                     "--no-agent",
                     "--script", "dashboard_server_keepalive.sh",
