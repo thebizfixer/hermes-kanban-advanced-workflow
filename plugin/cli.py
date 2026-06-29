@@ -620,15 +620,20 @@ def _handle_init(args) -> int:
                 timeout=15,
             )
             if "kanban-dashboard-keepalive" not in (existing.stdout or ""):
-                subprocess.run([
+                r = subprocess.run([
                     HERMES_BIN, "cron", "create", "every 1m",
                     "--name", "kanban-dashboard-keepalive",
                     "--no-agent",
                     "--script", "dashboard_server_keepalive.sh",
                     "--deliver", "local",
                     "--repeat", "999",
-                ], env={**os.environ, "HERMES_HOME": str(hermes_home)}, timeout=15)
-                print(f"   OK Keepalive cron registered (crash recovery every 60s)")
+                ], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                   env={**os.environ, "HERMES_HOME": str(hermes_home)}, timeout=15)
+                if r.returncode == 0:
+                    print(f"   OK Keepalive cron registered (crash recovery every 60s)")
+                else:
+                    err = (r.stderr or r.stdout or "unknown error").strip()[:200]
+                    print(f"   !  Could not register keepalive cron: {err}")
             else:
                 print(f"   OK Keepalive cron already registered")
         except Exception as exc:
