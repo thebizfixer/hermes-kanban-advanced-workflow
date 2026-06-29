@@ -672,7 +672,11 @@ def _resolve_git_executable() -> str | None:
 
 def _git_fetch_origin(install_dir: Path, git_exe: str) -> None:
     try:
-        _run([git_exe, "fetch", "origin", "--quiet"], timeout=15, cwd=str(install_dir))
+        _run(
+            [git_exe, "-c", "credential.helper=", "fetch", "origin", "--quiet"],
+            timeout=15, cwd=str(install_dir),
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
     except Exception:
         pass
 
@@ -1725,10 +1729,19 @@ def update_plugin():
 
     behind_before = _git_behind_count(install_dir, git_exe)
     if behind_before is None:
+        # Git unreachable — still allow sidecar restart (user's primary intent)
+        output.append("   !  Could not reach git remote — restarting sidecar anyway")
+        output.append("   ... Restarting sidecar — dashboard will reconnect in ~3 seconds")
+        old_pid = os.getpid()
+        _schedule_sidecar_restart()
+        _invalidate_status_cache()
         return {
-            "success": False,
-            "error": "Could not determine upstream — check git remote and tracking branch.",
+            "success": True,
+            "unchanged": True,
+            "restart_initiated": True,
+            "restart_previous_pid": old_pid,
             "output": output,
+            **_plugin_git_status_after_update(install_dir, git_exe),
         }
 
     if behind_before == 0:
