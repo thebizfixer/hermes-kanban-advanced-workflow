@@ -20,7 +20,9 @@ WORKER_PROFILE="${WORKER_PROFILE:-kanban-advanced-worker}"
 source "$SCRIPT_DIR/lib/kanban_config.sh"
 
 # shellcheck source=lib/kanban_db_path.sh
+_PREFLIGHT_SCRIPT_DIR="$SCRIPT_DIR"
 source "$SCRIPT_DIR/lib/kanban_db_path.sh" 2>/dev/null || true
+SCRIPT_DIR="$_PREFLIGHT_SCRIPT_DIR"
 
 REPO_ROOT="$(resolve_project_root "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
