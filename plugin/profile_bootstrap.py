@@ -531,11 +531,11 @@ def reconcile_dispatch_profiles(
         env=env,
         log=log,
     )
-    # Also seed coder SOUL if profile exists
+    # Also seed coder SOUL if profile exists (coder uses worker prompt)
     if coder_home.is_dir() and prompts_src.is_dir():
         seed_dispatch_profile_souls(
             run, hermes_bin, hermes_home, prompts_src,
-            coder_profile, env=env, log=log,
+            coder_profile, coder_profile, env=env, log=log,
         )
     seed_dispatch_profile_skills(
         run,
