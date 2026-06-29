@@ -139,7 +139,7 @@ def _schedule_sidecar_restart(delay: float = 2.0) -> None:
     def _restart() -> None:
         _time.sleep(delay)
         script = Path(__file__).resolve().parent.parent / "scripts" / "dashboard_server.py"
-        detach = (_sp.CREATE_NEW_PROCESS_GROUP | _sp.DETACHED_PROCESS
+        detach = (_sp.CREATE_NEW_PROCESS_GROUP | _sp.DETACHED_PROCESS | _sp.CREATE_NO_WINDOW
                   if sys.platform == "win32" else 0)
         try:
             child = _sp.Popen(
