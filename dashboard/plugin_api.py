@@ -1711,17 +1711,28 @@ def _execute_save(body: dict, output: list[str]) -> dict:
 
 
 @router.post("/update")
-def update_plugin():
-    """POST /api/plugins/kanban-advanced/update — git pull plugin install + refresh materialized assets.
-    
-    Defined as a regular (non-async) function so FastAPI runs it in a thread pool.
-    This prevents blocking the event loop during long-running git/sync/profile operations,
-    which would starve the /status polling endpoint and cause the frontend terminal log
-    to appear stuck (requiring a page refresh to see the completed output).
-    """
+def update_plugin(request: Request):
+    restart_only = _parse_bool_query(request.query_params.get("restart"))
     install_dir = resolve_plugin_install_dir(DEFAULT_PLUGIN_NAME)
-    output = [f"=== Updating plugin at {install_dir} ==="]
 
+    if restart_only:
+        output = ["=== Restarting sidecar (no git) ==="]
+        output.append("   ... Restarting sidecar — dashboard will reconnect in ~3 seconds")
+        old_pid = os.getpid()
+        _schedule_sidecar_restart()
+        _invalidate_status_cache()
+        git_exe = _resolve_git_executable()
+        status_fields = _plugin_git_status_after_update(install_dir, git_exe) if git_exe else {}
+        return {
+            "success": True,
+            "unchanged": True,
+            "restart_initiated": True,
+            "restart_previous_pid": old_pid,
+            "output": output,
+            **status_fields,
+        }
+
+    output = [f"=== Updating plugin at {install_dir} ==="]
     if not (install_dir / ".git").is_dir():
         return {
             "success": False,

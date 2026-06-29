@@ -688,8 +688,11 @@
     function runPluginUpdate() {
       setPluginUpdating(true);
       setConsoleLines([]);
-      addLines(["=== Updating plugin (git pull) ===", ""]);
-      apiPluginUpdate().then(function (r) {
+      // Detect restart-only vs full update based on banner state
+      var isRestart = status && (status.sidecar_stale === true || status.plugin_up_to_date === true);
+      var endpoint = isRestart ? "/api/plugins/kanban-advanced/update?restart=1" : "/api/plugins/kanban-advanced/update";
+      addLines([isRestart ? "=== Restarting plugin (no git) ===" : "=== Updating plugin (git pull) ===", ""]);
+      apiFetch(endpoint, { method: "POST" }).then(function (r) {
         if (r.error) {
           addLines(["ERROR: " + r.error], "line-err");
           if (r.output) addLines(r.output);
