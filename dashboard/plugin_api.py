@@ -141,11 +141,17 @@ def _schedule_sidecar_restart(delay: float = 3.0) -> None:
     def _restart() -> None:
         _time.sleep(delay)
         script = Path(__file__).resolve().parent.parent / "scripts" / "dashboard_server.py"
+        # Use pythonw.exe on Windows to avoid flashing a console window
+        python_exe = sys.executable
+        if sys.platform == "win32" and not python_exe.lower().endswith("w.exe"):
+            pyw = Path(python_exe).with_name("pythonw.exe")
+            if pyw.is_file():
+                python_exe = str(pyw)
         detach = (_sp.CREATE_NEW_PROCESS_GROUP | _sp.DETACHED_PROCESS | _sp.CREATE_NO_WINDOW
                   if sys.platform == "win32" else 0)
         try:
             child = _sp.Popen(
-                [sys.executable, str(script)],
+                [python_exe, str(script)],
                 stdout=_sp.DEVNULL, stderr=_sp.DEVNULL,
                 creationflags=detach if detach else 0,
                 start_new_session=(sys.platform != "win32"),

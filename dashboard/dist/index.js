@@ -730,7 +730,30 @@
           }, 1000);
         }
       }).catch(function (e) {
-        addLines(["ERROR: " + e.message], "line-err");
+        var msg = e.message || "";
+        // "Failed to fetch" during update is expected — the sidecar kills
+        // itself to restart. Treat as successful restart and poll /health.
+        if (msg === "Failed to fetch" || msg.indexOf("NetworkError") >= 0) {
+          setPluginUpdating(false);
+          setSidecarRestarting(true);
+          addLines(["OK Sidecar restarting — waiting for reconnect..."], "line-ok");
+          var poll = setInterval(function () {
+            fetch("http://127.0.0.1:18900/health")
+              .then(function (hr) { return hr.json(); })
+              .then(function (h) {
+                if (h.pid) {
+                  clearInterval(poll);
+                  setSidecarRestarting(false);
+                  addLines(["OK Sidecar restarted (PID " + h.pid + ")"], "line-ok");
+                  reloadStatus({ skipApply: true });
+                }
+              })
+              .catch(function () { /* still down */ });
+          }, 1000);
+          setTimeout(function () { clearInterval(poll); setSidecarRestarting(false); }, 35000);
+          return;
+        }
+        addLines(["ERROR: " + msg], "line-err");
         setPluginUpdating(false);
       });
     }
