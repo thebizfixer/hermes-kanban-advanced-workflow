@@ -608,7 +608,7 @@ def _handle_init(args) -> int:
     # ── 7. Dashboard server ───────────────────────────────────────────
     print("7. Dashboard server + keepalive cron...")
     server_script = cron_dir / "dashboard_server.py"
-    keepalive_script = cron_dir / "dashboard_server_keepalive.sh"
+    keepalive_script = cron_dir / "dashboard_server_keepalive.py"
     
     # Register keepalive cron for crash recovery (idempotent)
     if keepalive_script.exists():
@@ -624,7 +624,7 @@ def _handle_init(args) -> int:
                     HERMES_BIN, "cron", "create", "every 1m",
                     "--name", "kanban-dashboard-keepalive",
                     "--no-agent",
-                    "--script", "dashboard_server_keepalive.sh",
+                    "--script", "dashboard_server_keepalive.py",
                     "--deliver", "local",
                     "--repeat", "999",
                 ], capture_output=True, text=True, encoding="utf-8", errors="replace",
