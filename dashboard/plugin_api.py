@@ -897,6 +897,16 @@ def _git_last_commit_timestamp(install_dir: Path, git_exe: str) -> float | None:
     return None
 
 
+def _current_sidecar_pid() -> int | None:
+    """Return the current sidecar PID from /health, or None."""
+    try:
+        import requests as _rq
+        r = _rq.get("http://127.0.0.1:18900/health", timeout=2)
+        return r.json().get("pid")
+    except Exception:
+        return None
+
+
 def _check_sidecar_staleness(install_dir: Path, git_exe: str | None) -> bool | None:
     """Return True if sidecar started before last plugin update, False if current, None if unknown."""
     try:
@@ -1687,11 +1697,15 @@ def update_plugin():
 
     if behind_before == 0:
         output.append("   OK Already up to date")
+        output.append("   ... Restarting sidecar — dashboard will reconnect in ~3 seconds")
+        old_pid = _current_sidecar_pid()
         _schedule_sidecar_restart()
         _invalidate_status_cache()
         return {
             "success": True,
             "unchanged": True,
+            "restart_initiated": True,
+            "restart_previous_pid": old_pid,
             "output": output,
             **_plugin_git_status_after_update(install_dir, git_exe),
         }
@@ -1731,17 +1745,16 @@ def update_plugin():
         )
 
     output.append("OK Plugin updated")
+    output.append("   ... Restarting sidecar — dashboard will reconnect in ~3 seconds")
     _invalidate_status_cache()
-
-    # After pulling new code, the running sidecar process has stale Python
-    # modules in memory (e.g., PROFILE_SKILL_SETS_BY_ROLE from config_overlay).
-    # Schedule a restart in a background thread so the next request uses the
-    # updated code. The 2s delay lets the HTTP response flush before exit.
+    old_pid = _current_sidecar_pid()
     _schedule_sidecar_restart()
 
     return {
         "success": True,
         "unchanged": False,
+        "restart_initiated": True,
+        "restart_previous_pid": old_pid,
         "output": output,
         **_plugin_git_status_after_update(install_dir, git_exe),
     }

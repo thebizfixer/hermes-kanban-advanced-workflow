@@ -240,6 +240,7 @@
     // selectedModel is {provider: string, model: string} | null
     var _useState15 = useState(""), modelQuery = _useState15[0], setModelQuery = _useState15[1];
     var _useState16 = useState(false), pluginUpdating = _useState16[0], setPluginUpdating = _useState16[1];
+    var _useState16b = useState(false), sidecarRestarting = _useState16b[0], setSidecarRestarting = _useState16b[1];
     var _useState17 = useState(false), statusProbing = _useState17[0], setStatusProbing = _useState17[1];
     var _useState17b = useState(false), probesPending = _useState17b[0], setProbesPending = _useState17b[1];
     var _useState18 = useState(false), editingCodingAgentModel = _useState18[0], setEditingCodingAgentModel = _useState18[1];
@@ -714,6 +715,28 @@
           return next;
         });
         setPluginUpdating(false);
+        // If restart was initiated, poll until sidecar comes back with new PID
+        if (r.restart_initiated) {
+          setSidecarRestarting(true);
+          var prevPid = r.restart_previous_pid;
+          var attempts = 0;
+          var poll = setInterval(function () {
+            attempts++;
+            fetch("http://127.0.0.1:18900/health")
+              .then(function (hr) { return hr.json(); })
+              .then(function (h) {
+                if (h.pid && h.pid !== prevPid) {
+                  clearInterval(poll);
+                  setSidecarRestarting(false);
+                  addLines(["OK Sidecar restarted (PID " + prevPid + " -> " + h.pid + ")"], "line-ok");
+                  // Refresh status to update sidecar_stale
+                  reloadStatus({ skipApply: true });
+                }
+              })
+              .catch(function () { /* sidecar still down, keep polling */ });
+            if (attempts > 30) { clearInterval(poll); setSidecarRestarting(false); }
+          }, 1000);
+        }
       }).catch(function (e) {
         addLines(["ERROR: " + e.message], "line-err");
         setPluginUpdating(false);
@@ -730,7 +753,7 @@
     }
 
     var pluginUpdateDisabled = !status || !status.plugin_can_update
-      || pluginUpdating || bootstrapping || statusProbing || probesPending;
+      || pluginUpdating || sidecarRestarting || bootstrapping || statusProbing || probesPending;
 
     // ── Model selector ──
     function openModelPicker(profileName) {
@@ -970,6 +993,11 @@
                 ? React.createElement("span", { className: "flex items-center gap-1.5" },
                     React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
                     "Updating…"
+                  )
+                : sidecarRestarting
+                ? React.createElement("span", { className: "flex items-center gap-1.5" },
+                    React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
+                    "Restarting…"
                   )
                 : (status && (status.plugin_up_to_date === true || status.sidecar_stale === true) ? "Restart Plugin" : "Update Plugin")
             ) : null
