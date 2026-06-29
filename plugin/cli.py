@@ -624,7 +624,7 @@ def _handle_init(args) -> int:
                     HERMES_BIN, "cron", "create", "60s",
                     "--name", "kanban-dashboard-keepalive",
                     "--no-agent",
-                    "--script", str(keepalive_script),
+                    "--script", "dashboard_server_keepalive.sh",
                     "--deliver", "local",
                     "--repeat", "999",
                 ], env={**os.environ, "HERMES_HOME": str(hermes_home)}, timeout=15)
