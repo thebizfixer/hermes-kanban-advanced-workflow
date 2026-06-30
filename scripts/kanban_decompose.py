@@ -376,7 +376,7 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False, ru
             block_reason = "Awaiting dependency gate (auto_unblock when parents done)"
             blocked = False
             for attempt in range(1, 4):
-                _, b_err, b_rc = hermes("kanban", "block", task_id, block_reason)
+                _, b_err, b_rc = hermes("kanban", "block", task_id, "--kind", "dependency", block_reason)
                 if b_rc == 0:
                     # Verify the card is actually blocked
                     show_out, _, show_rc = hermes("kanban", "show", task_id)
