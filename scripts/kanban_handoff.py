@@ -901,7 +901,7 @@ if [[ -z "$GATE_ID" ]]; then
   done)
 fi
 echo "Gate: $GATE_ID"
-hermes kanban --board "$KANBAN_BOARD" block "$GATE_ID" --kind dependency "Gate — awaiting links"
+hermes kanban --board "$KANBAN_BOARD" block --kind dependency "$GATE_ID" "Gate — awaiting links"
 bash {bundle}/scripts/provision_kanban_crons.sh --check
 ```
 
