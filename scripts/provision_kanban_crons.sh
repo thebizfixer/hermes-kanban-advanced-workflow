@@ -294,50 +294,46 @@ case "$ACTION" in
   fi
   ;;
   clean)
-  # Clean stale plan-scoped crons from prior runs.
-  # Only removes crons whose name matches the plan_id suffix but whose
-  # workdir does NOT contain the current board slug (board-scoped crons).
-  # Plan-scoped crons have names like: kanban-auto-unblock-1m-{plan_id}
-  # Board-scoped crons have the board slug in their workdir.
-  if [[ -z "$PLAN_ID" ]]; then
-    echo "[provision_kanban_crons] --clean requires --plan-id" >&2
-    exit 1
-  fi
-  local cleaned=0
-  # Sanitize plan_id for name matching (same pattern as cron name suffix)
-  local plan_slug
-  plan_slug=$(echo "$PLAN_ID" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
-  local cron_list
-  cron_list=$(HERMES_HOME="$CRON_HERMES_HOME" hermes cron list 2>/dev/null || true)
-  while IFS= read -r job_name; do
-    [[ -z "$job_name" ]] && continue
-    # Skip if job name doesn't contain the plan_id
-    [[ "$job_name" != *"$plan_slug"* ]] && continue
-    # Skip the dashboard keepalive
-    [[ "$job_name" == *"dashboard"* ]] && continue
-    # Check if this is a plan-scoped cron (not board-scoped)
-    # Board-scoped crons have the board slug in workdir
-    local job_workdir
-    job_workdir=$(HERMES_HOME="$CRON_HERMES_HOME" hermes cron list 2>/dev/null | grep -A5 "Name:.*$job_name" | grep "Workdir:" | awk '{$1=""; print $0}' | xargs)
-    if [[ -n "${BOARD:-}" && "$job_workdir" == *"$BOARD"* ]]; then
-      echo "[provision_kanban_crons] [clean] skipping board-scoped: $job_name (workdir=$job_workdir)"
-      continue
+    # Clean stale plan-scoped crons from prior runs.
+    # Only removes crons whose name matches the plan_id suffix but whose
+    # workdir does NOT contain the current board slug (board-scoped crons).
+    # Plan-scoped crons have names like: kanban-auto-unblock-1m-{plan_id}
+    # Board-scoped crons have the board slug in their workdir.
+    if [[ -z "$PLAN_ID" ]]; then
+      echo "[provision_kanban_crons] --clean requires --plan-id" >&2
+      exit 1
     fi
-    # Remove stale plan-scoped cron
-    if [[ "$DRY_RUN" == true ]]; then
-      echo "[provision_kanban_crons] [dry-run] would remove stale cron: $job_name"
-    else
-      local jid
-      jid=$(HERMES_HOME="$CRON_HERMES_HOME" hermes cron list 2>/dev/null | grep -B2 "Name:.*$job_name" | grep "^  ID:" | awk '{print $2}')
-      if [[ -n "$jid" ]]; then
-        HERMES_HOME="$CRON_HERMES_HOME" hermes cron remove "$jid" 2>/dev/null && {
-          echo "[provision_kanban_crons] [clean] removed stale cron: $job_name ($jid)"
-          cleaned=$((cleaned + 1))
-        }
+    cleaned=0
+    # Sanitize plan_id for name matching (same pattern as cron name suffix)
+    plan_slug=$(echo "$PLAN_ID" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
+    cron_list=$(HERMES_HOME="$CRON_HERMES_HOME" hermes cron list 2>/dev/null || true)
+    while IFS= read -r job_name; do
+      [[ -z "$job_name" ]] && continue
+      # Skip if job name doesn't contain the plan_id
+      [[ "$job_name" != *"$plan_slug"* ]] && continue
+      # Skip the dashboard keepalive
+      [[ "$job_name" == *"dashboard"* ]] && continue
+      # Check if this is a plan-scoped cron (not board-scoped)
+      # Board-scoped crons have the board slug in workdir
+      job_workdir=$(HERMES_HOME="$CRON_HERMES_HOME" hermes cron list 2>/dev/null | grep -A5 "Name:.*$job_name" | grep "Workdir:" | awk '{$1=""; print $0}' | xargs)
+      if [[ -n "${BOARD:-}" && "$job_workdir" == *"$BOARD"* ]]; then
+        echo "[provision_kanban_crons] [clean] skipping board-scoped: $job_name (workdir=$job_workdir)"
+        continue
       fi
-    fi
-  done < <(echo "$cron_list" | grep "Name:" | sed 's/.*Name: *//')
-  echo "[provision_kanban_crons] [clean] removed $cleaned stale plan-scoped cron(s)"
+      # Remove stale plan-scoped cron
+      if [[ "$DRY_RUN" == true ]]; then
+        echo "[provision_kanban_crons] [dry-run] would remove stale cron: $job_name"
+      else
+        jid=$(HERMES_HOME="$CRON_HERMES_HOME" hermes cron list 2>/dev/null | grep -B2 "Name:.*$job_name" | grep "^  ID:" | awk '{print $2}')
+        if [[ -n "$jid" ]]; then
+          HERMES_HOME="$CRON_HERMES_HOME" hermes cron remove "$jid" 2>/dev/null && {
+            echo "[provision_kanban_crons] [clean] removed stale cron: $job_name ($jid)"
+            cleaned=$((cleaned + 1))
+          }
+        fi
+      fi
+    done < <(echo "$cron_list" | grep "Name:" | sed 's/.*Name: *//')
+    echo "[provision_kanban_crons] [clean] removed $cleaned stale plan-scoped cron(s)"
   ;;
   check)
     issues=0
