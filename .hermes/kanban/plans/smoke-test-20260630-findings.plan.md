@@ -103,6 +103,54 @@ A secondary thread: **gating is sequenced too late**. The walk-away gate blocks 
 
 ---
 
+## Research Validation
+
+Each fix is cross-referenced against established best practices. Sources validated June 2026.
+
+### Pre-Execution Gate Pattern (dev.to, "Why Pre-Execution Gates Are Your First Line of Defense")
+
+> "Your gate must complete before any irreversible action happens. If the gate says no, nothing executes." — executed synchronously, before state changes; policy-driven, not hardcoded; every decision recorded for audit.
+
+**Maps to A2 (walk-away gate):** The walk-away gate fires after cards are created and Card 5 executes — the "before side effects" principle is violated. The fix reorders the runbook so the gate blocks BEFORE `kanban create` is called when `walk_away_mode: false`. The gate becomes a first-class refusal, not an afterthought.
+
+**Maps to A4 (coder sub-agent protocol):** The coding agent calling `kanban_complete` is an action that should be gated at the capability layer. Only the worker (parent agent) should possess the `kanban_complete` capability — the coding agent's toolset must exclude it. This is the same "tool invocation as capability request" pattern from Arize's observability sandboxing.
+
+### Human-in-the-Loop Approval Workflows (StackAI)
+
+> "Require approval when the agent's next action is irreversible, costly, regulated, or high blast radius." Risk-based framework: read-only intelligence can be autonomous; write actions and external communications should be supervised by default until proven safe. Exception-only review for mature workflows.
+
+**Maps to A2:** Post-execution (final audit → remediation → postmortem → token report) is the "write action" — the orchestrator produces persistent artifacts and modifies board state. When `walk_away_mode: false`, these actions require operator approval. The fix converts the walk-away toggle from a post-execution notification to a pre-execution approval gate.
+
+**Maps to A3 (remediation cards):** Remediation cards are auto-spawned "write actions" that modify code. They should be gated when `walk_away_mode: false` — spawned but blocked pending operator review, not dispatched immediately.
+
+### Database-per-Tenant Isolation (Azure Architecture Center, Hamade 2026)
+
+> "Database-per-tenant offers the strongest 'hard' isolation. Data is segregated by operating system processes, network connections, and independent backups." Shared-database with row-level security is cheaper but riskier — a single mis-scoped query leaks data across tenants.
+
+**Maps to A1 (postmortem contamination):** The kanban-advanced board-per-run model is the "database-per-tenant" pattern. Each board (`kanban-standard-smoke-test-20260630-184420`) is an isolated kanban.db. But `generate_postmortem.py` queries across ALL boards — like a shared-database query without the `WHERE tenant_id = ?` clause. The fix (board resolver) adds the missing tenant filter.
+
+**Maps to A5 (board_slug stamping):** The `board_slug` in plan memory is the tenant ID. Every downstream consumer (postmortem, token report, lifecycle notify) must receive and filter by this ID. The fix stamps it at decompose time and threads it through all consumers.
+
+### Git Porcelain for Scripting (git-scm.com, StackOverflow)
+
+> "`git status --porcelain` is guaranteed not to change between Git versions and is designed for easy parsing by scripts." The `--porcelain` format is stable; `--short` is not. For untracked files specifically: `git ls-files --others --exclude-standard`.
+
+**Maps to A7 (E002 untracked detection):** The current E002 uses `git diff --name-only` which excludes untracked files. The fix adds `git ls-files --others --exclude-standard` as a second check. The porcelain format guarantees the fix won't break on Git version updates.
+
+### Fail-Fast Principle (CodeReliant, "The Fail Fast Principle")
+
+> "Immediately report any exception rather than trying to continue execution." In pipeline context: validate all preconditions first, execute only after all gates pass. A gate that fires mid-pipeline is worse than no gate — it creates a false sense of security while irreversible actions have already occurred.
+
+**Maps to A2 (walk-away gate ordering):** The current gate is a "fail-late" anti-pattern — it validates walk_away_mode AFTER all cards have been created and Card 5 has already run. The fix converts it to fail-fast: validate → approve → decompose. No cards exist until the operator says "go."
+
+### Multi-Tenant Cron Isolation (Azure Background Jobs Best Practices)
+
+> "Use a pattern like the Gatekeeper pattern to transfer data to an isolated background process that can access protected resources." Cron jobs running in a per-tenant worktree must validate their context before acting on shared state (kanban.db, git repo).
+
+**Maps to A3 + A6:** Board-scoped crons (workdir=card5 worktree) have a different view of the world than plan-scoped crons (workdir=repo root). The fix ensures crons self-validate: before acting, check `hermes kanban --board $BOARD list` to confirm the board exists and has the expected cards. If not, log and exit 0 (not an error — the board may have been cleaned up).
+
+---
+
 ## Anomaly Inventory
 
 ### 🔴 BLOCKING / HIGH
