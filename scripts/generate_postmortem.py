@@ -27,6 +27,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# Board resolver singleton — all subsystems resolve plan_id → board_slug here
+try:
+    from lib.board_resolver import resolve_board_for_plan  # noqa: E402
+except ImportError:
+    resolve_board_for_plan = None  # graceful degradation when run outside plugin context
+
 # === NEUTRAL (driven by coding_agent_binary from config) ===
 import os
 from pathlib import Path as _P
@@ -1052,8 +1058,14 @@ def build_report(
         )
         for task in sorted(tasks, key=lambda item: item.task_id):
             modes = ", ".join(task.failure_modes) if task.failure_modes else "—"
+            # Reconcile status against last event — DB status may be stale
+            display_status = task.status
+            if task.events:
+                last_kind = task.events[-1].kind.lower() if task.events else ""
+                if display_status == "running" and last_kind in ("completed", "archived"):
+                    display_status = task.events[-1].kind  # correct stale status
             lines.append(
-                f"| `{task.task_id}` | {task.status} | {task.profile or '—'} | {modes} | {len(task.events)} |"
+                f"| `{task.task_id}` | {display_status} | {task.profile or '—'} | {modes} | {len(task.events)} |"
             )
         lines.append("")
     else:
@@ -1402,6 +1414,7 @@ def build_kpi_json(
     repo_root: Path | None = None,
     kpi_corrections: dict[str, Any] | None = None,
     board_slug: str | None = None,
+    board_task_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     """Machine-readable KPI artifact for dashboards and cross-run trend."""
     plan_tokens = [entry for entry in token_entries if entry.get("plan_id") == plan_id]
@@ -1569,8 +1582,17 @@ def build_kpi_json(
     )
     uncaught = audit_fields["uncaught_violation_count"]
     # Board-scoped run with 100% task match = highest confidence signal
+    # Cross-validate: if board_slug set but board_task_ids is empty/None,
+    # the scoping may have failed — don't over-claim confidence.
     if board_slug and completed == total_tasks and total_tasks > 0:
-        data_confidence = "high"
+        # Verify at least some tasks were actually board-scoped
+        board_tid_count = len(board_task_ids) if board_task_ids else 0
+        if board_tid_count > 0 and board_tid_count == completed:
+            data_confidence = "high"
+        elif board_tid_count > 0:
+            data_confidence = "medium"  # board-scoped but task count mismatch
+        else:
+            data_confidence = "medium"  # board_slug set but no board_task_ids (resolver may have failed silently)
     elif uncaught is None or token_coverage_pct < 50.0:
         data_confidence = "low"
     elif uncaught or token_coverage_pct < 80.0:
@@ -2063,6 +2085,18 @@ def main(argv: list[str] | None = None) -> int:
     board_task_ids: set[str] | None = None
     board_notes: list[str] = []
 
+    # If --board not explicitly passed, resolve via board resolver singleton
+    if board_slug is None and resolve_board_for_plan is not None:
+        try:
+            resolved = resolve_board_for_plan(plan_id)
+            if resolved:
+                board_slug = resolved
+                board_notes.append(f"Auto-resolved board slug '{board_slug}' via resolver (no --board flag passed)")
+            else:
+                board_notes.append(f"Resolver found no board for plan_id '{plan_id}' — falling back to plan_id filter")
+        except Exception as exc:
+            board_notes.append(f"Resolver error ({exc}) — falling back to plan_id filter")
+
     if board_slug:
         board_task_ids, board_notes = _get_board_task_ids(board_slug)
         if board_notes:
@@ -2152,6 +2186,7 @@ def main(argv: list[str] | None = None) -> int:
         scope_violations=scope_violations,
         repo_root=_project_root(),
         board_slug=board_slug,
+        board_task_ids=board_task_ids,
     )
     kpi_dest = write_kpi_json(kpi, Path(args.output), plan_id)
     try:
