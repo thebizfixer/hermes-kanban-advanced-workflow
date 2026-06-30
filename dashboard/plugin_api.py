@@ -1314,6 +1314,11 @@ def _execute_init(body: dict, output: list[str]) -> dict:
             coding_agent_model=body.get("coding_agent_model"),
             env=env,
         )
+        coding_agent_provider = resolve_coding_agent_provider(
+            project_root,
+            coding_agent_provider=body.get("coding_agent_provider"),
+            env=env,
+        )
     else:
         working_branch, trigger_branch, kept = resolve_branch_settings(
             project_root,
@@ -1330,7 +1335,7 @@ def _execute_init(body: dict, output: list[str]) -> dict:
         coding_agent_model = normalize_coding_agent_model(
             body.get("coding_agent_model", "auto")
         )
-
+        coding_agent_provider = (body.get("coding_agent_provider") or "").strip()
     output.append(f"kanban-advanced init -- bootstrapping {project_root}")
     hermes_home_pre = resolve_hermes_home(project_root)
     output.append(f"   HERMES_HOME: {hermes_home_pre}")
