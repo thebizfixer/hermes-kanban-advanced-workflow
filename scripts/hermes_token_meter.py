@@ -91,14 +91,16 @@ def _parse_insights(text: str) -> dict:
 def _extract_total_tokens(entry: dict) -> int:
     """Extract total token count from a tokens.jsonl entry, supporting multiple formats."""
     tokens = entry.get("tokens", {})
-    if isinstance(tokens, dict):
-        return sum(
+    if isinstance(tokens, dict) and tokens:
+        token_sum = sum(
             v for k, v in tokens.items()
             if isinstance(v, (int, float)) and k not in ("source_note", "metering_method")
         )
-    if isinstance(tokens, (int, float)):
+        if token_sum > 0:
+            return token_sum
+    if isinstance(tokens, (int, float)) and tokens > 0:
         return int(tokens)
-    # Fallback: check for hermes_total or cursor fields
+    # Fallback: check for hermes_total or cursor fields (top-level keys from log_token_run)
     hermes = entry.get("hermes_total", 0)
     cursor_in = entry.get("cursor_input_tokens", 0)
     cursor_out = entry.get("cursor_output_tokens", 0)
