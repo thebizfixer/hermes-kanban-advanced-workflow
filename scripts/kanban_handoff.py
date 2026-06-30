@@ -837,16 +837,18 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
     if walk_away_mode == "false":
         walk_away_gate = (
             "### Walk-away gate (walk_away_mode: false)\n\n"
-            "**🛑 STOP — Operator approval required before Step 5 (Complete gate).**\n\n"
-            "All implementation cards (Cards 1–4) may proceed. Do NOT complete the gate card,\n"
-            "run Card 5 (verification), or spawn the final audit card until this card is unblocked.\n\n"
+            "**🛑 STOP — Operator approval required before Step 5.**\n\n"
+            "Cards 1–5 and the final audit card may proceed. Do NOT run postmortem,\n"
+            "reconciliation, cleanup, or completion-notify until this card is unblocked.\n\n"
+            "Walk-away mode controls only post-execution cleanup — not implementation\n"
+            "or verification cards. See `plugin/data/references/walk-away-mode.md`.\n\n"
             "Block this card to await operator review:\n"
             "```bash\n"
             'hermes kanban --board "$KANBAN_BOARD" block <this_card_id> '
             '--kind approval "Awaiting operator approval for post-execution '
             '(walk_away_mode=false)"\n'
             "```\n"
-            "The operator must unblock this card before post-execution steps.\n\n"
+            "The operator must unblock this card before you proceed to Step 5.\n\n"
         )
     else:
         walk_away_gate = ""
