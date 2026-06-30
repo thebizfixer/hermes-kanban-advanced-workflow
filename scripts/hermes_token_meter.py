@@ -88,6 +88,23 @@ def _parse_insights(text: str) -> dict:
     return result
 
 
+def _extract_total_tokens(entry: dict) -> int:
+    """Extract total token count from a tokens.jsonl entry, supporting multiple formats."""
+    tokens = entry.get("tokens", {})
+    if isinstance(tokens, dict):
+        return sum(
+            v for k, v in tokens.items()
+            if isinstance(v, (int, float)) and k not in ("source_note", "metering_method")
+        )
+    if isinstance(tokens, (int, float)):
+        return int(tokens)
+    # Fallback: check for hermes_total or cursor fields
+    hermes = entry.get("hermes_total", 0)
+    cursor_in = entry.get("cursor_input_tokens", 0)
+    cursor_out = entry.get("cursor_output_tokens", 0)
+    return int(hermes or cursor_in + cursor_out)
+
+
 def snapshot() -> int:
     """Capture current Hermes token state as baseline."""
     result = subprocess.run(
@@ -198,7 +215,65 @@ def delta(
         f"({inp_delta:,} in / {out_delta:,} out) "
         f"— logged as source={source}"
     )
+
+    # Merge coder profile tokens when coding agent is hermes with a separate profile.
+    # The orchestrator's hermes insights don't include coder-profile session tokens.
+    _merge_coder_profile_tokens(plan_id, task_id)
+
     return 0
+
+
+def _merge_coder_profile_tokens(plan_id: str, task_id: str) -> None:
+    """Scan coder profile's tokens.jsonl and merge entries matching plan/task IDs."""
+    coder_token_path = (
+        Path(os.environ.get("HERMES_HOME", str(Path.home() / ".hermes")))
+        / "profiles" / "kanban-advanced-coder" / "kanban" / "tokens.jsonl"
+    )
+    if not coder_token_path.exists():
+        return  # no coder profile tokens to merge
+
+    try:
+        coder_entries = []
+        with open(coder_token_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                entry_plan = str(entry.get("plan_id") or "").strip()
+                entry_task = str(entry.get("task_id") or "").strip()
+                if entry_plan == plan_id and (not task_id or entry_task == task_id):
+                    coder_entries.append(entry)
+        if coder_entries:
+            coder_total = sum(
+                _extract_total_tokens(e) for e in coder_entries
+            )
+            if coder_total > 0:
+                log_token_run(
+                    plan_id=plan_id,
+                    task_id=task_id,
+                    cursor_input_tokens=0,
+                    cursor_output_tokens=0,
+                    cursor_cache_read_tokens=0,
+                    cursor_cache_write_tokens=0,
+                    hermes_total=coder_total,
+                    source="coder_profile",
+                    status="completed",
+                    extra={
+                        "coding_agent_binary": "hermes",
+                        "metering_method": "coder_profile_merge",
+                        "coder_entries": len(coder_entries),
+                    },
+                )
+                print(
+                    f"[token_meter] Merged {len(coder_entries)} coder profile "
+                    f"token entries ({coder_total:,} total tokens)"
+                )
+    except Exception as exc:
+        print(f"[token_meter] WARNING: coder profile merge failed: {exc}")
 
 
 def meter_command(
