@@ -242,3 +242,75 @@ flowchart LR
 | Port 18900 already in use | Set `KA_DASHBOARD_PORT=18901` in your environment; restart the server |
 
 Full guide: [docs/how-to/troubleshooting.md](docs/how-to/troubleshooting.md)
+
+---
+
+## Updating the Plugin
+
+When a new version is released, update from the dashboard. The plugin handles git pull, asset materialization, and sidecar restart automatically — but you must re-bootstrap and (sometimes) restart the gateway.
+
+### 1. Update Plugin (dashboard button)
+
+Click **"Update Plugin"** in the dashboard Settings tab. This:
+
+- Runs `git pull` in the installed plugin directory
+- Materializes updated skills, scripts, and references to `$HERMES_HOME`
+- Reconciles dispatch profiles
+- Restarts the sidecar server automatically (dashboard reconnects in ~3 seconds)
+
+> **If the dashboard button fails** (git unreachable, merge conflict): pull manually in the installed plugin directory, then click **"Update Plugin"** again — it will detect you're up-to-date and still restart the sidecar and re-materialize assets.
+> ```bash
+> cd "$(hermes plugins list | grep kanban-advanced | awk '{print $NF}')"  # or the install path from hermes plugins list
+> git pull
+> ```
+
+### 2. Bootstrap (re-run init)
+
+**Always re-bootstrap after updating.** Click **"Bootstrap"** in the dashboard (or run `hermes kanban-advanced init`). This re-provisions:
+
+- Config overlay (`kanban-config.yaml`) — existing branch/profile settings are preserved
+- Dispatch profile models, reasoning effort defaults, and role-only skills
+- Materialized scripts and `.worktreeinclude` paths
+- `.env` sync (`HERMES_ENABLE_PROJECT_PLUGINS`, `KANBAN_CODING_AGENT*`, `HOME`)
+
+### 3. Restart the gateway (only when needed)
+
+The gateway does **not** hot-reload config. Restart it from outside the Hermes session if the update included:
+
+- Changes to `kanban.failure_limit`, `kanban.dispatch_stale_timeout_seconds`, or other `kanban.*` config keys
+- Updates to gateway-side cron script files
+- New `.env` variables the dispatcher or worker processes need to pick up
+
+```bash
+hermes gateway restart
+```
+
+### 4. Verify
+
+Run the plugin verification tiers to confirm the update applied cleanly:
+
+```bash
+# Tier 1 — plugin contract
+python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py
+bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh
+
+# Tier 2 — materialization integrity
+bash hermes-kanban-advanced-workflow/scripts/provision.sh --check
+```
+
+Full matrix: [wiki/plugin-verification.md](wiki/plugin-verification.md).
+
+### Update at a glance
+
+| Step | Action | Dashboard or CLI | Required every time? |
+|------|--------|------------------|:---:|
+| 1 | Pull + materialize + restart sidecar | **Update Plugin** button | ✓ |
+| 2 | Re-provision profiles, overlay, scripts | **Bootstrap** button / `hermes kanban-advanced init` | ✓ |
+| 3 | Restart gateway | `hermes gateway restart` | Only when `kanban.*` config or `.env` changed |
+| 4 | Verify | `smoke_test_plugin.py` + `provision.sh --check` | Recommended |
+
+> **Note for plugin developers:** If you're authoring changes and need the full deploy cycle (push → pull → init → restart sidecar → restart gateway → verify), see [wiki/setup.md](wiki/setup.md) § Re-init after update for agent-facing detail.
+
+---
+
+## Agent KPIs

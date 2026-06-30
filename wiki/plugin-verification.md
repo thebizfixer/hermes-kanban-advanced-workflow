@@ -94,7 +94,7 @@ bash hermes-kanban-advanced-workflow/scripts/governance_integrity.sh
 | `provision.sh --check` | Materialized skills under configured `skills_output_path` match plugin source hashes; `$HERMES_HOME/scripts/lib/` includes `card_body.py`, `presentation_acceptance.py`, `verify_optimization_presentation.py` | Hand-edited skill files, init not re-run after pull, stale lib sync |
 | `governance_integrity.sh` | Required scripts + lib modules, registry/policies/prompts/skills/references present (plugin layout), E028/E029 in registry, provision check when host overlay exists | Run from wrong directory; missing `frontend-neutrality.md` or presentation lib modules |
 
-After **Update Plugin** on the dashboard: run Tier 1 on the install dir, then Tier 2 from the host project, then **Bootstrap** if reconciliation still fails — see [[bootstrap#troubleshooting]].
+After **Update Plugin** on the dashboard: run Tier 1 on the install dir, then Tier 2 from the host project, then **Bootstrap** if reconciliation still fails — see [[bootstrap#troubleshooting]]. For the full update workflow (Update Plugin → Bootstrap → gateway restart → verify), see [README.md](../README.md#updating-the-plugin), the [install guide](../docs/how-to/install-as-plugin.md#updating), or [[setup#updating-the-plugin]].
 
 ---
 

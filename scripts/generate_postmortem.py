@@ -1807,8 +1807,43 @@ def write_report(content: str, output: Path, plan_id: str) -> Path:
 
 
 def _board_db_path(board_slug: str) -> Path:
-    """Return the kanban DB path for a specific board."""
-    return _hermes_home() / "kanban" / "boards" / board_slug / "kanban.db"
+    """Return the kanban DB path for a specific board (live or archived)."""
+    live = _hermes_home() / "kanban" / "boards" / board_slug / "kanban.db"
+    if live.exists():
+        # Only use live DB if it actually contains tasks (not cleared by archive)
+        try:
+            import sqlite3
+            conn = sqlite3.connect(str(live))
+            count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+            conn.close()
+            if count > 0:
+                return live
+        except Exception:
+            pass
+    # Search archived boards
+    archived_dir = _hermes_home() / "kanban" / "boards" / "_archived"
+    if archived_dir.is_dir():
+        for entry in sorted(archived_dir.iterdir(), reverse=True):
+            if entry.is_dir() and entry.name.startswith(board_slug):
+                db = entry / "kanban.db"
+                if db.exists():
+                    return db
+    return live  # fallback
+
+
+def _read_task_ids_from_board_db(board_slug: str) -> set[str]:
+    """Read task IDs directly from a board's kanban.db (live or archived)."""
+    db_path = _board_db_path(board_slug)
+    if not db_path.exists():
+        return set()
+    try:
+        import sqlite3
+        conn = sqlite3.connect(str(db_path))
+        rows = conn.execute("SELECT id FROM tasks").fetchall()
+        conn.close()
+        return {str(r[0]) for r in rows}
+    except Exception:
+        return set()
 
 
 def _get_board_task_ids(board_slug: str) -> tuple[set[str], list[str]]:
@@ -1816,9 +1851,18 @@ def _get_board_task_ids(board_slug: str) -> tuple[set[str], list[str]]:
 
     Returns (task_ids, notes) where task_ids is a set of task ID strings
     (empty if the command failed or the board has no tasks).
+    Falls back to reading the board's kanban.db directly for archived boards.
     notes explain what happened.
     """
     notes: list[str] = []
+
+    def _fallback_db() -> tuple[set[str], list[str]]:
+        task_ids = _read_task_ids_from_board_db(board_slug)
+        if task_ids:
+            notes.append(f"Board '{board_slug}' — discovered {len(task_ids)} task ID(s) via archived DB.")
+            return task_ids, notes
+        return set(), notes
+
     try:
         result = subprocess.run(
             ["hermes", "kanban", "--board", board_slug, "list", "--json"],
@@ -1830,7 +1874,7 @@ def _get_board_task_ids(board_slug: str) -> tuple[set[str], list[str]]:
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         notes.append(f"Failed to run 'hermes kanban --board {board_slug} list --json': {exc}")
-        return set(), notes
+        return _fallback_db()
 
     if result.returncode != 0:
         stderr = (result.stderr or "").strip()
@@ -1838,18 +1882,18 @@ def _get_board_task_ids(board_slug: str) -> tuple[set[str], list[str]]:
             f"'hermes kanban --board {board_slug} list --json' exited with code {result.returncode}"
             + (f": {stderr}" if stderr else "")
         )
-        return set(), notes
+        return _fallback_db()
 
     stdout = (result.stdout or "").strip()
     if not stdout:
         notes.append(f"'hermes kanban --board {board_slug} list --json' produced no output — board may be empty.")
-        return set(), notes
+        return _fallback_db()
 
     try:
         data = json.loads(stdout)
     except json.JSONDecodeError as exc:
         notes.append(f"Failed to parse JSON from 'hermes kanban --board {board_slug} list --json': {exc}")
-        return set(), notes
+        return _fallback_db()
 
     if isinstance(data, list):
         task_ids: set[str] = set()
@@ -1860,6 +1904,7 @@ def _get_board_task_ids(board_slug: str) -> tuple[set[str], list[str]]:
                     task_ids.add(str(tid))
         if not task_ids:
             notes.append(f"Board '{board_slug}' returned {len(data)} item(s) but no recognizable task IDs found.")
+            return _fallback_db()
         else:
             notes.append(f"Board '{board_slug}' — discovered {len(task_ids)} task ID(s) via CLI.")
         return task_ids, notes

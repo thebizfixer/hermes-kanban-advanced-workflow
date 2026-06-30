@@ -124,6 +124,39 @@ head -1 "$(hermes profile show kanban-advanced-worker | awk '/^Path:/ {print $2}
 
 ---
 
+## Updating
+
+When a new version is released, update from the dashboard. Two buttons and (sometimes) a gateway restart.
+
+### 1. Update Plugin (dashboard)
+
+Click **"Update Plugin"** in the dashboard Settings tab. It runs `git pull`, materializes updated skills/scripts to `$HERMES_HOME`, reconciles dispatch profiles, and restarts the sidecar automatically.
+
+> **If the dashboard button fails:** pull manually in the installed plugin directory, then click **"Update Plugin"** again — it detects you're up-to-date but still restarts the sidecar and re-materializes assets.
+
+### 2. Bootstrap (always)
+
+**Always re-bootstrap after updating.** Click **"Bootstrap"** (or run `hermes kanban-advanced init`). Existing branch and profile settings are preserved.
+
+### 3. Restart gateway (conditional)
+
+Only when the update changed `kanban.*` config keys, `.env` variables the dispatcher reads, or gateway-side cron scripts:
+
+```bash
+hermes gateway restart
+```
+
+### 4. Verify
+
+```bash
+python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py   # Tier 1
+bash hermes-kanban-advanced-workflow/scripts/provision.sh --check       # Tier 2
+```
+
+Full update reference: [README.md](../../README.md#updating-the-plugin) (user-facing) and [wiki/plugin-verification.md](../../wiki/plugin-verification.md) (agent-facing verification matrix).
+
+---
+
 ## Next: start the gateway and run your first plan
 
 ```bash

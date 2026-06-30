@@ -106,6 +106,48 @@ The worker reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from `.en
 
 8. **Tell the user:** "Setup complete. Create a plan with the orchestrator (`kanban-advanced-orchestrator` profile), then run `hermes kanban-advanced decompose --plan <file>`. See the README for the full lifecycle."
 
+## Updating the Plugin
+
+When a new version is released, update from the dashboard. The plugin handles git pull, asset materialization, and sidecar restart automatically — but you must re-bootstrap and (sometimes) restart the gateway.
+
+### Agent workflow (after user says "update the plugin")
+
+1. **Update Plugin** — Click **"Update Plugin"** in the dashboard. This runs `git pull`, materializes updated skills/scripts to `$HERMES_HOME`, reconciles dispatch profiles, and restarts the sidecar. If the dashboard is unavailable or the button fails:
+   ```bash
+   cd "$(hermes plugins list | grep kanban-advanced | awk '{print $NF}')"
+   git pull
+   ```
+   Then click **"Update Plugin"** anyway — it detects the repo is current but still restarts the sidecar and re-materializes.
+
+2. **Re-bootstrap** — **Always** click **"Bootstrap"** (or run `hermes kanban-advanced init`) after updating. This re-provisions the config overlay, dispatch profile models/skills, materialized scripts, and `.env` sync. Existing `working_branch` / `trigger_branch` are preserved unless explicitly changed.
+
+3. **Restart gateway** (conditional) — Only when the update touches `kanban.*` config keys, `.env` variables the dispatcher reads, or gateway-side cron scripts:
+   ```bash
+   hermes gateway restart
+   ```
+   The gateway does **not** hot-reload config. Restart from **outside** the Hermes session.
+
+4. **Verify** — Plugin verification tiers confirm the update applied cleanly:
+   ```bash
+   python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py   # Tier 1 — contract
+   bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh           # Tier 1 — structure
+   bash hermes-kanban-advanced-workflow/scripts/provision.sh --check       # Tier 2 — materialization
+   ```
+   Full matrix: [[plugin-verification]]. If any verification fails, re-run Bootstrap and re-check.
+
+### Reference for agents
+
+| Step | What | Required? |
+|------|------|:---:|
+| Update Plugin | `git pull` + materialize + restart sidecar | ✓ |
+| Bootstrap | Re-provision profiles, overlay, scripts, `.env` | ✓ |
+| Gateway restart | Only when config/cron/`.env` changed | Conditional |
+| Verify | `smoke_test_plugin.py` + `provision.sh --check` | Recommended |
+
+The sidecar restart is automatic (dashboard "Update Plugin" schedules it). Do **not** use `taskkill /F /IM python.exe` to restart the sidecar on Windows — it kills the gateway. Use PID-targeted kill or let the dashboard button handle it. See [[troubleshooting]] § Sidecar server restart kills gateway.
+
+User-facing reference: [README.md](../README.md#updating-the-plugin) and [install guide](../docs/how-to/install-as-plugin.md#updating).
+
 ## Fresh Hermes install
 
 If Hermes Agent isn't installed yet:
