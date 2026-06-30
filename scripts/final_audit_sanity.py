@@ -145,7 +145,7 @@ def _spawn_card(title: str, body: str, assignee: str, parent_id: str) -> str | N
     tid = _extract_task_id(out)
     if tid and parent_id:
         _hermes_run("kanban", "link", parent_id, tid)
-        _hermes_run("kanban", "block", tid, "Awaiting remediation wave (auto_unblock when audit re-runs)")
+        _hermes_run("kanban", "block", "--kind", "dependency", tid, "Awaiting remediation wave (auto_unblock when audit re-runs)")
     return tid
 
 
@@ -212,7 +212,7 @@ def _block_audit_card(audit_id: str, summary: str, dry_run: bool) -> None:
     if dry_run:
         print(f"[DRY-RUN] Would block audit card {audit_id}", file=sys.stderr)
         return
-    _hermes_run("kanban", "block", audit_id, reason)
+    _hermes_run("kanban", "block", "--kind", "dependency", audit_id, reason)
 
 
 def _escalate_max_rounds(

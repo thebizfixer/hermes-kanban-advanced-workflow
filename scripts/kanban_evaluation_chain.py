@@ -261,6 +261,26 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
         """Normalize to forward-slash repo-relative path for cross-platform comparison."""
         return p.replace("\\", "/").strip("/")
 
+    def _file_in_scope(diff_path: str, files_set: set) -> bool:
+        """Check if diff_path matches any file in the scope set.
+        Uses substring match (consistent with E001 step_1_file_compliance)
+        so worktree-prefixed paths like .worktrees/X/test-plan/scripts/f.py
+        match card paths like test-plan/scripts/f.py."""
+        np = _normalize_path(diff_path)
+        if np in files_set:
+            return True
+        # Substring fallback: strip common worktree prefixes
+        for prefix in (".worktrees/",):
+            if np.startswith(prefix):
+                # Find the second '/' to strip the worktree name
+                rest = np[len(prefix):]
+                idx = rest.find("/")
+                if idx > 0:
+                    stripped = rest[idx + 1:]
+                    if stripped in files_set:
+                        return True
+        return False
+
     files_normalized = {_normalize_path(f) for f in files}
     diff_range = _diff_range(baseline, workspace)
     result = subprocess.run(
@@ -272,7 +292,7 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
     unlisted = []
     for f in result.stdout.strip().split("\n"):
         f = f.strip()
-        if f and _normalize_path(f) not in files_normalized and not f.startswith(".hermes/"):
+        if f and not _file_in_scope(f, files_normalized) and not f.startswith(".hermes/"):
             unlisted.append(f)
     if unlisted:
         revert_failures = []
@@ -300,7 +320,7 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
         )
         still_unlisted = [
             f.strip() for f in result2.stdout.strip().split("\n")
-            if f.strip() and _normalize_path(f.strip()) not in files_normalized and not f.strip().startswith(".hermes/")
+            if f.strip() and not _file_in_scope(f.strip(), files_normalized) and not f.strip().startswith(".hermes/")
         ]
         if still_unlisted:
             print(f"[E002] DENY: {len(still_unlisted)} unlisted file(s) remain after revert: {still_unlisted}")
@@ -1112,7 +1132,7 @@ if __name__ == "__main__":
         print(f"[chain] DENY — {reason}")
         if not args.check_only:
             subprocess.run(
-                ["hermes", "kanban", "block", args.task_id, reason],
+                ["hermes", "kanban", "block", "--kind", "transient", args.task_id, reason],
                 timeout=30,
                 check=False,
                 capture_output=True,
