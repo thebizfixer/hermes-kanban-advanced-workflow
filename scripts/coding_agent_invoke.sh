@@ -185,6 +185,16 @@ print(Path(tmp) / 'hermes_token_meter_baseline.json')
 
   # Output captured content to stdout (worker captures this)
   cat "$out_file"
+
+  # Post-agent check: detect if coding agent prematurely completed the card
+  if [[ -n "${HERMES_KANBAN_TASK:-}" ]]; then
+    local agent_status
+    agent_status=$(hermes kanban show "$HERMES_KANBAN_TASK" 2>/dev/null | grep '^  status:' | awk '{print $2}')
+    if [[ "$agent_status" == "done" || "$agent_status" == "completed" ]]; then
+      echo "[WARN] Agent completed card $HERMES_KANBAN_TASK prematurely (status=$agent_status). Eval chain will run post-completion for verification." >&2
+    fi
+  fi
+
   rm -f "$out_file"
 
   return "$rc"

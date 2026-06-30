@@ -372,6 +372,38 @@ def step_2_unlisted_changes(files: List[str], baseline: str, workspace: str, tas
             return False, "E002_UNLISTED_FILE_CHANGE"
         # Log scope violations for postmortem reconciliation
         _log_scope_violations(task_id, unlisted, workspace)
+
+        # Check for untracked files (not in git diff — must use git ls-files)
+        # git diff --name-only excludes untracked files, creating a detection gap.
+        # git ls-files --others --exclude-standard is the porcelain-stable way
+        # to list untracked, non-ignored files (guaranteed across Git versions).
+        untracked_result = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+            cwd=workspace,
+        )
+        allowed_untracked = {".agent_prompt_tmp.txt", ".kanban-scope"}
+        untracked_violations = []
+        for uf in untracked_result.stdout.strip().split("\n"):
+            uf = uf.strip()
+            if not uf:
+                continue
+            uf_name = uf.split("/")[-1] if "/" in uf else uf
+            if uf_name in allowed_untracked or "__pycache__" in uf or uf.endswith(".pyc"):
+                continue  # worker artifacts, not scope violations
+            # Attempt auto-delete
+            uf_path = Path(workspace) / uf
+            try:
+                uf_path.unlink()
+                print(f"[E002] Auto-deleted untracked file: {uf}")
+                untracked_violations.append(uf)
+            except OSError:
+                print(f"[E002] WARNING: Could not delete untracked file: {uf}")
+        if untracked_violations:
+            _log_scope_violations(task_id, untracked_violations, workspace)
+            print(f"[E002] ALLOW — {len(untracked_violations)} untracked file(s) auto-deleted")
+
         return True, None
     return True, None
 
