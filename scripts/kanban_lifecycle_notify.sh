@@ -13,12 +13,15 @@ source "$SCRIPT_DIR/lib/kanban_logs.sh"
 source "$SCRIPT_DIR/lib/kanban_config.sh"
 
 PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}"
+BOARD=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --plan-id) PLAN_ID="${2:-}"; shift 2 ;;
+    --board) BOARD="${2:-}"; shift 2 ;;
     *) shift ;;
   esac
 done
+export KANBAN_BOARD="${BOARD:-${KANBAN_BOARD:-}}"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 # Read PLAN_ID from plan memory (per-plan tracking) or fall back to legacy singleton
@@ -84,12 +87,34 @@ def write_state_atomic(data: dict) -> None:
 
 
 def hermes_list() -> str:
+    board = os.environ.get("KANBAN_BOARD", "").strip()
+    if not board and plan_id:
+        # Auto-resolve board via resolver singleton
+        try:
+            from lib.board_resolver import resolve_board_for_plan  # noqa: E402
+            resolved = resolve_board_for_plan(plan_id)
+            if resolved:
+                board = resolved
+                os.environ["KANBAN_BOARD"] = board
+        except ImportError:
+            pass
+    if board:
+        return subprocess.run(
+            ["hermes", "kanban", "--board", board, "list"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace"
+        ).stdout
     return subprocess.run(
         ["hermes", "kanban", "list"], capture_output=True, text=True, encoding="utf-8", errors="replace"
     ).stdout
 
 
 def hermes_show(tid: str) -> str:
+    board = os.environ.get("KANBAN_BOARD", "").strip()
+    if board:
+        return subprocess.run(
+            ["hermes", "kanban", "--board", board, "show", tid],
+            capture_output=True, text=True, encoding="utf-8", errors="replace"
+        ).stdout
     return subprocess.run(
         ["hermes", "kanban", "show", tid], capture_output=True, text=True, encoding="utf-8", errors="replace"
     ).stdout

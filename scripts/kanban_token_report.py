@@ -41,10 +41,24 @@ def _get_agent_label():
     return f"{_get_coding_agent_binary()} agent"
 
 
-def _token_log_path() -> Path:
+def _token_log_path(board: str = "") -> Path:
     env = os.environ.get("KANBAN_TOKEN_LOG", "")
     if env:
         return Path(env)
+    # Board-scoped token log (timestamped boards)
+    if board:
+        hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+        board_path = hermes_home / "kanban" / "boards" / board / "tokens.jsonl"
+        if board_path.exists():
+            return board_path
+        # Try archived boards
+        archived_dir = hermes_home / "kanban" / "boards" / "_archived"
+        if archived_dir.is_dir():
+            for entry in sorted(archived_dir.iterdir(), reverse=True):
+                if entry.is_dir() and entry.name.startswith(board):
+                    p = entry / "tokens.jsonl"
+                    if p.exists():
+                        return p
     return Path.home() / ".hermes" / "kanban" / "tokens.jsonl"
 
 
@@ -168,11 +182,23 @@ def main():
     parser = argparse.ArgumentParser(description="Kanban token usage reporter")
     parser.add_argument("--plan", help="Plan ID to report on")
     parser.add_argument("--task", help="Kanban task ID to report on")
+    parser.add_argument("--board", help="Board slug for board-scoped token log (searches live + archived boards)")
     parser.add_argument("--all", action="store_true", help="Report all plans")
     parser.add_argument("--csv", action="store_true", help="Export as CSV")
     args = parser.parse_args()
 
-    entries = read_jsonl(_token_log_path())
+    # Resolve board via singleton when --board not set but --plan is
+    board = args.board or ""
+    if not board and args.plan:
+        try:
+            from lib.board_resolver import resolve_board_for_plan  # noqa: E402
+            resolved = resolve_board_for_plan(args.plan)
+            if resolved:
+                board = resolved
+        except ImportError:
+            pass
+
+    entries = read_jsonl(_token_log_path(board))
 
     if args.plan:
         report_plan(args.plan, entries)
@@ -184,7 +210,7 @@ def main():
             plans[e.get("plan_id", "unknown")].append(e)
         if not plans:
             print("No token data found.")
-            print(f"Expected log at: {_token_log_path()}")
+            print(f"Expected log at: {_token_log_path(board)}")
             return
         for plan_id in sorted(plans):
             report_plan(plan_id, plans[plan_id])

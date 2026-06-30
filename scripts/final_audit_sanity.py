@@ -66,8 +66,17 @@ def _hermes_home() -> Path:
     return Path.home() / ".hermes"
 
 
-def _resolve_kanban_db() -> Path:
+def _resolve_kanban_db(plan_id: str = "") -> Path:
     board = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
+    if not board and plan_id:
+        # Auto-resolve board via resolver singleton
+        try:
+            from lib.board_resolver import resolve_board_for_plan  # noqa: E402
+            resolved = resolve_board_for_plan(plan_id)
+            if resolved:
+                board = resolved
+        except ImportError:
+            pass
     if board and board != "default":
         return _hermes_home() / "kanban" / "boards" / board / "kanban.db"
     return _hermes_home() / "kanban.db"
@@ -320,7 +329,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"ERROR: plan file not found for plan_id={plan_id}", file=sys.stderr)
         return 2
 
-    db_path = _resolve_kanban_db()
+    db_path = _resolve_kanban_db(plan_id)
     try:
         cards = _load_cards_from_db(plan_id, db_path)
     except RuntimeError as exc:

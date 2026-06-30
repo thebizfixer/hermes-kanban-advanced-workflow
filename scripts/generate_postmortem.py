@@ -151,7 +151,20 @@ def _interventions_log_path() -> Path:
     return _project_root() / ".hermes" / "kanban" / "logs" / "interventions.jsonl"
 
 
-def _scope_violations_path() -> Path:
+def _scope_violations_path(board_slug: str = "") -> Path:
+    """Return the scope violations log path, board-scoped when available."""
+    if board_slug:
+        board_path = _hermes_home() / "kanban" / "boards" / board_slug / "scope_violations.jsonl"
+        if board_path.exists():
+            return board_path
+        # Search archived boards
+        archived_dir = _hermes_home() / "kanban" / "boards" / "_archived"
+        if archived_dir.is_dir():
+            for entry in sorted(archived_dir.iterdir(), reverse=True):
+                if entry.is_dir() and entry.name.startswith(board_slug):
+                    p = entry / "scope_violations.jsonl"
+                    if p.exists():
+                        return p
     return _project_root() / ".hermes" / "kanban" / "logs" / "scope_violations.jsonl"
 
 
@@ -351,6 +364,12 @@ class TaskRecord:
         modes: list[str] = []
         for event in self.events:
             kind = event.kind.lower()
+            # Exclude intentional dependency-gate blocks from failure count
+            # (wave promotion, gate card — RPN=10 per FMEA taxonomy)
+            if kind == "dependency_wait":
+                continue
+            if kind == "blocked" and _is_dependency_block_event(event):
+                continue
             if kind in FAILURE_KINDS:
                 modes.append(kind)
             elif kind == "completed" and "protocol" in event.summary.lower():
@@ -922,6 +941,23 @@ def build_report(
         if task.status.lower() in TERMINAL_STATUSES
     )
     failed = sum(1 for task in tasks if _classify_failure(task) is not None)
+    # Count dependency-gate blocks excluded from failure taxonomy (FMEA RPN=10)
+    dep_blocks_excluded = sum(
+        1 for task in tasks
+        for event in task.events
+        if event.kind.lower() == "dependency_wait"
+        or (
+            event.kind.lower() == "blocked"
+            and isinstance(event.raw, dict)
+            and isinstance(event.raw.get("payload", {}), dict)
+            and event.raw["payload"].get("kind") == "dependency"
+        )
+    )
+    if dep_blocks_excluded:
+        source_notes.append(
+            f"Dependency-gate blocks excluded from failure count: {dep_blocks_excluded} "
+            f"(intentional wave promotion / gate card — not failures)"
+        )
     autonomous = completed
     takeovers = sum(
         1
@@ -1532,7 +1568,10 @@ def build_kpi_json(
         (len(plan_tokens) / completed * 100.0) if completed else 0.0, 2
     )
     uncaught = audit_fields["uncaught_violation_count"]
-    if uncaught is None or token_coverage_pct < 50.0:
+    # Board-scoped run with 100% task match = highest confidence signal
+    if board_slug and completed == total_tasks and total_tasks > 0:
+        data_confidence = "high"
+    elif uncaught is None or token_coverage_pct < 50.0:
         data_confidence = "low"
     elif uncaught or token_coverage_pct < 80.0:
         data_confidence = "medium"
@@ -1566,13 +1605,43 @@ def write_kpi_json(kpi: dict[str, Any], output: Path, plan_id: str) -> Path:
     return dest
 
 
+def _is_dependency_block_event(event: TaskEvent) -> bool:
+    """Return True if this event is an intentional dependency-gate block (not a failure)."""
+    if event.kind.lower() == "dependency_wait":
+        return True
+    if event.kind.lower() != "blocked":
+        return False
+    if not isinstance(event.raw, dict):
+        return False
+    raw_payload = event.raw.get("payload", None)
+    if raw_payload is None:
+        return False
+    if isinstance(raw_payload, str):
+        try:
+            raw_payload = json.loads(raw_payload)
+        except (json.JSONDecodeError, TypeError):
+            return False
+    if not isinstance(raw_payload, dict):
+        return False
+    pk = raw_payload.get("kind")
+    reason = str(raw_payload.get("reason", "")).lower()
+    return pk == "dependency" or "awaiting dependency" in reason or "awaiting remediation wave" in reason
+
+
 def _build_blocker_chain(
     tasks: list[TaskRecord],
 ) -> list[dict[str, Any]]:
     """G1 — Blocker chain for thrash outliers: eval code, Tests line, wait condition."""
     chains: list[dict[str, Any]] = []
     for task in tasks:
-        reblocks = [e for e in task.events if "block" in e.kind.lower()]
+        reblocks = [
+            e for e in task.events
+            if "block" in e.kind.lower()
+            and not (
+                e.kind.lower() == "dependency_wait"
+                or _is_dependency_block_event(e)
+            )
+        ]
         if len(reblocks) < 3:
             continue
         chain = {
@@ -1608,11 +1677,26 @@ def _infer_completion_method(task: TaskRecord) -> str:
     
     Returns:
       - 'eval_chain' — last event before terminal was an eval chain ALLOW
+      - 'salvage' — prior agent run reused (salvage pattern, autonomous)
+      - 'orchestrator_runbook' — orchestrator SOP completion (handoff, gate, audit, root)
       - 'operator_cli' — marked done via hermes kanban complete (operator CLI)
       - 'unknown' — can't determine from available events
     """
     if task.status.lower() not in TERMINAL_STATUSES:
         return "unknown"
+    
+    # Check for salvage pattern (prior agent commit reused)
+    for event in task.events:
+        summary = (event.summary or "").lower()
+        if "salvage" in summary or "prior agent run" in summary or "prior run" in summary:
+            return "salvage"
+    
+    # Check for orchestrator runbook completions (no eval chain, not operator CLI)
+    profile = (task.profile or "").lower()
+    is_orchestrator = "orchestrator" in profile
+    title = (task.title or "").lower()
+    is_runbook = any(kw in title for kw in ("decompose", "gate", "root", "audit", "handoff"))
+    
     # Check last few events for eval chain signature
     for event in reversed(task.events[-10:]):
         summary = (event.summary or "").lower()
@@ -1624,6 +1708,11 @@ def _infer_completion_method(task: TaskRecord) -> str:
             raw = json.dumps(event.raw) if isinstance(event.raw, dict) else str(event.raw)
             if "evaluation chain" in raw.lower() or "eval_chain" in raw.lower():
                 return "eval_chain"
+    
+    # Orchestrator cards without eval chain = orchestrator runbook (autonomous)
+    if is_orchestrator and is_runbook:
+        return "orchestrator_runbook"
+    
     # If no eval chain signature found, assume operator CLI
     return "operator_cli" if task.events else "unknown"
 
@@ -1807,10 +1896,13 @@ def write_report(content: str, output: Path, plan_id: str) -> Path:
 
 
 def _board_db_path(board_slug: str) -> Path:
-    """Return the kanban DB path for a specific board (live or archived)."""
+    """Return the kanban DB path for a specific board (live or archived).
+
+    Delegates board discovery to the resolver singleton.  The resolver handles
+    live-vs-archived search, empty-DB detection, and timestamp sorting.
+    """
     live = _hermes_home() / "kanban" / "boards" / board_slug / "kanban.db"
     if live.exists():
-        # Only use live DB if it actually contains tasks (not cleared by archive)
         try:
             import sqlite3
             conn = sqlite3.connect(str(live))
@@ -2021,7 +2113,7 @@ def main(argv: list[str] | None = None) -> int:
         for entry in read_jsonl(_interventions_log_path())
         if not entry.get("plan_id") or entry.get("plan_id") == plan_id
     ]
-    scope_violations = read_jsonl(_scope_violations_path())
+    scope_violations = read_jsonl(_scope_violations_path(board_slug or ""))
 
     source_notes: list[str] = []
     if not token_path.exists():

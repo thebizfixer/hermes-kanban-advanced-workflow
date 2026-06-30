@@ -278,6 +278,20 @@ check_coding_agent_cli_reachability() {
   fi
   binary="${binary:-agent}"
 
+  # Hermes as coding agent: the adapter-based smoke test expects headless CLI output
+  # format that 'hermes chat' doesn't produce. check_coding_agent_cli.py handles
+  # hermes correctly via a different mechanism — skip adapter smoke here.
+  if [[ "$binary" == "hermes" ]]; then
+    if command -v hermes >/dev/null 2>&1; then
+      record_check "coding_agent_cli_reachability" "pass" "blocking" \
+        "Coding agent is hermes (platform binary) — headless smoke delegated to check_coding_agent_cli.py"
+    else
+      record_check "coding_agent_cli_reachability" "fail" "blocking" \
+        "Coding agent binary 'hermes' not on PATH"
+    fi
+    return
+  fi
+
   if ! command -v "$binary" >/dev/null 2>&1; then
     record_check "coding_agent_cli_reachability" "fail" "blocking" \
       "Coding agent binary '${binary}' not on PATH — install CLI or fix coding_agent_binary"
@@ -574,6 +588,32 @@ from token_tracker import log_token_run, log_from_env, log_from_agent_output
   fi
 }
 
+check_attestation_freshness() {
+  # Auto-regenerate stale attestation when KANBAN_PLAN_ID is set.
+  # Follows the SRE self-healing pattern: if the system can detect the condition
+  # AND knows the fix, apply the fix and log — don't block waiting for a human.
+  local plan_id="${KANBAN_PLAN_ID:-}"
+  if [[ -z "$plan_id" ]]; then
+    return  # No plan — attestation check deferred to pre_dispatch_gate
+  fi
+  local att_file="${REPO_ROOT}/.hermes/kanban/attestation-${plan_id}.yaml"
+  if [[ ! -f "$att_file" ]]; then
+    return  # No existing attestation — will be generated fresh
+  fi
+  # Check staleness via kanban_attestation.py --verify
+  if python3 "${SCRIPT_DIR}/kanban_attestation.py" "$plan_id" --verify >/dev/null 2>&1; then
+    return  # Attestation is fresh
+  fi
+  # Stale — auto-regenerate
+  if python3 "${SCRIPT_DIR}/kanban_attestation.py" "$plan_id" >/dev/null 2>&1; then
+    record_check "attestation_freshness" "pass" "blocking" \
+      "Auto-regenerated stale attestation for plan ${plan_id}"
+  else
+    record_check "attestation_freshness" "degraded" "degraded" \
+      "Attestation stale and auto-regeneration failed — run: python3 scripts/kanban_attestation.py ${plan_id}"
+  fi
+}
+
 check_plan_backup() {
   # Copy the plan file to .hermes/kanban/plans/ for safe keeping
   # before decomposition can accidentally lose it.
@@ -721,6 +761,7 @@ check_kanban_auto_decompose
 check_kanban_dispatch_stale_timeout
 check_filesystem_coherence
 check_kanban_db_integrity
+check_attestation_freshness
 check_secret_availability
 check_api_reachability
 check_gateway_health

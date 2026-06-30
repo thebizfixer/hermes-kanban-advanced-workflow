@@ -167,8 +167,20 @@ def resolve_baseline_sha(
 ) -> str:
     stamped = extract_field(audit_body, "Audit-baseline-sha")
     if stamped:
-        return stamped
+        # Verify the stamped SHA is reachable (worktree branches get pruned)
+        result = _run_git(["rev-parse", "--verify", f"{stamped}^{{commit}}"], repo_root)
+        if result.returncode == 0:
+            return stamped
+        # Stamped SHA pruned — fall through to merge-commit search
     branch = working_branch or resolve_working_branch(repo_root)
+    # Prefer the most recent merge commit on the working branch
+    # (survives worktree pruning, reachable from HEAD)
+    result = _run_git(
+        ["log", "--merges", "--oneline", "-1", "--format=%H", branch],
+        repo_root,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
     result = _run_git(["rev-parse", f"origin/{branch}"], repo_root)
     if result.returncode == 0 and result.stdout.strip():
         return result.stdout.strip()

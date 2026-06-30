@@ -42,6 +42,14 @@ env['PATH'] = git_usr_bin + os.pathsep + env.get('PATH', '')
 # Pass board scope if set (for multi-board isolation)
 if os.environ.get('HERMES_KANBAN_BOARD'):
     env['KANBAN_BOARD'] = os.environ['HERMES_KANBAN_BOARD']
+# Forward --board flag from CLI args to shell script
+board_flag = ""
+for i, arg in enumerate(sys.argv[1:]):
+    if arg == "--board" and i + 1 < len(sys.argv) - 1:
+        board_flag = f"--board {sys.argv[i + 2]}"
+        break
+if board_flag:
+    args = f"{args} {board_flag}"
 r = subprocess.run(f'"{GIT_BASH}" "{script}" {args}', shell=True,
                    capture_output=True, text=True, encoding="utf-8", timeout=60, cwd=repo_root, env=env)
 if r.stdout:

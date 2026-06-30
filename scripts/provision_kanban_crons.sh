@@ -47,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --json) JSON_OUT=true; shift ;;
     --headless) HEADLESS=true; shift ;;
     --workdir) WORKDIR="${2:-}"; shift 2 ;;
+    --board) BOARD="${2:-}"; shift 2 ;;
     -h|--help)
       sed -n '1,12p' "$0"
       exit 0
@@ -242,7 +243,9 @@ case "$ACTION" in
     keeper_id="$(_create_job "every 3m" "$BOARD_KEEPER_NAME" "$BOARD_KEEPER_SCRIPT" local "--workdir $WORKDIR")"
     lifecycle_id=""
     if _notify_lifecycle_enabled; then
-      lifecycle_id="$(_create_job "every 5m" "$LIFECYCLE_NOTIFY_NAME" "$LIFECYCLE_SCRIPT" "$LIFECYCLE_DELIVER" "--workdir $WORKDIR")"
+      lifecycle_args="--workdir $WORKDIR"
+      [[ -n "${BOARD:-}" ]] && lifecycle_args="$lifecycle_args --board $BOARD"
+      lifecycle_id="$(_create_job "every 5m" "$LIFECYCLE_NOTIFY_NAME" "$LIFECYCLE_SCRIPT" "$LIFECYCLE_DELIVER" "$lifecycle_args")"
       if [[ -n "$PLAN_ID" && "$DRY_RUN" != true ]]; then
         mkdir -p "$REPO_ROOT/.hermes/kanban/memory"
         printf '{"plan_id":"%s","active":true}' "$PLAN_ID" > "$REPO_ROOT/.hermes/kanban/memory/${PLAN_ID}.json"

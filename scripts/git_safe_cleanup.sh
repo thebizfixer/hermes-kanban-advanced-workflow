@@ -368,6 +368,18 @@ if [[ -n "$PLAN_ID" ]]; then
     done
 fi
 
+# ── 2f. Remove stale attestation file ──────────────────────────────────
+if [[ -n "$PLAN_ID" ]]; then
+    att_file="${REPO_ROOT}/.hermes/kanban/attestation-${PLAN_ID}.yaml"
+    if [[ -f "$att_file" ]]; then
+        if [[ "$DRY_RUN" == "true" ]]; then
+            echo "[dry-run] Would remove stale attestation: attestation-${PLAN_ID}.yaml"
+        else
+            rm -f "$att_file" && green "  → Removed stale attestation: attestation-${PLAN_ID}.yaml" || yellow "  → Could not remove attestation"
+        fi
+    fi
+fi
+
 # ── 2d. Post-cleanup verification ──────────────────────────────────────
 echo ""
 blue "--- Post-Cleanup Verification ---"

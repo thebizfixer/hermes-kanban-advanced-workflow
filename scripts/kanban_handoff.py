@@ -135,6 +135,7 @@ def _run_cron_provision(
     bundle_root: Path,
     project_root: Path,
     *,
+    kanban_board: str = "",
     dry_run: bool = False,
 ) -> tuple[str, bool, str]:
     """Run provision_kanban_crons --create then --check in default-profile session."""
@@ -147,10 +148,9 @@ def _run_cron_provision(
 
     ts = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     bash_cron = _bash_path(cron_script)
-    # shell=True is required on Windows so the spawned bash process inherits
-    # MSYS2 path translation. Passing bash + args as a list bypasses the
-    # shell layer and MSYS2's automount can't resolve /c/ paths.
     create_args = f"bash {bash_cron} --create --plan-id {plan_id}"
+    if kanban_board:
+        create_args += f" --board {kanban_board}"
     if dry_run:
         create_args += " --dry-run"
 
@@ -1139,6 +1139,7 @@ def main() -> int:
             plan_id,
             bundle_root,
             project_root,
+            kanban_board=kanban_board,
             dry_run=args.dry_run,
         )
         if not cron_ok and not args.dry_run:

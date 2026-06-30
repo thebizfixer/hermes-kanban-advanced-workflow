@@ -970,7 +970,15 @@ def main():
             mem = repo_root / ".hermes" / "kanban" / "memory" / f"{plan_id_for_cron}.json"
             if mem.exists():
                 data = json.loads(mem.read_text())
+                # Merge orchestrator IDs into main task_ids list so postmortem counts all cards
+                existing = set(data.get("task_ids") or [])
+                existing.update(orchestrator_ids.values())
+                data["task_ids"] = sorted(existing)
                 data.setdefault("orchestrator_task_ids", {}).update(orchestrator_ids)
+                # Stamp board slug so the resolver has a fast path
+                board_slug = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
+                if board_slug:
+                    data["board_slug"] = board_slug
                 mem.write_text(json.dumps(data, indent=2))
         try:
             from lib.orchestrator_token_checkpoint import maybe_log_orchestrator_checkpoint  # noqa: E402
