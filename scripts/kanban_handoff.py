@@ -837,16 +837,16 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
     if walk_away_mode == "false":
         walk_away_gate = (
             "### Walk-away gate (walk_away_mode: false)\n\n"
-            "**🛑 STOP — Operator approval required before Step 3 (Decompose).**\n\n"
-            "Do NOT create any implementation cards until this card is unblocked.\n"
+            "**🛑 STOP — Operator approval required before Step 5 (Complete gate).**\n\n"
+            "All implementation cards (Cards 1–4) may proceed. Do NOT complete the gate card,\n"
+            "run Card 5 (verification), or spawn the final audit card until this card is unblocked.\n\n"
             "Block this card to await operator review:\n"
             "```bash\n"
             'hermes kanban --board "$KANBAN_BOARD" block <this_card_id> '
-            '--kind approval "Awaiting operator approval for decomposition '
+            '--kind approval "Awaiting operator approval for post-execution '
             '(walk_away_mode=false)"\n'
             "```\n"
-            "The operator must unblock this card before you proceed to decomposition.\n"
-            "If the operator does not unblock within the gateway timeout, this card will stale-close.\n\n"
+            "The operator must unblock this card before post-execution steps.\n\n"
         )
     else:
         walk_away_gate = ""
@@ -940,7 +940,6 @@ bash {bundle}/scripts/provision_kanban_crons.sh --check
 
 ### Step 3 — Decompose
 
-{walk_away_gate}
 Substitute `<gate_id>` from Step 2:
 ```bash
 python3 {bundle}/scripts/kanban_decompose.py {decompose_source} --from-handoff --gate-id <gate_id> --no-crons
@@ -954,7 +953,7 @@ bash {bundle}/scripts/validate_board.sh
 ```
 Fix every structural failure before proceeding.
 
-### Step 5 — Complete gate
+{walk_away_gate}### Step 5 — Complete gate
 
 ```bash
 hermes kanban --board "$KANBAN_BOARD" complete <gate_id> --summary "Gate complete. Auto-unblock: <cron1_id>. Board-keeper: <cron2_id>. N cards dispatched."
