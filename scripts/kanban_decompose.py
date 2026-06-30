@@ -976,7 +976,7 @@ def main():
                 data["task_ids"] = sorted(existing)
                 data.setdefault("orchestrator_task_ids", {}).update(orchestrator_ids)
                 # Stamp board slug so the resolver has a fast path
-                board_slug = os.environ.get("HERMES_KANBAN_BOARD", "").strip()
+                board_slug = os.environ.get("HERMES_KANBAN_BOARD", "").strip() or os.environ.get("KANBAN_BOARD", "").strip()
                 if board_slug:
                     data["board_slug"] = board_slug
                 mem.write_text(json.dumps(data, indent=2))

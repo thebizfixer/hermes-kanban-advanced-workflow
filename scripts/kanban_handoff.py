@@ -881,6 +881,7 @@ SOP-only, no `agent -p` block, not a coding task.
 
 This handoff runs on board `{kanban_board}`. Export before all commands:
 ```bash
+export HERMES_KANBAN_BOARD="{kanban_board}"
 export KANBAN_BOARD="{kanban_board}"
 ```
 
