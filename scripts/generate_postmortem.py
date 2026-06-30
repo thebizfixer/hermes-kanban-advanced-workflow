@@ -469,7 +469,8 @@ def load_plan_memory_task_ids(project_root: Path, plan_id: str) -> tuple[set[str
 
 
 def load_task_history(
-    db_path: Path, plan_id: str, project_root: Path | None = None
+    db_path: Path, plan_id: str, project_root: Path | None = None,
+    board_task_ids: set[str] | None = None,
 ) -> tuple[list[TaskRecord], list[str]]:
     notes: list[str] = []
     root = project_root or _project_root()
@@ -481,6 +482,11 @@ def load_task_history(
             "No plan memory task_ids — falling back to exact plan_id match in metadata/body "
             "(substring plan_id match disabled)."
         )
+    if board_task_ids is not None:
+        if not board_task_ids:
+            notes.append("Board-scoped task ID set is empty — no tasks will be included.")
+        else:
+            notes.append(f"Board-scoped filtering active — restricting to {len(board_task_ids)} task ID(s) from board.")
     if not db_path.exists():
         notes.append(f"Kanban DB not found at `{db_path}` — task history inferred from token log only.")
         return [], notes
@@ -526,6 +532,10 @@ def load_task_history(
                     or bool(PLAN_ID_RE.search(body) and _extract_plan_id(body, metadata) == plan_id)
                 )
             if not matched:
+                continue
+
+            # Board-scoped filtering: skip tasks not in the board's task list
+            if board_task_ids is not None and task_id not in board_task_ids:
                 continue
 
             task = TaskRecord(
@@ -901,6 +911,7 @@ def build_report(
     intervention_log: list[dict[str, Any]],
     scope_violations: list[dict[str, Any]],
     source_notes: list[str],
+    board_slug: str | None = None,
 ) -> str:
     plan_tokens = [entry for entry in token_entries if entry.get("plan_id") == plan_id]
 
@@ -953,9 +964,13 @@ def build_report(
     skill_updates = _skill_updates(pitfalls)
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines: list[str] = [
+    frontmatter_lines = [
         "---",
         f"plan_id: {plan_id}",
+    ]
+    if board_slug:
+        frontmatter_lines.append(f"board_slug: {board_slug}")
+    frontmatter_lines.extend([
         f"generated_at: {generated_at}",
         "document_type: postmortem",
         "generator: hermes-kanban-advanced-workflow/scripts/generate_postmortem.py",
@@ -963,7 +978,8 @@ def build_report(
         "",
         f"# Kanban Postmortem — {plan_id}",
         "",
-    ]
+    ])
+    lines: list[str] = frontmatter_lines
 
     if source_notes:
         lines.extend(["> **Data notes:**"] + [f"> - {note}" for note in source_notes] + [""])
@@ -1349,6 +1365,7 @@ def build_kpi_json(
     scope_violations: list[dict[str, Any]],
     repo_root: Path | None = None,
     kpi_corrections: dict[str, Any] | None = None,
+    board_slug: str | None = None,
 ) -> dict[str, Any]:
     """Machine-readable KPI artifact for dashboards and cross-run trend."""
     plan_tokens = [entry for entry in token_entries if entry.get("plan_id") == plan_id]
@@ -1454,6 +1471,7 @@ def build_kpi_json(
 
     kpi: dict[str, Any] = {
         "plan_id": plan_id,
+        "board_slug": board_slug,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "success_rate": round(success_rate, 2),
         "intervention_rate": round(intervention_rate, 2),
@@ -1645,6 +1663,7 @@ def build_reconciliation(
     intervention_count: int,
     scope_violations: list[dict[str, Any]],
     source_notes: list[str],
+    board_slug: str | None = None,
 ) -> str:
     """Machinery-health reconciliation sidecar (separate from project-outcome postmortem).
     
@@ -1655,9 +1674,13 @@ def build_reconciliation(
     plan_tokens = [e for e in token_entries if e.get("plan_id") == plan_id]
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
-    lines: list[str] = [
+    recon_frontmatter = [
         "---",
         f"plan_id: {plan_id}",
+    ]
+    if board_slug:
+        recon_frontmatter.append(f"board_slug: {board_slug}")
+    recon_frontmatter.extend([
         f"generated_at: {generated_at}",
         "document_type: reconciliation",
         "generator: hermes-kanban-advanced-workflow/scripts/generate_postmortem.py",
@@ -1665,11 +1688,14 @@ def build_reconciliation(
         "",
         f"# Reconciliation — {plan_id}",
         "",
+    ])
+    lines: list[str] = recon_frontmatter
+    lines.extend([
         "> **Machinery-health report.** Focuses on plugin/agent evaluation chain performance,",
         "> parser misses, scope violations, and thrash patterns. For project outcomes",
         "> (what shipped, what didn't, acceptance gaps), see the postmortem companion.",
         "",
-    ]
+    ])
 
     if source_notes:
         lines.extend(["> **Data notes:**"] + [f"> - {note}" for note in source_notes] + [""])
@@ -1780,9 +1806,93 @@ def write_report(content: str, output: Path, plan_id: str) -> Path:
     return dest
 
 
+def _board_db_path(board_slug: str) -> Path:
+    """Return the kanban DB path for a specific board."""
+    return _hermes_home() / "kanban" / "boards" / board_slug / "kanban.db"
+
+
+def _get_board_task_ids(board_slug: str) -> tuple[set[str], list[str]]:
+    """Run 'hermes kanban --board <slug> list --json' and return discovered task IDs.
+
+    Returns (task_ids, notes). task_ids is None if the command failed or
+    produced no usable output; notes explain what happened.
+    """
+    notes: list[str] = []
+    try:
+        result = subprocess.run(
+            ["hermes", "kanban", "--board", board_slug, "list", "--json"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        notes.append(f"Failed to run 'hermes kanban --board {board_slug} list --json': {exc}")
+        return set(), notes
+
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        notes.append(
+            f"'hermes kanban --board {board_slug} list --json' exited with code {result.returncode}"
+            + (f": {stderr}" if stderr else "")
+        )
+        return set(), notes
+
+    stdout = (result.stdout or "").strip()
+    if not stdout:
+        notes.append(f"'hermes kanban --board {board_slug} list --json' produced no output — board may be empty.")
+        return set(), notes
+
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        notes.append(f"Failed to parse JSON from 'hermes kanban --board {board_slug} list --json': {exc}")
+        return set(), notes
+
+    if isinstance(data, list):
+        task_ids: set[str] = set()
+        for item in data:
+            if isinstance(item, dict):
+                tid = item.get("id") or item.get("task_id") or item.get("uuid")
+                if tid:
+                    task_ids.add(str(tid))
+        if not task_ids:
+            notes.append(f"Board '{board_slug}' returned {len(data)} item(s) but no recognizable task IDs found.")
+        else:
+            notes.append(f"Board '{board_slug}' — discovered {len(task_ids)} task ID(s) via CLI.")
+        return task_ids, notes
+
+    if isinstance(data, dict):
+        # Could be a wrapped response like {"tasks": [...]}
+        for key in ("tasks", "items", "cards", "results"):
+            items = data.get(key)
+            if isinstance(items, list):
+                task_ids = set()
+                for item in items:
+                    if isinstance(item, dict):
+                        tid = item.get("id") or item.get("task_id") or item.get("uuid")
+                        if tid:
+                            task_ids.add(str(tid))
+                if task_ids:
+                    notes.append(f"Board '{board_slug}' — discovered {len(task_ids)} task ID(s) via CLI (key '{key}').")
+                    return task_ids, notes
+        notes.append(f"Board '{board_slug}' returned a JSON object but no recognizable task list found.")
+        return set(), notes
+
+    notes.append(f"Unexpected JSON type from 'hermes kanban --board {board_slug} list --json'.")
+    return set(), notes
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate kanban plan postmortem markdown report")
     parser.add_argument("--plan-id", required=True, help="Plan identifier (matches plan_id in card bodies)")
+    parser.add_argument(
+        "--board",
+        default=None,
+        help="Board slug for board-scoped filtering (runs 'hermes kanban --board <slug> list --json' to discover task IDs). "
+             "When set, only tasks from this board are included in the report. Falls back to --plan-id behavior when omitted.",
+    )
     parser.add_argument(
         "--output",
         default=str(_hermes_home() / "kanban" / "reports"),

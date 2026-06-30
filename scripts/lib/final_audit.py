@@ -320,6 +320,9 @@ def run_tier1(ctx: AuditContext) -> list[Violation]:
                     )
                 )
         for site in surf["call_sites"]:
+            # Recognize 'none' as an intentional sentinel — declared "no call-sites"
+            if re.search(r'^\s*none\b', site, re.IGNORECASE):
+                continue
             if not _call_site_resolvable(site, ctx.repo_root):
                 violations.append(
                     Violation(

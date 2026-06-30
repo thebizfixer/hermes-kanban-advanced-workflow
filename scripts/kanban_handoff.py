@@ -830,6 +830,21 @@ def _build_body(plan_id: str, plan_path: Path, repo_root: Path, working_branch: 
     gate_body = _gate_card_body(plan_id)
     gate_body_escaped = gate_body.replace('\\', '\\\\').replace('"', '\\"')
 
+    if walk_away_mode == "false":
+        walk_away_gate = (
+            "### Walk-away gate (walk_away_mode: false)\n\n"
+            "**🛑 STOP — Operator approval required before Step 5.**\n\n"
+            "Block this card to await operator review:\n"
+            "```bash\n"
+            'hermes kanban --board "$KANBAN_BOARD" block <this_card_id> '
+            '--kind approval "Awaiting operator approval for post-execution '
+            '(walk_away_mode=false)"\n'
+            "```\n"
+            "The operator must unblock this card before you proceed to Step 5.\n\n"
+        )
+    else:
+        walk_away_gate = ""
+
     return f"""Type: {HANDOFF_TYPE}
 plan_id: {plan_id}
 Plan: {plan_path}
@@ -931,7 +946,7 @@ bash {bundle}/scripts/validate_board.sh
 ```
 Fix every structural failure before proceeding.
 
-### Step 5 — Complete gate
+{walk_away_gate}### Step 5 — Complete gate
 
 ```bash
 hermes kanban --board "$KANBAN_BOARD" complete <gate_id> --summary "Gate complete. Auto-unblock: <cron1_id>. Board-keeper: <cron2_id>. N cards dispatched."

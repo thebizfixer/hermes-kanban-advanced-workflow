@@ -74,6 +74,10 @@ _dispatch_and_log() {
   local out_file
   out_file="$(mktemp)"
 
+  if [[ -z "${HERMES_KANBAN_TASK:-}" ]]; then
+    echo "[coding_agent_invoke] WARNING: HERMES_KANBAN_TASK not set — token log task_id will be empty" >&2
+  fi
+
   local rc=0
   if run_with_coding_agent_auth_lock "$BINARY" "${agent_args[@]}" >"$out_file" 2>&1; then
     rc=0
@@ -88,6 +92,11 @@ _dispatch_and_log() {
   HERMES_KANBAN_PLAN_ID="${HERMES_KANBAN_PLAN_ID:-}" \
   HERMES_KANBAN_TASK="${HERMES_KANBAN_TASK:-}" \
     python3 "$SCRIPT_DIR/log_invoke_tokens.py" --output-file "$out_file" 2>/dev/null || true
+
+  # Save agent output to expected path before cat so E020 eval check finds it.
+  local agent_output_path
+  agent_output_path="${KANBAN_TEMP:-${TMPDIR:-${TEMP:-/tmp}}}/agent_output_${HERMES_KANBAN_TASK:-unknown}.json"
+  cp "$out_file" "$agent_output_path" 2>/dev/null || true
 
   # Output captured content to stdout (worker captures this)
   cat "$out_file"
@@ -107,6 +116,10 @@ _dispatch_hermes_and_meter() {
   local -a agent_args=("$@")
   local out_file
   out_file="$(mktemp)"
+
+  if [[ -z "${HERMES_KANBAN_TASK:-}" ]]; then
+    echo "[coding_agent_invoke] WARNING: HERMES_KANBAN_TASK not set — token log task_id will be empty" >&2
+  fi
 
   # Clean up stale baseline on interrupt (SIGTERM/SIGINT) so next run starts clean.
   # BASELINE_FILE path matches hermes_token_meter.py's tempfile.gettempdir() location.
@@ -163,6 +176,12 @@ print(Path(tmp) / 'hermes_token_meter_baseline.json')
   elif [ "$meter_rc" -ne 0 ]; then
     echo "[WARNING] Token delta failed but snapshot was OK — baseline/delta mismatch, check hermes insights" >&2
   fi
+
+  # Save agent output to expected path before cat so E020 eval check finds it.
+  # Path must match step_7_agent_output_capture in kanban_evaluation_chain.py.
+  local agent_output_path
+  agent_output_path="${KANBAN_TEMP:-${TMPDIR:-${TEMP:-/tmp}}}/agent_output_${HERMES_KANBAN_TASK:-unknown}.json"
+  cp "$out_file" "$agent_output_path" 2>/dev/null || true
 
   # Output captured content to stdout (worker captures this)
   cat "$out_file"

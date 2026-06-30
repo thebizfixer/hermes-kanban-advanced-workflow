@@ -12,6 +12,7 @@ Exit codes: 0=clean, 1=violations, 2=script error
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -70,6 +71,35 @@ def _resolve_kanban_db() -> Path:
     if board and board != "default":
         return _hermes_home() / "kanban" / "boards" / board / "kanban.db"
     return _hermes_home() / "kanban.db"
+
+
+def _counter_path(plan_id: str) -> Path:
+    return _hermes_home() / "kanban" / f"remediation_rounds_{plan_id}.json"
+
+
+def _read_counter(plan_id: str) -> int:
+    path = _counter_path(plan_id)
+    if not path.is_file():
+        return 0
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return int(data.get("rounds", 0))
+    except Exception:
+        return 0
+
+
+def _write_counter(plan_id: str, rounds: int) -> None:
+    path = _counter_path(plan_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"rounds": rounds, "plan_id": plan_id}), encoding="utf-8")
+
+
+def _delete_counter(plan_id: str) -> None:
+    path = _counter_path(plan_id)
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        pass
 
 
 def _load_cards_from_db(plan_id: str, db_path: Path) -> list[dict[str, Any]]:
@@ -270,6 +300,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--baseline", default=None, help="Override baseline ref (default: Audit-baseline-sha from audit card)")
     p.add_argument("--tier", choices=("1", "2", "all"), default="all")
     p.add_argument("--spawn-remediation", action="store_true")
+    p.add_argument("--max-rounds", type=int, default=None, help="Override max remediation rounds (default 2)")
     p.add_argument("--round", type=int, default=None)
     p.add_argument("--no-json", action="store_true", help="Suppress tier JSON report writes")
     p.add_argument("--dry-run", action="store_true")
@@ -281,6 +312,8 @@ def main(argv: list[str] | None = None) -> int:
     plan_id = args.plan_id.strip()
     repo_root = Path(args.repo_root).resolve()
     overrides, max_rounds = read_overlay_audit_settings(repo_root)
+    if args.max_rounds is not None:
+        max_rounds = args.max_rounds
 
     plan_path = resolve_plan_file(repo_root, plan_id)
     if not plan_path or not plan_path.is_file():
@@ -336,6 +369,11 @@ def main(argv: list[str] | None = None) -> int:
         pass
 
     if args.spawn_remediation:
+        current_rounds = _read_counter(plan_id)
+        if current_rounds >= max_rounds:
+            print(f"ERROR: max remediation rounds ({max_rounds}) reached", file=sys.stderr)
+            return 2
+
         round_num = args.round
         if round_num is None:
             stamped = extract_field(audit_body, "Audit-round")
@@ -347,11 +385,6 @@ def main(argv: list[str] | None = None) -> int:
         violations = load_violations_from_reports(report_dir, plan_id)
         violations = filter_violations_by_fingerprints(violations, gave_up_fps)
         violations = [v for v in violations if v.severity == "fail"]
-
-        if round_num > max_rounds:
-            print(f"ERROR: max remediation rounds ({max_rounds}) exceeded", file=sys.stderr)
-            _escalate_max_rounds(audit_card, plan_id, max_rounds, violations, repo_root, args.dry_run)
-            return 1
 
         groups = group_remediation_cards(violations)
         overlay = repo_root / ".hermes" / "kanban-overrides" / "kanban-config.yaml"
@@ -372,9 +405,14 @@ def main(argv: list[str] | None = None) -> int:
             if tid:
                 print(f"Spawned remediation card {tid}")
 
+        _write_counter(plan_id, current_rounds + 1)
+
         if audit_card and not args.dry_run:
             _update_audit_round(audit_card["task_id"], round_num)
-        return 1 if violations else 0
+        ret = 1 if violations else 0
+        if ret == 0:
+            _delete_counter(plan_id)
+        return ret
 
     if audit_card and current_audit_round(audit_body) >= 1:
         _process_gave_up_before_rerun(audit_card, plan_id, report_dir, repo_root, args.dry_run)

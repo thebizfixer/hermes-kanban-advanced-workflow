@@ -55,6 +55,7 @@ def load_error_registry(registry_path: str) -> dict:
         "E021_ACCEPTANCE_TEST_MISSING": {"severity": "error", "description": "Acceptance names test files not present in git diff — worker self-certified without shipping tests"},
         "E022_DOCS_STALE_MARKERS": {"severity": "error", "description": "Docs Verify: rg commands matched stale markers (pending, [new], TODO) against HEAD — docs not reconciled after implementation"},
         "E023_REPEATED_IDENTICAL_ERROR": {"severity": "error", "description": "Identical error from prior run — lattice memory hit. Escalate, do not retry."},
+        "E024_INFRA_HEALTH": {"severity": "error", "description": "Infrastructure dependency missing — agent output file, token log, or workspace mismatch. Worker should self-repair and re-run."},
     }
 
 
@@ -194,6 +195,50 @@ def _diff_range(baseline: str, workspace: str) -> str:
 
 def _card_pre_existing(card_body: str) -> bool:
     return bool(re.search(r"(?m)^pre_existing:\s*true\s*$", card_body, re.IGNORECASE))
+
+
+def step_0_infrastructure_health(task_id: str) -> Tuple[bool, Optional[str]]:
+    """E024 — Infrastructure health pre-check.
+
+    Verifies that agent output and token logging infrastructure exists
+    before running work checks. Prevents false E018/E020/E021 when the
+    real failure is missing infrastructure, not incorrect work.
+
+    Returns DENY when infrastructure gaps are detected so the worker
+    can self-repair (create the missing file, fix workspace) rather
+    than blocking on a misleading error code.
+    """
+    # 1. Agent output file must exist at expected path
+    temp_dir = os.environ.get(
+        "KANBAN_TEMP",
+        os.environ.get("TMPDIR", os.environ.get("TEMP", "/tmp")),
+    )
+    agent_output_file = Path(temp_dir) / f"agent_output_{task_id}.json"
+    if not agent_output_file.exists():
+        print(
+            f"[E024] agent output file not found: {agent_output_file}"
+        )
+        return False, "E024_INFRA_HEALTH"
+
+    # 2. Token log must be writable (warn only — don't block on missing log)
+    token_log = os.environ.get(
+        "KANBAN_TOKEN_LOG",
+        os.path.join(
+            os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes")),
+            "kanban", "tokens.jsonl",
+        ),
+    )
+    token_path = Path(token_log)
+    token_dir = token_path.parent
+    if not token_dir.exists():
+        try:
+            token_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            print(f"[E024] token log directory not writable: {token_dir}")
+            return False, "E024_INFRA_HEALTH"
+
+    print("[E024] infrastructure health OK")
+    return True, None
 
 
 def step_1_file_compliance(
@@ -970,6 +1015,7 @@ def run_chain(task_id: str, workspace: str, card_body: str,
 
     # Cold path: run all steps
     steps = [
+        ("Infrastructure health (E024)", lambda: step_0_infrastructure_health(task_id)),
         ("Files: compliance", lambda: step_1_file_compliance(
             parsed["files"], baseline, workspace, parsed.get("commit", ""),
             card_body=card_body, working_branch=working_branch,

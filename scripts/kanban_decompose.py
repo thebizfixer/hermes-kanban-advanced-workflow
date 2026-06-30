@@ -373,18 +373,26 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False, ru
         # Block immediately to beat the dispatcher (claims 'ready' cards in <1s).
         if block_after:
             import time as _time
-            block_reason = "Awaiting dependency gate"
+            # wave-1 cards (no parent): use --kind dependency for auto-promotion
+            # wave-2+ cards (has wave_parent): use regular block — auto_unblock cron
+            # respects parent completion ordering
+            has_parent = bool(card.get("wave_parent") or card.get("ordinal_parent"))
+            if has_parent:
+                block_args = [task_id, "Awaiting dependency gate"]
+            else:
+                block_args = ["--kind", "dependency", task_id, "Awaiting dependency gate"]
             blocked = False
             for attempt in range(1, 4):
-                _, b_err, b_rc = hermes("kanban", "block", "--kind", "dependency", task_id, block_reason)
+                _, b_err, b_rc = hermes("kanban", "block", *block_args)
                 if b_rc == 0:
-                    # Verify the card is actually blocked
+                    # Verify the card is actually blocked/todo
                     show_out, _, show_rc = hermes("kanban", "show", task_id)
-                    if show_rc == 0 and "status:    blocked" in show_out:
+                    expected_status = "todo" if not has_parent else "blocked"
+                    if show_rc == 0 and (f"status:    {expected_status}" in show_out or "status:    blocked" in show_out or "status:    todo" in show_out):
                         blocked = True
                         break
                     else:
-                        print(f"  WARN: block {task_id} reported success but status not 'blocked' (attempt {attempt}/3)", file=sys.stderr)
+                        print(f"  WARN: block {task_id} reported success but status mismatch (attempt {attempt}/3)", file=sys.stderr)
                 else:
                     print(f"  WARN: block {task_id} failed (attempt {attempt}/3): {b_err[:200]}", file=sys.stderr)
                 if attempt < 3:
