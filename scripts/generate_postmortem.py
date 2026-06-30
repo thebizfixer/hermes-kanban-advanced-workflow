@@ -1814,8 +1814,9 @@ def _board_db_path(board_slug: str) -> Path:
 def _get_board_task_ids(board_slug: str) -> tuple[set[str], list[str]]:
     """Run 'hermes kanban --board <slug> list --json' and return discovered task IDs.
 
-    Returns (task_ids, notes). task_ids is None if the command failed or
-    produced no usable output; notes explain what happened.
+    Returns (task_ids, notes) where task_ids is a set of task ID strings
+    (empty if the command failed or the board has no tasks).
+    notes explain what happened.
     """
     notes: list[str] = []
     try:
@@ -1921,8 +1922,20 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --plan-id is required", file=sys.stderr)
         return 2
 
+    board_slug = (args.board or "").strip() or None
+    board_task_ids: set[str] | None = None
+    board_notes: list[str] = []
+
+    if board_slug:
+        board_task_ids, board_notes = _get_board_task_ids(board_slug)
+        if board_notes:
+            for note in board_notes:
+                print(f"board: {note}", file=sys.stderr)
+        if board_task_ids is None:
+            board_task_ids = set()
+
     token_path = args.token_log or _token_log_path()
-    db_path = args.db or _kanban_db_path()
+    db_path = args.db or (board_slug and _board_db_path(board_slug)) or _kanban_db_path()
     interventions_path = args.interventions or _interventions_count_path()
 
     token_entries = [
@@ -1947,6 +1960,13 @@ def main(argv: list[str] | None = None) -> int:
                 token_entries.append(entry)
                 seen.add(key)
 
+    # Board-scoped filtering: restrict token entries to board task IDs
+    if board_task_ids is not None:
+        token_entries = [
+            e for e in token_entries
+            if _task_id_from_token(e) in board_task_ids
+        ]
+
     # Scope to most recent run only — avoids aggregating across multiple decompositions
     token_entries = _scope_to_latest_run(token_entries, plan_id)
 
@@ -1967,8 +1987,10 @@ def main(argv: list[str] | None = None) -> int:
         source_notes.append(f"Intervention JSONL missing — {intervention_count} intervention(s) occurred but no structured records written. Orchestrator did not call intervention logging.")
     if not scope_violations:
         source_notes.append("No scope violations logged — E002 ran without unlisted file changes, or scope violation logging not yet active for this plan.")
+    if board_notes:
+        source_notes.extend(board_notes)
 
-    tasks, db_notes = load_task_history(db_path, plan_id, _project_root())
+    tasks, db_notes = load_task_history(db_path, plan_id, _project_root(), board_task_ids=board_task_ids)
     source_notes.extend(db_notes)
     tasks = _merge_tasks_with_tokens(tasks, token_entries, plan_id)
 
@@ -1980,6 +2002,7 @@ def main(argv: list[str] | None = None) -> int:
         intervention_log=intervention_log,
         scope_violations=scope_violations,
         source_notes=source_notes,
+        board_slug=board_slug,
     )
 
     dest = write_report(report, Path(args.output), plan_id)
@@ -1991,6 +2014,7 @@ def main(argv: list[str] | None = None) -> int:
         intervention_log=intervention_log,
         scope_violations=scope_violations,
         repo_root=_project_root(),
+        board_slug=board_slug,
     )
     kpi_dest = write_kpi_json(kpi, Path(args.output), plan_id)
     try:
@@ -2013,6 +2037,7 @@ def main(argv: list[str] | None = None) -> int:
         intervention_count=intervention_count,
         scope_violations=scope_violations,
         source_notes=source_notes,
+        board_slug=board_slug,
     )
     recon_dest = write_reconciliation(reconciliation, Path(args.output), plan_id)
     print(f"Reconciliation written: {recon_dest}")

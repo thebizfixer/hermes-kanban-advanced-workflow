@@ -443,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
             _escalate_max_rounds(audit_card, plan_id, max_rounds, all_fails, repo_root, args.dry_run)
         return 1
     print(f"Final audit clean for plan_id={plan_id}")
+    _delete_counter(plan_id)
     return 0
 
 
