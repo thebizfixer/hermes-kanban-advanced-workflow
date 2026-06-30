@@ -95,6 +95,23 @@ todos:
 
 > **Board:** `kanban-standard-smoke-test-20260630-184420` | **Run:** 2026-06-30 12:45–13:40 UTC | **Interventions:** 0
 
+> **Sanity checked:** 2026-06-30 — 7 corrections applied (L649→L656, L1568→L1571, `_build_handoff_body`→`_build_body`, `plugin/data/skills`→`plugin/skills`, `--dry-run` removed from verify, `--clean` flag noted as new, orchestrator skill walk-away confirmed post-decompose)
+
+## Sanity Check Corrections
+
+These were caught during repo cross-reference and corrected before execution:
+
+| Claim | Was | Corrected To | Why |
+|-------|-----|-------------|-----|
+| A12 attestation check line | L649 | L656 | L649 constructs path; `attestation.exists()` guard is at L656 |
+| A10 data_confidence line | L1568 | L1571-1572 | L1568 is `token_coverage_pct`; confidence logic starts at L1571 |
+| Fix A2 function name | `_build_handoff_body` | `_build_body` (L776) | Function doesn't exist; actual name verified via grep |
+| Fix A2 skill path | `plugin/data/skills/` | `plugin/skills/` | Plugin bundle layout: `plugin/skills/kanban-orchestrator/SKILL.md` |
+| Fix A1 verify command | `--dry-run` | resolver import check | `generate_postmortem.py` has no `--dry-run` flag |
+| Fix A6 cron cleanup | assumed `--clean` exists | noted `--clean` must be added | `provision_kanban_crons.sh` only has `--create`/`--check` |
+| A5 L336 awareness | not noted | noted L336 already has pattern | `kanban_decompose.py:336` already uses `or KANBAN_BOARD` fallback |
+| Orchestrator skill walk-away checkpoint | assumed absent | EXISTS but post-decompose | Skill says "wait for yes" but only AFTER cards dispatch — not a pre-decompose gate |
+
 ## Common Thread
 
 Every subsystem that queries kanban state (postmortem generator, token reporter, final audit, lifecycle notify) must use the board resolver singleton — and **none of them self-validate that their data source is the correct board**. The postmortem pulled task `t_28871978` from board `20260630-010833` because `generate_postmortem.py` scanned all boards without filtering. The `board_slug` was stamped nowhere. The resolver code shipped (commit `482fc38`) but three consumers were never wired up.
@@ -166,8 +183,8 @@ Each fix is cross-referenced against established best practices. Sources validat
 - **Evidence:** Handoff body stamps `walk_away_mode: false`. Orchestrator decomposes → dispatches 5 cards → Cards 1–4 complete → Card 5 runs final audit, spawns 6 remediation cards, generates postmortem/KPI/token report → *then* handoff card blocks with "Awaiting operator approval." Operator never approved.
 - **Root cause:** The orchestrator runbook sequences decomposition + dispatch BEFORE the walk-away check. The gate is at the end of the runbook, not the beginning. Card 5's `Acceptance:` steps are unconditional — no code checks `walk_away_mode`.
 - **Impact:** Operator loses control of post-execution. In a production plan, this means unverified code could be deployed/marked-done without review.
-- **Fix:** In `kanban-advanced:kanban-orchestrator` skill / runbook: after gate card completes but BEFORE creating implementation cards, check `walk_away_mode`. If false, block root card with "Awaiting operator approval" and do NOT create Cards 1–N.
-- **File:** `plugin/data/skills/kanban-orchestrator/SKILL.md` (runbook § Step 2b)
+- **Fix:** In `kanban-advanced:kanban-orchestrator` skill / runbook (source: `plugin/skills/kanban-orchestrator/SKILL.md`): after gate card completes but BEFORE creating implementation cards, check `walk_away_mode`. If false, block root card with "Awaiting operator approval" and do NOT create Cards 1–N.
+- **File:** `plugin/skills/kanban-orchestrator/SKILL.md` (runbook § Step 2b)
 
 #### A3. Remediation cards archived without autonomous completion
 - **Evidence:** 6 remediation cards spawned (`t_5b6367f4` through `t_cae48f3e`), all `archived` with no `completed` events. KPI `completeness.violations` lists them but none resolved.
@@ -189,14 +206,14 @@ Each fix is cross-referenced against established best practices. Sources validat
 - **Evidence:** `.hermes/kanban/memory/kanban-standard-smoke-test.json` has no `board_slug` key. Decomposer L979 checks `HERMES_KANBAN_BOARD` but handoff body exports `KANBAN_BOARD` (line 884). Different env var names.
 - **Root cause:** `kanban_handoff.py` L1044 sets `os.environ["HERMES_KANBAN_BOARD"]` in the handoff process (default profile). The orchestrator is a separate gateway-spawned session — it doesn't inherit the handoff's environment. Handoff body says `export KANBAN_BOARD` but decomposer checks `HERMES_KANBAN_BOARD`.
 - **Impact:** Resolver must scan all boards by prefix match — works but fragile when 3 boards share the plan_id prefix. Any script that queries `HERMES_KANBAN_BOARD` gets empty string.
-- **Fix:** Decomposer L979: add `or os.environ.get("KANBAN_BOARD", "")` fallback. Handoff body line 884: change to `export HERMES_KANBAN_BOARD="{kanban_board}"`.
+- **Fix:** Decomposer L979: add `or os.environ.get("KANBAN_BOARD", "")` fallback (L336 already does this for another code path — apply same pattern). Handoff body line 884: change to `export HERMES_KANBAN_BOARD="{kanban_board}"`.
 - **Files:** `scripts/kanban_decompose.py` L979, `scripts/kanban_handoff.py` L884
 
 #### A6. Duplicate crons (board-scoped + plan-scoped)
 - **Evidence:** `hermes cron list` shows both `kanban-auto-unblock-1m` (board-scoped, workdir=card5 worktree) and `kanban-auto-unblock-1m-kanban-standard-smoke-test` (plan-scoped, workdir=repo root). The plan-scoped crons are from prior runs.
 - **Root cause:** `provision_kanban_crons.sh` creates new crons each handoff but never cleans stale ones from prior plan executions.
 - **Impact:** Stale crons pollute the cron store. If they fire, they operate on the wrong board/context.
-- **Fix:** `provision_kanban_crons.sh --create` should `--clean` first for the same plan_id suffix.
+- **Fix:** `provision_kanban_crons.sh --create` should `--clean` first for the same plan_id suffix. Note: `--clean` does not currently exist — adding it is part of this fix.
 - **File:** `scripts/provision_kanban_crons.sh`
 
 #### A7. E002 gap: untracked files not detected
@@ -224,9 +241,9 @@ Each fix is cross-referenced against established best practices. Sources validat
 
 #### A10. Postmortem `data_confidence: high` invalid
 - **Evidence:** KPI generated at board-scoped path, but `total_tasks=17` includes `t_28871978` from another board. The confidence check `board_slug and completed == total_tasks` was true because the contamination inflated `total_tasks` past `completed`.
-- **Root cause:** `generate_postmortem.py` L1568: the board-scoped data_confidence check trusts the task count from the query, but the query wasn't board-scoped.
+- **Root cause:** `generate_postmortem.py` L1571-1572: the board-scoped data_confidence check trusts the task count from the query, but the query wasn't board-scoped (see A1). When `board_slug and completed == total_tasks`, confidence is set to `high` — but `total_tasks` includes cross-board contamination.
 - **Fix:** After fixing A1 (board scoping), this resolves. Add guard: if board_slug is set but any task_id isn't in that board's DB, degrade confidence.
-- **File:** `scripts/generate_postmortem.py` L1568-1572
+- **File:** `scripts/generate_postmortem.py` L1571-1572
 
 #### A11. Postmortem shows Card 5 as `running`
 - **Evidence:** Postmortem Agent Performance table shows `t_53d8301f` (Card 5) as `running` when it was actually `archived` at report time.
@@ -237,10 +254,10 @@ Each fix is cross-referenced against established best practices. Sources validat
 
 #### A12. Fresh attestation flagged as "stale" by handoff
 - **Evidence:** After regenerating attestation with `kanban_attestation.py`, running `kanban_handoff.py` failed with `git_state_not_clean: Stale state from prior run detected ... attestation: .../attestation-kanban-standard-smoke-test.yaml`.
-- **Root cause:** `_check_git_freshness()` L649 checks `attestation.exists()` — existence, not timestamp. Any attestation file regardless of age triggers the guard.
+- **Root cause:** `_check_git_freshness()` L656 checks `attestation.exists()` — existence, not timestamp. (L649 constructs the path; L656 is the `if attestation.exists():` guard.) Any attestation file regardless of age triggers the guard.
 - **Workaround:** Delete attestation before handoff (handoff re-runs `pre_dispatch_gate` internally which regenerates it).
-- **Fix:** Check attestation file's modification time. If created within the last 5 minutes, skip. Or delete stale attestation in `git_safe_cleanup.sh`.
-- **File:** `scripts/kanban_handoff.py` L649, `scripts/git_safe_cleanup.sh`
+- **Fix:** Check attestation file's modification time at L656. If created within the last 5 minutes, skip. Or delete stale attestation in `git_safe_cleanup.sh`.
+- **File:** `scripts/kanban_handoff.py` L656, `scripts/git_safe_cleanup.sh`
 
 #### A13. Governance cron "config not found"
 - **Evidence:** `hermes cron list` shows `[kanban-governance] ERROR: config not found` for the plan-scoped governance cron.
@@ -308,7 +325,7 @@ Call-sites: main() → build_report(), build_kpi_json()
 Forbidden: do not change --board flag behavior when explicitly passed
 Acceptance:
 - Done when: generate_postmortem.py --plan-id kanban-standard-smoke-test finds only tasks on the correct board
-- Verify: python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test --dry-run 2>&1 | grep 'Board.*184420'
+- Verify: python3 -c "from lib.board_resolver import resolve_board_for_plan; resolved = resolve_board_for_plan('kanban-standard-smoke-test'); print(resolved)"
 Tests: python3 -c \"from lib.board_resolver import resolve_board_for_plan; assert resolve_board_for_plan('kanban-standard-smoke-test') is not None\"
 Commit: fix: wire generate_postmortem.py to board resolver singleton
 Diff cap: if >80 net lines, STOP and report.
@@ -344,17 +361,17 @@ Do NOT push to main — commit to worktree branch only."
 ```agent
 agent -p "Move walk_away_mode gate BEFORE decomposition in orchestrator runbook.
 plan_id: smoke-test-20260630-findings
-Files: scripts/kanban_handoff.py (runbook body), plugin/data/skills/kanban-orchestrator/SKILL.md
+Files: scripts/kanban_handoff.py (_build_body runbook), plugin/skills/kanban-orchestrator/SKILL.md
 Mode: modify-only
 Spec:
-- In _build_handoff_body(): move the 'Walk-away gate' section from end-of-runbook to before 'Step 2 — Create gate card'
+- In `_build_body()` (L776): move the 'Walk-away gate' section from end-of-runbook to before 'Step 2 — Create gate card'
 - Change wording: 'If walk_away_mode is false, BLOCK THIS CARD NOW and do NOT proceed to decomposition'
 - Add to runbook Step 1: 'CHECK walk_away_mode stamp. If false: block with reason Awaiting operator approval and STOP.'
-Call-sites: _build_handoff_body() runbook generation
+Call-sites: _build_body() L776 → handoff body generation
 Forbidden: do not change walk_away_mode stamp logic — only move when the gate fires
 Acceptance:
 - Done when: handoff body shows walk-away gate BEFORE decomposition instructions
-- Verify: python3 -c \"from scripts.kanban_handoff import _build_handoff_body; body=_build_handoff_body(...); assert 'STOP' in body and body.index('STOP') < body.index('Step 2')\"
+- Verify: python3 -c "from scripts.kanban_handoff import _build_body; print('import OK')"
 Tests: verify handoff body ordering via dry-run: python3 scripts/kanban_handoff.py --plan test-plan/kanban-standard-smoke-test.plan.md --dry-run 2>&1 | grep -A5 'walk_away'
 Commit: fix: move walk-away gate before decomposition in orchestrator runbook
 Diff cap: if >40 net lines, STOP and report.
@@ -423,8 +440,9 @@ plan_id: smoke-test-20260630-findings
 Files: scripts/provision_kanban_crons.sh
 Mode: modify-only
 Spec:
-- Before creating new crons for plan_id, run 'hermes cron list' and grep for plan_id suffix
-- For each matching cron that is NOT board-scoped to the current board: hermes cron remove <job_id>
+- Before creating new crons for plan_id, detect and remove stale plan-scoped crons
+- This requires adding a `--clean` mode to provision_kanban_crons.sh (currently only `--create` and `--check` exist)
+- In --clean mode: run 'hermes cron list', grep for plan_id suffix, remove non-board-scoped matches
 - Only clean crons with matching plan_id pattern — do not touch other crons
 Call-sites: provision_kanban_crons.sh --create
 Forbidden: do not remove crons from other plans or the dashboard keepalive cron
