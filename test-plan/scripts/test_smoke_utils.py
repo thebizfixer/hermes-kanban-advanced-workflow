@@ -1,6 +1,6 @@
-"""Pytest tests for smoke_utils module — kanban-standard-smoke-test Card 2."""
+"""Pytest tests for smoke_utils module — kanban-standard-smoke-test."""
 
-from smoke_utils import greet, add, format_name
+from smoke_utils import greet, add, format_name, multiply
 
 
 def test_greet_returns_string():
@@ -33,3 +33,15 @@ def test_format_name_standard():
 def test_format_name_single():
     """format_name() handles single-name input."""
     assert format_name("Madonna", "") == ", Madonna"
+
+
+def test_multiply_positive():
+    """multiply() works with positive integers."""
+    assert multiply(3, 4) == 12
+    assert multiply(5, 7) == 35
+
+
+def test_multiply_zero():
+    """multiply() works with zero."""
+    assert multiply(0, 5) == 0
+    assert multiply(10, 0) == 0
