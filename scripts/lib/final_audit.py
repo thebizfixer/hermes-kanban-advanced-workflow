@@ -118,7 +118,7 @@ def read_overlay_audit_settings(repo_root: Path) -> tuple[list[dict[str, str]], 
 
 
 def extract_field(body: str, field_name: str) -> str:
-    m = re.search(rf"(?m)^{re.escape(field_name)}:\s*(.+)$", body, re.IGNORECASE)
+    m = re.search(rf"(?m)^{re.escape(field_name)}:[^\S\n]*(.+)$", body, re.IGNORECASE)
     return m.group(1).strip() if m else ""
 
 
@@ -130,7 +130,7 @@ def extract_list_field(body: str, field_name: str) -> list[str]:
 
 
 def extract_acceptance_bullets(body: str) -> list[str]:
-    m = re.search(r"(?m)^Acceptance:\s*(.*)$", body)
+    m = re.search(r"(?m)^Acceptance:[^\S\n]*(.*)$", body)
     if not m:
         return []
     rest = body[m.start() :]
@@ -147,11 +147,14 @@ def extract_acceptance_bullets(body: str) -> list[str]:
 
 
 def extract_call_sites(body: str) -> list[str]:
-    m = re.search(r"(?m)^Call-sites:\s*(.*)$", body)
+    m = re.search(r"(?m)^Call-sites:[^\S\n]*(.*)$", body)
     if not m:
         return []
     val = m.group(1).strip()
     if val:
+        # If the entire value starts with "none", no call-sites to check
+        if re.match(r"^\s*none\b", val, re.IGNORECASE):
+            return []
         return [s.strip() for s in val.split(",") if s.strip()]
     sites: list[str] = []
     for line in body.splitlines():
