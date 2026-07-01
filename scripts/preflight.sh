@@ -776,32 +776,60 @@ check_plan_backup
 # Discover installed plugins and run their preflight tools.
 # Plugin preflight failures are WARN only — never BLOCK decomposition.
 _run_plugin_preflights() {
-  local plugins_json
-  plugins_json=$(hermes plugins list --json 2>/dev/null)
-  if [[ -z "$plugins_json" ]]; then
-    return 0  # hermes not on PATH or no plugins — skip
-  fi
+  local plugins_json _pname _pscript _rc
+  plugins_json=$(hermes plugins list --json 2>/dev/null) || return 0
+  [[ -z "$plugins_json" ]] && return 0
 
-  # Check if procurement preflight tool is available as a Hermes CLI subcommand
-  if hermes procurement-preflight --help &>/dev/null; then
-    local preflight_out
-    preflight_out=$(hermes procurement-preflight 2>&1) || true
-    local zoho_ok stripe_ok
-    zoho_ok=$(echo "$preflight_out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('zoho',{}).get('valid',False))" 2>/dev/null || echo "False")
-    stripe_ok=$(echo "$preflight_out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('stripe',{}).get('valid',False))" 2>/dev/null || echo "False")
-
-    if [[ "$zoho_ok" == "True" ]] && [[ "$stripe_ok" == "True" ]]; then
-      log_check "plugin_preflight:hermes-procurement" "pass" "Zoho + Stripe auth valid" "" ""
+  while IFS=$'\t' read -r _pname _pscript; do
+    [[ -z "$_pscript" || ! -f "$_pscript" ]] && continue
+    echo "Running preflight for plugin: $_pname" >&2
+    if bash "$_pscript"; then
+      record_check "plugin_preflight:$_pname" "pass" "degraded" "Plugin preflight passed"
     else
-      local detail=""
-      [[ "$zoho_ok" != "True" ]] && detail="Zoho auth failed"
-      [[ "$stripe_ok" != "True" ]] && detail="${detail:+$detail, }Stripe auth failed"
-      log_check "plugin_preflight:hermes-procurement" "degraded" "$detail" "" ""
+      _rc=$?
+      record_check "plugin_preflight:$_pname" "degraded" "degraded" \
+        "Plugin preflight failed (exit ${_rc})"
     fi
-  fi
+  done < <(printf '%s' "$plugins_json" | python3 - "$HERMES_HOME" <<'PY'
+import json, sys
+from pathlib import Path
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)
+home = Path(sys.argv[1])
+plugins = json.load(sys.stdin)
+dirs = {}
 
-  # Future plugin preflights follow the same pattern:
-  #   if hermes <plugin>-preflight --help &>/dev/null; then ... fi
+def scan(base, depth=0):
+    if not base.is_dir() or depth > 2:
+        return
+    for d in sorted(base.iterdir()):
+        if not d.is_dir():
+            continue
+        mf = d / "plugin.yaml"
+        if mf.exists():
+            m = yaml.safe_load(mf.read_text(encoding="utf-8")) or {}
+            dirs[m.get("name", d.name)] = d
+        elif depth < 2:
+            scan(d, depth + 1)
+
+scan(home / "plugins")
+for p in plugins:
+    name = p.get("name", "")
+    root = dirs.get(name)
+    if not root:
+        continue
+    m = yaml.safe_load((root / "plugin.yaml").read_text(encoding="utf-8")) or {}
+    pf = m.get("preflight") or {}
+    script = pf.get("script") if isinstance(pf, dict) else None
+    if not script:
+        continue
+    sp = (root / script).resolve()
+    if sp.is_file():
+        print(f"{name}\t{sp}")
+PY
+  )
 }
 _run_plugin_preflights
 
