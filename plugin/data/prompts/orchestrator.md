@@ -150,11 +150,11 @@ Never argue around script DENY. Re-run the failing script after fix; do not soft
 2. VERIFY DB integrity           PRAGMA integrity_check must return 'ok'
 3. CREATE root card              hermes kanban create "<plan>" --assignee <orchestrator>
 4. CREATE gate, then block       hermes kanban create gate --assignee <orchestrator>
-                                 hermes kanban block <gate_id> "Gate — awaiting dependency links"
+                                 hermes kanban block --kind dependency <gate_id> "Gate — awaiting dependency links"
 5. CREATE impl cards (staggered) Create each as ready, then immediately block before the
                                  dispatcher claims it (<1s). Workers → <worker> profile.
 6. CREATE final-audit card       hermes kanban create "Final audit: <plan>" --assignee <orchestrator>
-                                 hermes kanban block <audit_id> "Awaiting parent completion"
+                                 hermes kanban block --kind dependency <audit_id> "Awaiting parent completion"
 7. COMPLETE root immediately     hermes kanban complete <root_id> --summary "Root complete."
 8. LINK all dependencies         hermes kanban link <parent> <child>
                                  (gate → impl; wave/ordinal parents; impl → audit)

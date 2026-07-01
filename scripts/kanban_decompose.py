@@ -373,21 +373,17 @@ def create_card(card: dict, dry_run: bool = False, block_after: bool = False, ru
         # Block immediately to beat the dispatcher (claims 'ready' cards in <1s).
         if block_after:
             import time as _time
-            # wave-1 cards (no parent): use --kind dependency for auto-promotion
-            # wave-2+ cards (has wave_parent): use regular block — auto_unblock cron
-            # respects parent completion ordering
-            has_parent = bool(card.get("wave_parent") or card.get("ordinal_parent"))
-            if has_parent:
-                block_args = [task_id, "Awaiting dependency gate"]
-            else:
-                block_args = ["--kind", "dependency", task_id, "Awaiting dependency gate"]
+            # All gate-blocks use --kind dependency: routes to todo (dependency_wait),
+            # auto-promotes when parents complete, and does NOT count toward
+            # BLOCK_RECURRENCE_LIMIT (card remains in todo, not blocked).
+            block_args = ["--kind", "dependency", task_id, "Awaiting dependency gate"]
             blocked = False
             for attempt in range(1, 4):
                 _, b_err, b_rc = hermes("kanban", "block", *block_args)
                 if b_rc == 0:
-                    # Verify the card is actually blocked/todo
+                    # Verify the card is actually todo (dependency_wait)
                     show_out, _, show_rc = hermes("kanban", "show", task_id)
-                    expected_status = "todo" if not has_parent else "blocked"
+                    expected_status = "todo"
                     if show_rc == 0 and (f"status:    {expected_status}" in show_out or "status:    blocked" in show_out or "status:    todo" in show_out):
                         blocked = True
                         break

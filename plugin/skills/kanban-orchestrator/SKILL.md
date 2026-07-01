@@ -393,7 +393,7 @@ Draft the graph out loud before creating anything:
                                      Must return 'ok'. Remove stale init.lock if present.
 1.  CREATE root card                 hermes kanban create "<plan>" --assignee ${orchestrator_profile}
 2.  CREATE gate (blocked)           hermes kanban create gate --assignee ${orchestrator_profile}
-                                     hermes kanban block <gate_id> "Gate — awaiting dependency links"
+                                     hermes kanban block --kind dependency <gate_id> "Gate — awaiting dependency links"
 3.  VERIFY wave crons (shell)       bash hermes-kanban-advanced-workflow/scripts/provision_kanban_crons.sh --check
                                      Crons are created at **execute/handoff** by the default profile
                                      (`kanban_handoff.py`). Re-create only when `--check` fails:
@@ -409,7 +409,7 @@ Draft the graph out loud before creating anything:
                                      Gate, root, audit assigned to ${orchestrator_profile} (orchestrator profile).
                                      Pass --gate-id <gate_id> to kanban_decompose.py to avoid duplicate gate.
 7.  CREATE final audit card         hermes kanban create "Final audit: <plan>" --assignee ${orchestrator_profile}
-                                     hermes kanban block <audit_id> "Awaiting parent completion"
+                                     hermes kanban block --kind dependency <audit_id> "Awaiting parent completion"
 8.  COMPLETE root immediately       hermes kanban complete <root_id> --summary "Root complete — N cards dispatched."
 9.  LINK all dependencies           hermes kanban link <parent> <child>
 10. RUN validate_board.sh           bash hermes-kanban-advanced-workflow/scripts/validate_board.sh
