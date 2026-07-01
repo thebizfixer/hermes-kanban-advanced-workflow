@@ -55,6 +55,19 @@ Plugin repo (this repo)              Target repo (your project)
 
 ## How to Use
 
+You can run the smoke test on **any repo** — your production project, a throwaway test repo, or even a fresh `git init`. The smoke test validates the *plugin environment*, not your code. Use it to calibrate auth, gateway, profiles, and disk before you trust the pipeline with real work.
+
+### Pick your repo
+
+| Scenario | Repo | Why |
+|----------|------|-----|
+| **Trial run** | `mkdir kanban-trial && cd kanban-trial && git init` | Risk-free — validates the plugin without touching real code |
+| **Production prep** | Your actual project repo | Calibrates the exact environment you'll use for real plans |
+
+Both work identically. The only difference is where generated artifacts (`test-plan/scripts/`, postmortems) land.
+
+### Steps
+
 1. **Install the plugin** if you haven't already:
    ```bash
    hermes plugins install thebizfixer/hermes-kanban-advanced-workflow

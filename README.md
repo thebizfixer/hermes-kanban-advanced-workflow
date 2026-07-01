@@ -33,7 +33,21 @@ Two steps. Init creates `kanban-advanced-orchestrator` and `kanban-advanced-work
 
 > **Dashboard:** The plugin includes a dashboard settings tab (port 18900). The server starts automatically during init and runs while the Hermes dashboard is active. For remote/VPS setups, configure your reverse proxy to route `/api/plugins/kanban-advanced/` → `127.0.0.1:18900`.
 
-> **Verify your installation:** Run the [standard smoke test](test-plan/kanban-standard-smoke-test.plan.md) to validate the full governance pipeline end-to-end. Copy the plan to `.hermes/kanban/plans/` in your target repo, then run the gates from the target repo root: `bash "$HERMES_HOME/scripts/preflight.sh"`, `bash "$HERMES_HOME/scripts/pre_dispatch_gate.sh" kanban-standard-smoke-test`, `python3 "$HERMES_HOME/scripts/kanban_handoff.py" --plan .hermes/kanban/plans/kanban-standard-smoke-test.plan.md`. Expected: 5 cards, 8/8 tests passing, governance gates exercised, postmortem generated.
+> **Verify your installation:** Run the [standard smoke test](test-plan/kanban-standard-smoke-test.plan.md) to validate the full governance pipeline end-to-end. You can run it on your project repo or a throwaway test repo — either works. The smoke test exercises every phase (preflight → attest → decompose → eval chain → audit → postmortem) so you can fix environmental issues before production use.
+>
+> ```bash
+> # 1. Copy the plan to your repo
+> cp "$HERMES_HOME/plugins/kanban-advanced/test-plan/kanban-standard-smoke-test.plan.md" \
+>    .hermes/kanban/plans/
+>
+> # 2. Run the three gates from your repo root
+> bash "$HERMES_HOME/scripts/preflight.sh"
+> bash "$HERMES_HOME/scripts/pre_dispatch_gate.sh" kanban-standard-smoke-test
+> python3 "$HERMES_HOME/scripts/kanban_handoff.py" \
+>   --plan .hermes/kanban/plans/kanban-standard-smoke-test.plan.md
+> ```
+>
+> Expected: 5 cards, 8/8 tests passing, governance gates exercised, postmortem generated.
 
 > **Coding-agent auth:** Bootstrap runs an **advisory** smoke test and writes `HOME` + `KANBAN_CODING_AGENT*` to `.env`. It does **not** add API keys or block init on auth failure. You must supply keys in `.env` or run vendor login (`agent login`, `claude login`, …) on the gateway host. **Preflight** blocks decomposition if headless auth still fails. See [coding-agent auth](plugin/data/references/coding-agent-auth.md).
 
@@ -291,11 +305,11 @@ Run the plugin verification tiers to confirm the update applied cleanly:
 
 ```bash
 # Tier 1 — plugin contract
-python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py
-bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh
+python3 "$HERMES_HOME/scripts/smoke_test_plugin.py"
+bash "$HERMES_HOME/scripts/sanity_check.sh"
 
 # Tier 2 — materialization integrity
-bash hermes-kanban-advanced-workflow/scripts/provision.sh --check
+bash "$HERMES_HOME/scripts/provision.sh" --check
 ```
 
 Full matrix: [wiki/plugin-verification.md](wiki/plugin-verification.md).

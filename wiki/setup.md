@@ -96,15 +96,31 @@ The worker reads `KANBAN_CODING_AGENT` and `KANBAN_CODING_AGENT_MODEL` from `.en
 
 7. **Plugin verification tests** (when bootstrap/update looks wrong — optional but recommended after **Update Plugin**):
    ```bash
-   python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py
-   bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh
-   bash hermes-kanban-advanced-workflow/scripts/provision.sh --check
+   python3 "$HERMES_HOME/scripts/smoke_test_plugin.py"
+   bash "$HERMES_HOME/scripts/sanity_check.sh"
+   bash "$HERMES_HOME/scripts/provision.sh" --check
    ```
    Full matrix: [[plugin-verification]].
 
-   After init, run the [standard smoke test plan](../test-plan/kanban-standard-smoke-test.plan.md) to validate the full governance pipeline end-to-end. Copy the plan to `.hermes/kanban/plans/`, decompose, and execute.
+8. **Run the smoke test** — validates the full governance pipeline end-to-end BEFORE you commit to a production plan. You can run this on:
+   - **Your project repo** — calibrates the environment you'll actually use
+   - **A throwaway test repo** — try it out risk-free before touching real code
 
-8. **Tell the user:** "Setup complete. Create a plan with the orchestrator (`kanban-advanced-orchestrator` profile), then run `hermes kanban-advanced decompose --plan <file>`. See the README for the full lifecycle."
+   ```bash
+   # Copy the plan to your target repo (whichever you chose above)
+   cp "$HERMES_HOME/plugins/kanban-advanced/test-plan/kanban-standard-smoke-test.plan.md" \
+      .hermes/kanban/plans/
+
+   # Run the three gates from the target repo root
+   bash "$HERMES_HOME/scripts/preflight.sh"
+   bash "$HERMES_HOME/scripts/pre_dispatch_gate.sh" kanban-standard-smoke-test
+   python3 "$HERMES_HOME/scripts/kanban_handoff.py" \
+     --plan .hermes/kanban/plans/kanban-standard-smoke-test.plan.md
+   ```
+
+   Expected: 5 cards dispatched, 8/8 tests passing, governance gates exercised, postmortem generated. Fix any environmental issues (auth, gateway, disk) before moving to production. Details: [Smoke Test Plan](../test-plan/kanban-standard-smoke-test.plan.md).
+
+9. **Tell the user:** "Setup complete. The smoke test validated your environment. Create a plan with the orchestrator (`kanban-advanced-orchestrator` profile), then run `hermes kanban-advanced decompose --plan <file>`. See the README for the full lifecycle."
 
 ## Updating the Plugin
 
@@ -129,9 +145,9 @@ When a new version is released, update from the dashboard. The plugin handles gi
 
 4. **Verify** — Plugin verification tiers confirm the update applied cleanly:
    ```bash
-   python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py   # Tier 1 — contract
-   bash hermes-kanban-advanced-workflow/scripts/sanity_check.sh           # Tier 1 — structure
-   bash hermes-kanban-advanced-workflow/scripts/provision.sh --check       # Tier 2 — materialization
+   python3 "$HERMES_HOME/scripts/smoke_test_plugin.py"   # Tier 1 — contract
+   bash "$HERMES_HOME/scripts/sanity_check.sh"           # Tier 1 — structure
+   bash "$HERMES_HOME/scripts/provision.sh" --check       # Tier 2 — materialization
    ```
    Full matrix: [[plugin-verification]]. If any verification fails, re-run Bootstrap and re-check.
 
@@ -196,6 +212,8 @@ git clone <repo-url> ~/projects/<repo-name>   # ✓ native ext4
 Cross-mount paths cause silent write corruption. Preflight check 0 catches this and blocks.
 
 ## After setup: first plan
+
+**Before your first production plan, run the smoke test (step 8 above).** It validates your environment end-to-end — coding agent auth, gateway, profiles, disk, and the full governance pipeline. Fix any failures before trusting the plugin with real work. Once the smoke test passes clean:
 
 The user should:
 1. Draft a plan with the orchestrator (`kanban-advanced-orchestrator` profile) — provide a goal, let the orchestrator write it
