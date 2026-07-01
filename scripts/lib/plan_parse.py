@@ -720,7 +720,9 @@ def parse_plan(plan_path: str) -> dict:
         sys.exit("ERROR: No card definitions found in optimization section")
 
     plan_id = extract_plan_id_from_content(content) or Path(plan_path).stem.replace(".plan", "")
-    return {"cards": cards, "plan_id": plan_id}
+    fm, _ = parse_frontmatter(content)
+    process_type = fm.get("process_type", "code-gen")
+    return {"cards": cards, "plan_id": plan_id, "process_type": process_type}
 
 
 def _cmd_card_ordinals(args: argparse.Namespace) -> int:

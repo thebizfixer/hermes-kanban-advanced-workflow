@@ -546,6 +546,43 @@ def _normalize_card_assignee(card: dict, worker: str, orchestrator: str) -> None
         card["assignee"] = worker
 
 
+def _dispatch_process_type(process_type: str, args) -> None:
+    """Route non-code-gen process types to their registered CLI subcommands.
+
+    Plugin process-type handlers are registered via ctx.register_cli_command().
+    The convention is: hermes <process_type>-decompose --plan <file> --workspace <path>
+
+    For procurement: hermes procurement-decompose --plan <file> --workspace <path>
+    """
+    import subprocess as sp
+
+    cli_cmd = f"{process_type}-decompose"
+    workspace = str(Path(args.plan).resolve().parent) if args.plan else str(Path.cwd())
+
+    cmd = ["hermes", cli_cmd, "--plan", args.plan, "--workspace", workspace]
+    if args.dry_run:
+        cmd.append("--dry-run")
+    if args.json:
+        cmd.append("--json")
+
+    print(f"Dispatch: process_type={process_type} → hermes {cli_cmd}")
+    try:
+        result = sp.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+        if result.stdout:
+            print(result.stdout.rstrip())
+        if result.stderr:
+            print(result.stderr.rstrip(), file=sys.stderr)
+        if result.returncode != 0:
+            sys.exit(f"ERROR: {cli_cmd} failed with exit code {result.returncode}")
+    except FileNotFoundError:
+        sys.exit(
+            f"ERROR: No handler for process_type: {process_type}. "
+            f"Install the plugin that provides 'hermes {cli_cmd}'."
+        )
+    except sp.TimeoutExpired:
+        sys.exit(f"ERROR: {cli_cmd} timed out after 120s")
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 def main():
@@ -581,6 +618,14 @@ def main():
     else:
         print(f"Parsing plan: {args.plan}")
         parsed = parse_plan(args.plan)
+
+    # ── Process-type dispatch (extension hook for plugins) ──────────────────
+    # Plans declare `process_type` in YAML frontmatter. Default is 'code-gen'.
+    # Non-code-gen process types route to their registered CLI subcommands.
+    process_type = parsed.get("process_type", "code-gen")
+    if process_type != "code-gen":
+        _dispatch_process_type(process_type, args)
+        return  # _dispatch_process_type exits on failure, prints cards on success
     all_cards = parsed["cards"]
     for card in all_cards:
         _normalize_card_assignee(card, worker_profile, orchestrator_profile)

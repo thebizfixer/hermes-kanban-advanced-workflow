@@ -65,6 +65,49 @@ async def health():
 
 app.include_router(router, prefix="/api/plugins/kanban-advanced")
 
+# ── Plugin router discovery (H3 extension hook) ───────────────────────────────
+# Discover installed plugins and mount their dashboard FastAPI routers.
+# Uses hermes plugins list --json to find plugin root paths, then imports
+# and mounts any dashboard/procurement_routes.py found.
+def _discover_plugin_routers():
+    """Mount dashboard routers from installed plugins (procurement, etc.)."""
+    import importlib.util
+    import json
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["hermes", "plugins", "list", "--json"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+        )
+        if result.returncode != 0:
+            return
+        plugins = json.loads(result.stdout)
+    except Exception:
+        return
+
+    for p in plugins if isinstance(plugins, list) else []:
+        p_root = p.get("path", "") or p.get("root", "")
+        if not p_root:
+            continue
+        router_path = os.path.join(p_root, "dashboard", "procurement_routes.py")
+        if not os.path.isfile(router_path):
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location(
+                f"plugin_{p.get('name', 'unknown')}_routes", router_path
+            )
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            if hasattr(mod, "router"):
+                app.include_router(mod.router, prefix="/api/plugins/procurement")
+                logger.info("Mounted dashboard routes for plugin: %s", p.get("name", "unknown"))
+        except Exception as exc:
+            logger.warning("Could not mount router for plugin %s: %s",
+                          p.get("name", "unknown"), exc)
+
+_discover_plugin_routers()
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Lifecycle management (self-managing — no cron needed)

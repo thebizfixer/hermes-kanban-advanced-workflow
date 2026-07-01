@@ -772,6 +772,39 @@ check_environment_parity
 check_token_log
 check_plan_backup
 
+# ── Plugin preflight discovery (H2 extension hook) ──────────────────────────
+# Discover installed plugins and run their preflight tools.
+# Plugin preflight failures are WARN only — never BLOCK decomposition.
+_run_plugin_preflights() {
+  local plugins_json
+  plugins_json=$(hermes plugins list --json 2>/dev/null)
+  if [[ -z "$plugins_json" ]]; then
+    return 0  # hermes not on PATH or no plugins — skip
+  fi
+
+  # Check if procurement preflight tool is available as a Hermes CLI subcommand
+  if hermes procurement-preflight --help &>/dev/null; then
+    local preflight_out
+    preflight_out=$(hermes procurement-preflight 2>&1) || true
+    local zoho_ok stripe_ok
+    zoho_ok=$(echo "$preflight_out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('zoho',{}).get('valid',False))" 2>/dev/null || echo "False")
+    stripe_ok=$(echo "$preflight_out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('stripe',{}).get('valid',False))" 2>/dev/null || echo "False")
+
+    if [[ "$zoho_ok" == "True" ]] && [[ "$stripe_ok" == "True" ]]; then
+      log_check "plugin_preflight:hermes-procurement" "pass" "Zoho + Stripe auth valid" "" ""
+    else
+      local detail=""
+      [[ "$zoho_ok" != "True" ]] && detail="Zoho auth failed"
+      [[ "$stripe_ok" != "True" ]] && detail="${detail:+$detail, }Stripe auth failed"
+      log_check "plugin_preflight:hermes-procurement" "degraded" "$detail" "" ""
+    fi
+  fi
+
+  # Future plugin preflights follow the same pattern:
+  #   if hermes <plugin>-preflight --help &>/dev/null; then ... fi
+}
+_run_plugin_preflights
+
 OVERALL_STATUS="pass"
 if ((BLOCKING_FAILURES > 0)); then
   OVERALL_STATUS="fail"
