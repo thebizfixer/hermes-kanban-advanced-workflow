@@ -131,13 +131,14 @@ acceptance_matrix:
 <!-- skip-validate V001 -- Prerequisites: documentation references only, no work targets -->
 > **Prerequisites:**
 > - Hermes Agent ≥ 0.17.0
-> - `hermes kanban-advanced init` completed successfully
+> - `hermes kanban-advanced init` completed successfully **in the target repository** (the repo you want to smoke-test)
 > - Coding agent binary configured in `.hermes/kanban-overrides/kanban-config.yaml` (`coding_agent_binary`)
 > - Coding agent authenticated (see `plugin/data/references/coding-agent-auth.md`)
 > - Gateway running (`hermes gateway run` or scheduled task)
 > - `auto_decompose: false` in Hermes kanban config (`hermes config set kanban.auto_decompose false`)
-> - Working directory: plugin repo root (`hermes-kanban-advanced-workflow/`)
-> - `test-plan` added to `plan_search_dirs` in overlay config (so `pre_dispatch_gate.sh` finds the plan)
+> - **Working directory: the target repository root** (not the plugin clone)
+> - This plan file copied to `.hermes/kanban/plans/kanban-standard-smoke-test.plan.md` in the target repo
+> - `test-plan` present in `plan_search_dirs` overlay config (default; ensures scripts find the plan)
 
 > **Expected duration:** 20–40 minutes (depends on coding agent speed + remediation wave)
 > **Expected outcome:** 4 code-gen cards dispatched, 3 completed (Cards 1–3), 1 completed-or-blocked (Card 4 — E002 autonomous recovery), 1 verification card passed (Card 5 — including optional remediation wave). Zero manual interventions. Postmortem + KPI JSON generated. The smoke test validates both recovery layers: Layer 1 (E002 auto-revert) always exercised; Layer 2 (remediation cards) exercised if any latent issues exist, or via the force-trigger documented in Card 5.
@@ -184,10 +185,10 @@ The smoke test **FAILS** when ANY of the following occur:
 ```
 Operator (default profile)
   │
-  ├─ 1. bash scripts/preflight.sh                 ← env gating (13+ checks)
-  ├─ 2. bash scripts/pre_dispatch_gate.sh {id}    ← plan + CLI + attestation
-  └─ 3. python3 scripts/kanban_handoff.py         ← handoff card + cron provision
-         --plan test-plan/{plan_id}.plan.md
+  ├─ 1. bash "$HERMES_HOME/scripts/preflight.sh"      ← env gating (13+ checks)
+  ├─ 2. bash "$HERMES_HOME/scripts/pre_dispatch_gate.sh" {id}  ← plan + CLI + attestation
+  └─ 3. python3 "$HERMES_HOME/scripts/kanban_handoff.py"      ← handoff card + cron provision
+         --plan .hermes/kanban/plans/{plan_id}.plan.md
               │
               ▼
 Orchestrator (orchestrator profile)
@@ -200,6 +201,8 @@ Orchestrator (orchestrator profile)
        ├─ exit 0 → postmortem → cleanup
        └─ exit 1 → --spawn-remediation → remediation wave → re-audit → exit 0
 ```
+
+> **Scripts are materialized** to `$HERMES_HOME/scripts/` by `hermes kanban-advanced init`. They run from any repo — no plugin clone needed. The plan file lives in the **target repo** (`.hermes/kanban/plans/` or `test-plan/`). Generated artifacts (`smoke_utils.py`, tests, postmortems) are created in the target repo's `test-plan/` directory.
 
 ### Autonomous Recovery Mechanisms Tested
 
@@ -234,10 +237,10 @@ Gates are **manual, operator-executed** steps run from the default profile BEFOR
 
 ### Gate 1 — Preflight (environment gating)
 
-**Purpose:** Verify all infrastructure is healthy. Run from repo root.
+**Purpose:** Verify all infrastructure is healthy. Run from the **target repo root**.
 
 ```bash
-bash hermes-kanban-advanced-workflow/scripts/preflight.sh
+bash "$HERMES_HOME/scripts/preflight.sh"
 ```
 
 **Gate Verification:**
@@ -251,7 +254,7 @@ If degraded: review the JSON output for warnings. The smoke test can proceed wit
 **Purpose:** Verify the plan is on the working branch, coding agent is reachable, plan memory is seeded, and the kanban DB is healthy.
 
 ```bash
-bash hermes-kanban-advanced-workflow/scripts/pre_dispatch_gate.sh kanban-standard-smoke-test
+bash "$HERMES_HOME/scripts/pre_dispatch_gate.sh" kanban-standard-smoke-test
 ```
 
 **Gate Verification:**
@@ -265,7 +268,14 @@ Common failure: `coding_agent_cli` — authenticate the coding CLI and re-run. I
 **Purpose:** Create the handoff card that the orchestrator will decompose. Provisions wave crons (auto-unblock-1m, board-keeper-3m) before card creation.
 
 ```bash
-python3 hermes-kanban-advanced-workflow/scripts/kanban_handoff.py \
+python3 "$HERMES_HOME/scripts/kanban_handoff.py" \
+  --plan .hermes/kanban/plans/kanban-standard-smoke-test.plan.md
+```
+
+If the plan is in a different location (e.g., `test-plan/`), pass the path relative to the target repo root:
+
+```bash
+python3 "$HERMES_HOME/scripts/kanban_handoff.py" \
   --plan test-plan/kanban-standard-smoke-test.plan.md
 ```
 
@@ -461,12 +471,12 @@ Type: verification-local
 plan_id: kanban-standard-smoke-test
 Acceptance:
 - 1. Run test suite: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
-- 2. Run final audit: python3 scripts/final_audit_sanity.py --plan-id kanban-standard-smoke-test --tier all
-- 3. If audit exit 1: python3 scripts/final_audit_sanity.py --plan-id kanban-standard-smoke-test --spawn-remediation
+- 2. Run final audit: python3 "$HERMES_HOME/scripts/final_audit_sanity.py" --plan-id kanban-standard-smoke-test --tier all
+- 3. If audit exit 1: python3 "$HERMES_HOME/scripts/final_audit_sanity.py" --plan-id kanban-standard-smoke-test --spawn-remediation
      Wait for all remediation cards to reach done (hermes kanban list). Re-run step 2.
 - 4. If audit exit 2: BLOCK — script error. Do NOT proceed. Investigate.
-- 5. Generate token report: python3 scripts/kanban_token_report.py --plan kanban-standard-smoke-test
-- 6. Generate postmortem: python3 scripts/generate_postmortem.py --plan-id kanban-standard-smoke-test
+- 5. Generate token report: python3 "$HERMES_HOME/scripts/kanban_token_report.py" --plan kanban-standard-smoke-test
+- 6. Generate postmortem: python3 "$HERMES_HOME/scripts/generate_postmortem.py" --plan-id kanban-standard-smoke-test
 - 7. Verify artifacts: ls .hermes/kanban/reports/kanban-standard-smoke-test_*.md .hermes/kanban/reports/kanban-standard-smoke-test_kpi.json
 - 8. Run reconciliation per kanban-advanced:kanban-reconciliation skill
 Tests: python3 -m pytest test-plan/scripts/test_smoke_utils.py -v --rootdir=test-plan/scripts
