@@ -23,7 +23,7 @@ import sys
 import os
 from pathlib import Path
 
-from .hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config
+from .hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config, patch_block_recurrence_limit
 from .config_overlay import (
     DEFAULT_ORCHESTRATOR_PROFILE,
     DEFAULT_WORKER_PROFILE,
@@ -567,6 +567,7 @@ def _handle_init(args) -> int:
     # See plugin/data/references/dispatch-stale-timeout.md.
     print("5. Configuring Hermes kanban dispatcher...")
     apply_hermes_kanban_bootstrap_config(_run, HERMES_BIN, log=print)
+    patch_block_recurrence_limit(log=print)
 
     # ── 6. Gateway ───────────────────────────────────────────────────
     print("6. Checking gateway...")

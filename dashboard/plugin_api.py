@@ -84,7 +84,7 @@ from plugin.hermes_model_config import (  # noqa: E402
     seed_default_reasoning_effort_for_profile,
 )
 from plugin.file_text import read_utf8_text  # noqa: E402
-from plugin.hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config  # noqa: E402
+from plugin.hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config, patch_block_recurrence_limit  # noqa: E402
 from plugin.profile_bootstrap import (  # noqa: E402
     dispatch_profile_names,
     ensure_dispatch_profiles,
@@ -1529,6 +1529,7 @@ def _execute_init(body: dict, output: list[str]) -> dict:
 
     # Kanban Hermes config — auto_decompose off + stale dispatch timeout (see dispatch-stale-timeout.md)
     apply_hermes_kanban_bootstrap_config(_run, HERMES_BIN, log=output.append)
+    patch_block_recurrence_limit(log=output.append)
 
     # Gateway
     gw = _check_gateway()
