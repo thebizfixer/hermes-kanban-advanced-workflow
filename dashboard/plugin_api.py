@@ -1529,7 +1529,7 @@ def _execute_init(body: dict, output: list[str]) -> dict:
 
     # Kanban Hermes config — auto_decompose off + stale dispatch timeout (see dispatch-stale-timeout.md)
     apply_hermes_kanban_bootstrap_config(_run, HERMES_BIN, log=output.append)
-    patch_block_recurrence_limit(log=output.append)
+    patch_block_recurrence_limit(log=output.append, hermes_home=hermes_home)
 
     # Gateway
     gw = _check_gateway()

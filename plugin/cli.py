@@ -567,7 +567,7 @@ def _handle_init(args) -> int:
     # See plugin/data/references/dispatch-stale-timeout.md.
     print("5. Configuring Hermes kanban dispatcher...")
     apply_hermes_kanban_bootstrap_config(_run, HERMES_BIN, log=print)
-    patch_block_recurrence_limit(log=print)
+    patch_block_recurrence_limit(log=print, hermes_home=hermes_home)
 
     # ── 6. Gateway ───────────────────────────────────────────────────
     print("6. Checking gateway...")

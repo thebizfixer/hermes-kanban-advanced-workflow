@@ -12,10 +12,15 @@ BLOCK_RECURRENCE_LIMIT_TARGET = 5  # Must match BLOCK_RECURRENCE_LIMIT in hermes
 
 def patch_block_recurrence_limit(
     log: Callable[[str], None] | None = None,
+    hermes_home: str | os.PathLike | None = None,
 ) -> bool:
     """Patch hermes_cli/kanban_db.py BLOCK_RECURRENCE_LIMIT to 5 (idempotent).
 
     Returns True if the limit is already at the target or was patched successfully.
+
+    ``hermes_home`` should be the resolved Hermes state directory (e.g. from
+    ``resolve_hermes_home()``).  When omitted, falls back to ``$HERMES_HOME``,
+    ``~/.hermes``, or ``%LOCALAPPDATA%/hermes`` (Windows).
     """
     import os
 
@@ -23,9 +28,24 @@ def patch_block_recurrence_limit(
         if log is not None:
             log(msg)
 
-    hermes_home = os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
+    if hermes_home is not None:
+        resolved = str(hermes_home)
+    else:
+        resolved = os.environ.get("HERMES_HOME", "") or os.environ.get(
+            "HERMES_STATE_DIR", ""
+        )
+        if not resolved:
+            if os.name == "nt":
+                local_app = os.environ.get("LOCALAPPDATA", "")
+                if local_app:
+                    candidate = os.path.join(local_app, "hermes")
+                    if os.path.isdir(candidate):
+                        resolved = candidate
+            if not resolved:
+                resolved = os.path.expanduser("~/.hermes")
+
     target = os.path.join(
-        hermes_home, "hermes-agent", "hermes_cli", "kanban_db.py"
+        resolved, "hermes-agent", "hermes_cli", "kanban_db.py"
     )
     if not os.path.isfile(target):
         _log(
