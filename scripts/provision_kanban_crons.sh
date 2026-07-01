@@ -23,9 +23,6 @@ source "$SCRIPT_DIR/lib/hermes_home.sh"
 source "$SCRIPT_DIR/lib/gateway_hermes_home.sh"
 CRON_HERMES_HOME="$KANBAN_GATEWAY_HERMES_HOME"
 
-AUTO_UNBLOCK_NAME="kanban-auto-unblock-1m${PLAN_ID:+-$PLAN_ID}"
-BOARD_KEEPER_NAME="kanban-board-keeper-3m${PLAN_ID:+-$PLAN_ID}"
-LIFECYCLE_NOTIFY_NAME="kanban-lifecycle-notify-5m${PLAN_ID:+-$PLAN_ID}"
 # .py launchers work around https://github.com/NousResearch/hermes-agent/issues/23404
 # (bash script paths with Windows backslashes get mangled by the cron runner).
 AUTO_UNBLOCK_SCRIPT="auto_unblock.py"
@@ -65,6 +62,13 @@ if [[ -z "$WORKDIR" ]]; then
   WORKDIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 fi
 REPO_ROOT="$WORKDIR"
+
+# Cron names include plan_id suffix when --plan-id is passed so plans in
+# different repos get distinct cron jobs and don't overwrite each other's
+# workdir. Computed AFTER argument parsing (PLAN_ID must be populated).
+AUTO_UNBLOCK_NAME="kanban-auto-unblock-1m${PLAN_ID:+-$PLAN_ID}"
+BOARD_KEEPER_NAME="kanban-board-keeper-3m${PLAN_ID:+-$PLAN_ID}"
+LIFECYCLE_NOTIFY_NAME="kanban-lifecycle-notify-5m${PLAN_ID:+-$PLAN_ID}"
 
 _notify_lifecycle_enabled() {
   local cfg="$REPO_ROOT/.hermes/kanban-overrides/kanban-config.yaml"
