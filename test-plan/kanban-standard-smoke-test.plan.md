@@ -305,7 +305,7 @@ After handoff: the orchestrator receives the card, decomposes, and dispatches Ca
 ```agent
 agent -p "Create test-plan/scripts/smoke_utils.py with three utility functions.
 plan_id: kanban-standard-smoke-test
-Files: scripts/smoke_utils.py
+Files: test-plan/scripts/smoke_utils.py
 Mode: create-only
 Spec:
 - def greet() -> str: returns 'hello from kanban'
@@ -340,7 +340,7 @@ Do NOT push to main — commit to worktree branch only."
 ```agent
 agent -p "Create test-plan/scripts/test_smoke_utils.py with pytest tests for smoke_utils.
 plan_id: kanban-standard-smoke-test
-Files: scripts/test_smoke_utils.py
+Files: test-plan/scripts/test_smoke_utils.py
 Mode: create-only
 Spec:
 - test_greet_returns_string: calls greet(), asserts isinstance(result, str) and result != ''
@@ -378,7 +378,7 @@ Do NOT push to main — commit to worktree branch only."
 ```agent
 agent -p "Add a multiply() function to test-plan/scripts/smoke_utils.py and a test to test-plan/scripts/test_smoke_utils.py.
 plan_id: kanban-standard-smoke-test
-Files: scripts/smoke_utils.py (modify-only), scripts/test_smoke_utils.py
+Files: test-plan/scripts/smoke_utils.py (modify-only), test-plan/scripts/test_smoke_utils.py
 Mode: modify-only
 **Before modifying test-plan/scripts/test_smoke_utils.py, rebase on Card 2's work: git fetch origin {card2-branch} && git merge {card2-branch}.**
 Spec:
@@ -422,7 +422,7 @@ Do NOT push to main — commit to worktree branch only."
 ```agent
 agent -p "Add a module-level docstring to scripts/smoke_utils.py AND create a scratchpad file.
 plan_id: kanban-standard-smoke-test
-Files: scripts/smoke_utils.py
+Files: test-plan/scripts/smoke_utils.py
 Mode: modify-only
 Spec:
 - Add a module-level docstring to test-plan/scripts/smoke_utils.py: '\"\"\"Kanban smoke test utility functions.\"\"\"' at the top of the file (after the hashbang if present, before imports)
@@ -529,7 +529,7 @@ Contracts: none (all symbols are local to single cards — no shared functions, 
 #### Card 1 — Create Utility Module
 plan_id: kanban-standard-smoke-test
 files:
-  - scripts/smoke_utils.py
+  - test-plan/scripts/smoke_utils.py
 mode: create-only
 wave: 1
 assignee: kanban-advanced-worker
@@ -538,10 +538,10 @@ estimated_lines: 25
 ```agent
 agent -p "Create scripts/smoke_utils.py with three utility functions.
 plan_id: kanban-standard-smoke-test
-Files: scripts/smoke_utils.py
+Files: test-plan/scripts/smoke_utils.py
 Mode: create-only
 Spec:
-- Create at scripts/smoke_utils.py (repo root, not test-plan/scripts/ — working directory is repo root)
+- Create at test-plan/scripts/smoke_utils.py
 - def greet() -> str: returns 'hello from kanban'
 - def add(a: int, b: int) -> int: returns a + b
 - def format_name(first: str, last: str) -> str: returns '{last}, {first}' (Last, First format)
@@ -561,7 +561,7 @@ Do NOT push to main — commit to worktree branch only."
 #### Card 2 — Create Tests
 plan_id: kanban-standard-smoke-test
 files:
-  - scripts/test_smoke_utils.py
+  - test-plan/scripts/test_smoke_utils.py
 mode: create-only
 wave: 2
 wave_parent: card1
@@ -571,7 +571,7 @@ estimated_lines: 40
 ```agent
 agent -p "Create test-plan/scripts/test_smoke_utils.py with pytest tests for smoke_utils.
 plan_id: kanban-standard-smoke-test
-Files: scripts/test_smoke_utils.py
+Files: test-plan/scripts/test_smoke_utils.py
 Mode: create-only
 Spec:
 - test_greet_returns_string: calls greet(), asserts isinstance(result, str) and result != ''
@@ -596,8 +596,8 @@ Do NOT push to main — commit to worktree branch only."
 #### Card 3 — Modify Utility Module
 plan_id: kanban-standard-smoke-test
 files:
-  - scripts/smoke_utils.py
-  - scripts/test_smoke_utils.py
+  - test-plan/scripts/smoke_utils.py
+  - test-plan/scripts/test_smoke_utils.py
 mode: modify-only
 wave: 3
 wave_parent: card2
@@ -607,7 +607,7 @@ estimated_lines: 35
 ```agent
 agent -p "Add a multiply() function to scripts/smoke_utils.py and a test to scripts/test_smoke_utils.py.
 plan_id: kanban-standard-smoke-test
-Files: scripts/smoke_utils.py (modify-only), scripts/test_smoke_utils.py
+Files: test-plan/scripts/smoke_utils.py (modify-only), test-plan/scripts/test_smoke_utils.py
 Mode: modify-only
 **Before modifying test-plan/scripts/test_smoke_utils.py, rebase on Card 2's work: git fetch origin {card2-branch} && git merge {card2-branch}.**
 Spec:
@@ -630,7 +630,7 @@ Do NOT push to main — commit to worktree branch only."
 #### Card 4 — Autonomous Recovery Test (E002)
 plan_id: kanban-standard-smoke-test
 files:
-  - scripts/smoke_utils.py
+  - test-plan/scripts/smoke_utils.py
 mode: modify-only
 wave: 4
 wave_parent: card3
@@ -640,7 +640,7 @@ estimated_lines: 10
 ```agent
 agent -p "Add a module-level docstring to scripts/smoke_utils.py AND create a scratchpad file.
 plan_id: kanban-standard-smoke-test
-Files: scripts/smoke_utils.py
+Files: test-plan/scripts/smoke_utils.py
 Mode: modify-only
 Spec:
 - Add a module-level docstring to test-plan/scripts/smoke_utils.py: '\"\"\"Kanban smoke test utility functions.\"\"\"' at the top of the file (after the hashbang if present, before imports)

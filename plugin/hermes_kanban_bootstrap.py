@@ -12,15 +12,14 @@ BLOCK_RECURRENCE_LIMIT_TARGET = 5  # Must match BLOCK_RECURRENCE_LIMIT in hermes
 
 def patch_block_recurrence_limit(
     log: Callable[[str], None] | None = None,
-    hermes_home: str | os.PathLike | None = None,
 ) -> bool:
     """Patch hermes_cli/kanban_db.py BLOCK_RECURRENCE_LIMIT to 5 (idempotent).
 
     Returns True if the limit is already at the target or was patched successfully.
 
-    ``hermes_home`` should be the resolved Hermes state directory (e.g. from
-    ``resolve_hermes_home()``).  When omitted, falls back to ``$HERMES_HOME``,
-    ``~/.hermes``, or ``%LOCALAPPDATA%/hermes`` (Windows).
+    Resolves the Hermes installation directory by probing candidate paths
+    until ``hermes-agent/hermes_cli/kanban_db.py`` is found.  Does NOT use
+    project-local ``.hermes/`` directories — only the real Hermes install.
     """
     import os
 
@@ -28,29 +27,35 @@ def patch_block_recurrence_limit(
         if log is not None:
             log(msg)
 
-    if hermes_home is not None:
-        resolved = str(hermes_home)
-    else:
-        resolved = os.environ.get("HERMES_HOME", "") or os.environ.get(
-            "HERMES_STATE_DIR", ""
-        )
-        if not resolved:
-            if os.name == "nt":
-                local_app = os.environ.get("LOCALAPPDATA", "")
-                if local_app:
-                    candidate = os.path.join(local_app, "hermes")
-                    if os.path.isdir(candidate):
-                        resolved = candidate
-            if not resolved:
-                resolved = os.path.expanduser("~/.hermes")
+    # Candidate Hermes installation roots (ordered by likelihood).
+    # We verify by checking that hermes-agent/hermes_cli/kanban_db.py exists.
+    candidates: list[str] = []
+    for env in ("HERMES_HOME", "HERMES_STATE_DIR"):
+        raw = os.environ.get(env, "").strip()
+        if raw:
+            candidates.append(raw)
+    if os.name == "nt":
+        local_app = os.environ.get("LOCALAPPDATA", "").strip()
+        if local_app:
+            candidates.append(os.path.join(local_app, "hermes"))
+    candidates.append(os.path.expanduser("~/.hermes"))
+    if os.name == "nt":
+        userprofile = os.environ.get("USERPROFILE", "").strip()
+        if userprofile:
+            candidates.append(os.path.join(userprofile, ".hermes"))
 
-    target = os.path.join(
-        resolved, "hermes-agent", "hermes_cli", "kanban_db.py"
-    )
-    if not os.path.isfile(target):
+    target: str | None = None
+    for root in candidates:
+        probe = os.path.join(root, "hermes-agent", "hermes_cli", "kanban_db.py")
+        if os.path.isfile(probe):
+            target = probe
+            break
+
+    if target is None:
+        tried = "\n".join(f"    {c}" for c in candidates)
         _log(
-            f"   !  Could not find kanban_db.py at {target} — "
-            "patch BLOCK_RECURRENCE_LIMIT manually"
+            f"   !  Could not find kanban_db.py in any candidate:\n{tried}\n"
+            "   !  Patch BLOCK_RECURRENCE_LIMIT manually"
         )
         return False
 
