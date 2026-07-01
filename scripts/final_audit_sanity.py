@@ -30,6 +30,7 @@ if str(_LIB) not in sys.path:
 
 from final_audit import (  # noqa: E402
     AuditContext,
+    _apply_override,
     build_remediation_body,
     current_audit_round,
     extract_field,
@@ -429,6 +430,7 @@ def main(argv: list[str] | None = None) -> int:
     # Run audit tiers
     try:
         tier1_violations = run_tier1(ctx) if args.tier in ("1", "all") else []
+        tier1_violations = [_apply_override(v, ctx.overrides) for v in tier1_violations]
         changed = git_changed_paths(baseline, repo_root)
         tier2_violations = run_tier2(ctx, changed) if args.tier in ("2", "all") else []
     except RuntimeError as exc:
