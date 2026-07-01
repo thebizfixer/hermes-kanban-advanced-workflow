@@ -67,18 +67,24 @@ app.include_router(router, prefix="/api/plugins/kanban-advanced")
 
 # ── Plugin router discovery (H3 extension hook) ───────────────────────────────
 # Discover installed plugins and mount their dashboard FastAPI routers.
-# Uses hermes plugins list --json to find plugin root paths, then imports
-# and mounts any dashboard/procurement_routes.py found.
+# Uses hermes plugins list --json + plugin.yaml dashboard.router metadata.
 def _discover_plugin_routers():
-    """Mount dashboard routers from installed plugins (procurement, etc.)."""
+    """Mount dashboard routers declared in each plugin's plugin.yaml metadata."""
     import importlib.util
     import json
+    import logging
     import subprocess
 
     try:
+        import yaml
+    except ImportError:
+        return
+
+    log = logging.getLogger("dashboard_server")
+    try:
         result = subprocess.run(
             ["hermes", "plugins", "list", "--json"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10,
+            capture_output=True, text=True, encoding="utf-8-sig", errors="replace", timeout=10,
         )
         if result.returncode != 0:
             return
@@ -86,25 +92,64 @@ def _discover_plugin_routers():
     except Exception:
         return
 
-    for p in plugins if isinstance(plugins, list) else []:
-        p_root = p.get("path", "") or p.get("root", "")
-        if not p_root:
-            continue
-        router_path = os.path.join(p_root, "dashboard", "procurement_routes.py")
-        if not os.path.isfile(router_path):
+    hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+    plugin_dirs: dict[str, Path] = {}
+
+    def _scan_plugins(base: Path, depth: int = 0) -> None:
+        if not base.is_dir() or depth > 2:
+            return
+        for child in sorted(base.iterdir()):
+            if not child.is_dir():
+                continue
+            manifest = child / "plugin.yaml"
+            if manifest.exists():
+                try:
+                    meta = yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}
+                    plugin_dirs[meta.get("name", child.name)] = child
+                except Exception:
+                    pass
+            elif depth < 2:
+                _scan_plugins(child, depth + 1)
+
+    _scan_plugins(hermes_home / "plugins")
+
+    for entry in plugins if isinstance(plugins, list) else []:
+        name = entry.get("name", "")
+        root = plugin_dirs.get(name)
+        if not name or not root:
             continue
         try:
-            spec = importlib.util.spec_from_file_location(
-                f"plugin_{p.get('name', 'unknown')}_routes", router_path
-            )
+            meta = yaml.safe_load((root / "plugin.yaml").read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+        dash = meta.get("dashboard")
+        if not isinstance(dash, dict):
+            continue
+        router_rel = dash.get("router")
+        if not router_rel:
+            continue
+        prefix = dash.get("prefix") or f"/api/plugins/{name}"
+        router_path = (root / router_rel).resolve()
+        try:
+            router_path.relative_to(root.resolve())
+        except ValueError:
+            log.warning("Plugin %s: refusing router path outside plugin root", name)
+            continue
+        if not router_path.is_file():
+            continue
+        try:
+            spec = importlib.util.spec_from_file_location(f"plugin_{name}_routes", router_path)
+            if spec is None or spec.loader is None:
+                continue
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
-            if hasattr(mod, "router"):
-                app.include_router(mod.router, prefix="/api/plugins/procurement")
-                logger.info("Mounted dashboard routes for plugin: %s", p.get("name", "unknown"))
+            router_obj = getattr(mod, "router", None)
+            if router_obj is None:
+                continue
+            app.include_router(router_obj, prefix=prefix)
+            log.info("Mounted dashboard routes for plugin: %s", name)
         except Exception as exc:
-            logger.warning("Could not mount router for plugin %s: %s",
-                          p.get("name", "unknown"), exc)
+            log.warning("Could not mount router for plugin %s: %s", name, exc)
 
 _discover_plugin_routers()
 
