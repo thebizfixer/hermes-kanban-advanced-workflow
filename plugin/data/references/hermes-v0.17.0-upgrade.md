@@ -207,3 +207,5 @@ Also: `messaging` toolset removal may cause "Unknown toolsets" warnings if any p
 5. **Update 88 doc references** → if CLI invocation path changes permanently (not yet; `hermes kanban-advanced init` still works)
 
 **All code-level remediations are complete.** The plugin is v0.17.0-compatible. Remaining items are operational (config migrate) or contingent on future upstream changes.
+
+> See also: [hermes-v0.18.0-upgrade.md](hermes-v0.18.0-upgrade.md) for the v0.18.0 release — kanban lifecycle hooks, typed block reasons, and block recurrence behavior changes.

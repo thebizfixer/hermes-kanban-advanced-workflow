@@ -59,6 +59,10 @@ def register(ctx):
     ctx.register_hook("on_session_start", hooks.on_session_start)
     # post_tool_call: fires after every tool call; callback(tool_name, params, result)
     ctx.register_hook("post_tool_call", hooks.post_tool_call)
+    # kanban_task_completed: fires after complete_task commits (v0.17.0+)
+    ctx.register_hook("kanban_task_completed", hooks.on_kanban_task_completed)
+    # kanban_task_blocked: fires after block_task commits (v0.17.0+)
+    ctx.register_hook("kanban_task_blocked", hooks.on_kanban_task_blocked)
 
     # ── 4. Register CLI subcommands ────────────────────────────────
     ctx.register_cli_command(

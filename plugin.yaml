@@ -19,3 +19,5 @@ provides_skills:
 provides_hooks:
   - on_session_start
   - post_tool_call
+  - kanban_task_completed
+  - kanban_task_blocked

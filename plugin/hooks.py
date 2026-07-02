@@ -167,12 +167,44 @@ def post_tool_call(tool_name: str = "", args: Any = None, result: str = "",
 
         if tool_name == "kanban_complete":
             result_text = str(result or "").lower()
-            if "error" not in result_text and "failed" not in result_text:
-                _trigger_event_driven_unblock()
 
     except Exception as exc:
         # Hook errors are caught by Hermes, but we log to stderr as a fallback
         logger.error("plugin: post_tool_call hook failed for %s: %s", tool_name, exc)
+
+
+def on_kanban_task_completed(task_id: str = "", summary: str | None = None, **kwargs: Any) -> None:
+    """Trigger event-driven auto_unblock after a task completes.
+
+    Fires in the WORKER process after ``complete_task`` commits. Replaces the
+    ad-hoc ``post_tool_call`` detection pattern with the native lifecycle hook
+    (Hermes v0.17.0+).  See :pr:`50349`.
+    """
+    try:
+        _trigger_event_driven_unblock()
+    except Exception as exc:
+        logger.error("plugin: on_kanban_task_completed hook failed: %s", exc)
+
+
+def on_kanban_task_blocked(task_id: str = "", reason: str | None = None, **kwargs: Any) -> None:
+    """Log block event via the native kanban lifecycle hook.
+
+    Fires in the WORKER process (or the process that drove the block) after
+    ``block_task`` commits.  Complements the JSONL board-event log in
+    ``post_tool_call`` with a structured block entry.
+    """
+    try:
+        _ensure_log_dir()
+        entry = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "event": "blocked",
+            "task_id": task_id,
+            "reason": reason,
+        }
+        with open(EVENT_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as exc:
+        logger.error("plugin: on_kanban_task_blocked hook failed: %s", exc)
 
 
 def _get_board_status() -> str:

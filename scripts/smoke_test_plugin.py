@@ -25,16 +25,16 @@ if str(REPO_ROOT) not in sys.path:
 
 # Expected surface (must match plugin.yaml and README "What You Get").
 EXPECTED_SKILLS = {
-    "kanban-advanced", "kanban-cleanup", "kanban-git", "kanban-notify",
-    "kanban-orchestrator", "kanban-orchestrator-governance", "kanban-planning",
-    "kanban-postmortem", "kanban-preflight", "kanban-reconciliation",
-    "kanban-worker", "kanban-worker-governance",
+    "kanban-advanced", "kanban-cleanup", "kanban-coder", "kanban-git",
+    "kanban-notify", "kanban-orchestrator", "kanban-orchestrator-governance",
+    "kanban-planning", "kanban-postmortem", "kanban-preflight",
+    "kanban-reconciliation", "kanban-worker", "kanban-worker-governance",
 }
 EXPECTED_TOOLS = {
     "kanban_create", "kanban_list", "kanban_show", "kanban_complete",
     "kanban_block", "kanban_unblock", "kanban_link",
 }
-EXPECTED_HOOKS = {"on_session_start", "post_tool_call"}
+EXPECTED_HOOKS = {"on_session_start", "post_tool_call", "kanban_task_completed", "kanban_task_blocked"}
 EXPECTED_CLI = {"kanban-advanced"}
 
 

@@ -157,6 +157,14 @@ KANBAN_BLOCK = {
                 "type": "string",
                 "description": "Reason for blocking — appended as a comment on the card",
             },
+            "kind": {
+                "type": "string",
+                "enum": ["dependency", "needs_input", "capability", "transient"],
+                "description": (
+                    "Block kind: 'dependency' parks in todo (auto-resumed when parent "
+                    "completes); others block immediately. Omit for legacy behavior."
+                ),
+            },
         },
         "required": ["task_id", "reason"],
     },

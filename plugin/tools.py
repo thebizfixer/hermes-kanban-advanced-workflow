@@ -131,6 +131,9 @@ def kanban_block(args: dict, **kwargs) -> str:
     if not task_id or not reason:
         return json.dumps({"error": "kanban_block requires 'task_id' and 'reason'"})
     cli = ["block", task_id, reason]
+    kind = args.get("kind")
+    if kind:
+        cli.extend(["--kind", kind])
     return json.dumps(_run_kanban(cli))
 
 
