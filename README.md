@@ -62,7 +62,7 @@ Two steps. Init creates `kanban-advanced-orchestrator` and `kanban-advanced-work
 | Surface | Count | Details |
 |---------|-------|---------|
 | Bundled skills | 12 | `kanban-advanced:kanban-advanced` (bridge), `kanban-advanced:kanban-planning`, `kanban-advanced:kanban-orchestrator`, `kanban-advanced:kanban-worker`, `kanban-advanced:kanban-preflight`, `kanban-advanced:kanban-cleanup`, `kanban-advanced:kanban-notify`, `kanban-advanced:kanban-postmortem`, `kanban-advanced:kanban-reconciliation`, `kanban-advanced:kanban-orchestrator-governance`, `kanban-advanced:kanban-worker-governance`, `kanban-advanced:kanban-git` |
-| CLI commands | 7 | `hermes kanban-advanced decompose`, `list`, `show`, `validate`, `verify-optimization`, `preflight`, `init` |
+| CLI commands | 8 | `hermes kanban-advanced decompose`, `list`, `show`, `validate`, `verify-optimization`, `verify-skills`, `preflight`, `init` |
 | LLM tools | 7 | `kanban_create`, `kanban_list`, `kanban_show`, `kanban_complete`, `kanban_block`, `kanban_unblock`, `kanban_link` |
 | Lifecycle hooks | 2 | `on_session_start` (profile-aware skill hint), `post_tool_call` (board event JSONL + event-driven `auto_unblock` after successful `kanban_complete`) |
 | Dashboard tab | 1 | Settings UI in the Hermes dashboard (`/kanban-advanced`) — configure coding agent, branch, and profiles without CLI; Save reconciles lifecycle crons when notify toggles change; mirrors `hermes kanban-advanced init` |

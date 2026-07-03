@@ -358,7 +358,7 @@ Reference: `plugin/data/references/final-audit-sanity-check.md`, `plugin/data/re
 python hermes-kanban-advanced-workflow/scripts/generate_postmortem.py --plan-id <id> --output .hermes/kanban/reports/
 ```
 
-Generates 8-section markdown postmortem plus machine-readable KPI artifact: `{plan_id}_kpi.json` and append-only `kpi_history.jsonl` in the output directory. KPI includes success/intervention rates, wall-clock hours, `subsystem_failures` taxonomy, `auth_escalation_count`, `thrash_outliers`, and `completeness` (worker vs orchestrator catch, remediation cards). When `{plan_id}_audit_tier1.json` / `tier2.json` exist, adds `final_audit_rounds`, `plan_scope_gaps`, `doc_coverage_gaps`; sets `uncaught_violation_count` to **`null`** (unknown) when tier JSON is absent — not `0`. Cross-plan lessons merge into `.hermes/kanban/memory/_global.json` via `scripts/lib/cross_plan_memory.py`. Reads `tokens.jsonl`, kanban SQLite DB, and intervention counter. Run before board archive.
+Generates 8-section markdown postmortem plus machine-readable KPI artifact: `{plan_id}_kpi.json` and append-only `kpi_history.jsonl` in the output directory. KPI includes success/intervention rates, wall-clock hours, `subsystem_failures` taxonomy, `auth_escalation_count`, `thrash_outliers`, and `completeness` (worker vs orchestrator catch, remediation cards). When `{plan_id}_audit_tier1.json` / `tier2.json` exist, adds `final_audit_rounds`, `plan_scope_gaps`, `doc_coverage_gaps`; sets `uncaught_violation_count` to **`null`** (unknown) when tier JSON is absent — not `0`. Cross-plan lessons merge into `.hermes/kanban/memory/_global.json` via `scripts/lib/cross_plan_memory.py`. Reads `tokens.jsonl`, kanban SQLite DB, and intervention counter. **Intervention counter derived from plan-scoped JSONL as source of truth** (plan-scoped path first, flat fallback). **Detects archived boards** — when the active DB returns 0 tasks, searches `_archived` and annotates the postmortem with a data-confidence note and plan-memory task counts. Run before board archive.
 
 ## Verify optimization (`verify_optimization.sh`)
 
@@ -416,7 +416,7 @@ Environment-neutral structural validation: directories, `bash -n` on all shell s
 bash hermes-kanban-advanced-workflow/scripts/kanban_intervention_inc.sh
 ```
 
-Increments `.hermes/kanban/logs/{plan_id}/interventions.count` when `--plan-id` is provided (per-plan scoping). Falls back to `.hermes/kanban/logs/interventions.count` for backward compat. Called once per gateway escalation. Postmortem reads this counter for intervention rate KPI.
+Increments `.hermes/kanban/logs/{plan_id}/interventions.count` when `--plan-id` is provided (per-plan scoping). Also writes to `.hermes/kanban/logs/{plan_id}/interventions.jsonl` for the event log. Falls back to flat `.hermes/kanban/logs/` paths for backward compat. Called once per gateway escalation. **Postmortem derives the intervention count from the JSONL event log as source of truth** (plan-scoped path first, flat fallback, counter as tertiary fallback). Counter is still written by the shell script for backward compatibility but the JSONL is authoritative at read time.
 
 ## Git safe cleanup (`git_safe_cleanup.sh`)
 
