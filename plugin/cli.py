@@ -23,7 +23,7 @@ import sys
 import os
 from pathlib import Path
 
-from .hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config, patch_block_recurrence_limit
+from .hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config, patch_block_recurrence_limit, verify_recurrence_limit_geq_failure_limit
 from .config_overlay import (
     DEFAULT_ORCHESTRATOR_PROFILE,
     DEFAULT_WORKER_PROFILE,
@@ -126,6 +126,10 @@ def setup_argparse(subparser: argparse.ArgumentParser) -> None:
     )
     init.add_argument("--force", action="store_true", help="Skip confirmation prompts")
 
+    # ── verify-skills ──
+    verify = subs.add_parser("verify-skills", help="Verify process-type plugin skills are discoverable")
+    verify.add_argument("--process-type", required=True, help="Process type to verify (e.g. procurement)")
+
     subparser.set_defaults(func=handle_kanban)
 
 
@@ -139,6 +143,7 @@ def handle_kanban(args: argparse.Namespace) -> int:
         "verify-optimization": _handle_verify_optimization,
         "preflight": _handle_preflight,
         "init": _handle_init,
+        "verify-skills": _handle_verify_skills,
     }
 
     handler = handlers.get(args.subcommand)
@@ -568,6 +573,7 @@ def _handle_init(args) -> int:
     print("5. Configuring Hermes kanban dispatcher...")
     apply_hermes_kanban_bootstrap_config(_run, HERMES_BIN, log=print)
     patch_block_recurrence_limit(log=print)
+    verify_recurrence_limit_geq_failure_limit(log=print)
 
     # ── 6. Gateway ───────────────────────────────────────────────────
     print("6. Checking gateway...")
@@ -670,3 +676,23 @@ def _handle_init(args) -> int:
         print("  Before your first plan:")
         print(f"    hermes gateway run")
     return 0
+
+
+def _handle_verify_skills(args) -> int:
+    from .skill_verifier import verify_process_type_skills
+    found, missing, errors = verify_process_type_skills(args.process_type)
+    if errors:
+        for e in errors:
+            print(f"  ?  {e}")
+        return 0  # non-blocking
+    print(f"  Process-type: {args.process_type}")
+    for s in found:
+        print(f"  ✓  {s}")
+    for s in missing:
+        print(f"  ✗  {s}  (SKILL.md missing — expected at $HERMES_HOME/plugins/<plugin>/plugin/skills/{s}/SKILL.md)")
+    summary = f"  {len(found)} found, {len(missing)} missing out of {len(found) + len(missing)} declared"
+    print(summary)
+    if missing:
+        plugin = f"hermes-{args.process_type}" if not any(e for e in errors) else "<plugin-name>"
+        print(f"  Fix: hermes plugins update {plugin}")
+    return 0  # non-blocking

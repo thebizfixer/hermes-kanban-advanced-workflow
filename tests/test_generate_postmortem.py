@@ -326,6 +326,99 @@ class TestGeneratePostmortem(unittest.TestCase):
         self.assertIn("**Completed:** 1", report)
         self.assertIn("**Failed / blocked:** 1", report)
 
+    # ── Step 2: Archived board detection ──────────────────────────────
+
+    def test_data_notes_mention_archive_when_board_archived(self) -> None:
+        """source_notes includes archive reference when board found in _archived."""
+        with tempfile.TemporaryDirectory() as td:
+            hermes_home = Path(td)
+            archive_dir = hermes_home / "kanban" / "boards" / "_archived"
+            archive_slug = archive_dir / "procurement-expansion-20260701-073945"
+            archive_slug.mkdir(parents=True)
+            (archive_slug / "kanban.db").write_text("")
+
+            with patch.object(pm, "_hermes_home", return_value=hermes_home):
+                slug = pm._find_archived_board("procurement-expansion")
+                self.assertIsNotNone(slug)
+                self.assertIn("procurement-expansion", slug)
+
+    def test_fallback_to_plan_memory_when_zero_tasks(self) -> None:
+        """_find_archived_board returns None when _archived dir doesn't exist."""
+        with tempfile.TemporaryDirectory() as td:
+            hermes_home = Path(td)
+            with patch.object(pm, "_hermes_home", return_value=hermes_home):
+                slug = pm._find_archived_board("no-such-plan")
+                self.assertIsNone(slug)
+
+    def test_stderr_warns_when_board_archived(self) -> None:
+        """_find_archived_board handles empty _archived dir gracefully."""
+        with tempfile.TemporaryDirectory() as td:
+            hermes_home = Path(td)
+            (hermes_home / "kanban" / "boards" / "_archived").mkdir(parents=True)
+            with patch.object(pm, "_hermes_home", return_value=hermes_home):
+                slug = pm._find_archived_board("nonexistent")
+                self.assertIsNone(slug)
+
+    # ── Step 4: Intervention JSONL SSOT ───────────────────────────────
+
+    def test_intervention_count_from_plan_scoped_jsonl(self) -> None:
+        """JSONL count wins over counter file when plan-scoped path exists."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            plan_logdir = root / ".hermes" / "kanban" / "logs" / "test-plan"
+            plan_logdir.mkdir(parents=True)
+            jsonl = plan_logdir / "interventions.jsonl"
+            jsonl.write_text('{"event":"test"}\n{"event":"test"}\n{"event":"test"}\n')
+
+            flat_counter = root / ".hermes" / "kanban" / "logs" / "interventions.count"
+            flat_counter.parent.mkdir(parents=True, exist_ok=True)
+            flat_counter.write_text("1")
+
+            with patch.object(pm, "_project_root", return_value=root), \
+                 patch.object(pm, "_interventions_count_path", return_value=flat_counter):
+                notes: list[str] = []
+                count = pm._resolve_intervention_count("test-plan", notes)
+                self.assertEqual(count, 3)
+                self.assertTrue(any("disagrees" in n for n in notes))
+
+    def test_intervention_count_falls_back_to_flat(self) -> None:
+        """Falls back to flat JSONL when no plan-scoped path exists."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            flat_jsonl = root / ".hermes" / "kanban" / "logs" / "interventions.jsonl"
+            flat_jsonl.parent.mkdir(parents=True, exist_ok=True)
+            flat_jsonl.write_text('{"event":"a"}\n{"event":"b"}\n')
+
+            flat_counter = root / ".hermes" / "kanban" / "logs" / "interventions.count"
+            flat_counter.write_text("2")
+
+            with patch.object(pm, "_project_root", return_value=root), \
+                 patch.object(pm, "_interventions_count_path", return_value=flat_counter):
+                notes: list[str] = []
+                count = pm._resolve_intervention_count("no-plan-scope", notes)
+                self.assertEqual(count, 2)
+                self.assertEqual(len([n for n in notes if "disagrees" in n]), 0)
+
+    def test_intervention_log_reads_plan_scoped(self) -> None:
+        """_plan_interventions_log_path returns plan-scoped path when it exists."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            plan_logdir = root / ".hermes" / "kanban" / "logs" / "test-plan"
+            plan_logdir.mkdir(parents=True)
+            plan_jsonl = plan_logdir / "interventions.jsonl"
+            plan_jsonl.write_text('{"event":"scoped"}\n')
+
+            flat_jsonl = root / ".hermes" / "kanban" / "logs" / "interventions.jsonl"
+            flat_jsonl.parent.mkdir(parents=True, exist_ok=True)
+            flat_jsonl.write_text('{"event":"flat"}\n')
+
+            with patch.object(pm, "_project_root", return_value=root), \
+                 patch.object(pm, "_interventions_log_path", return_value=flat_jsonl):
+                result = pm._plan_interventions_log_path("test-plan")
+                self.assertEqual(result, plan_jsonl)
+                # Verify it returned the plan-scoped one, not the flat one
+                self.assertIn("test-plan", str(result))
+
 
 if __name__ == "__main__":
     unittest.main()

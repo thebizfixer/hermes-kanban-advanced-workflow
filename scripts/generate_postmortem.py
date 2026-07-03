@@ -157,6 +157,25 @@ def _interventions_log_path() -> Path:
     return _project_root() / ".hermes" / "kanban" / "logs" / "interventions.jsonl"
 
 
+def _find_archived_board(plan_id: str) -> str | None:
+    """Return the slug of an archived board matching plan_id, or None."""
+    archived_dir = _hermes_home() / "kanban" / "boards" / "_archived"
+    if not archived_dir.is_dir():
+        return None
+    for child in sorted(archived_dir.iterdir(), reverse=True):
+        if child.is_dir() and plan_id in child.name:
+            return child.name
+    return None
+
+
+def _plan_interventions_log_path(plan_id: str) -> Path:
+    """Return the plan-scoped interventions JSONL path, falling back to flat path."""
+    scoped = _project_root() / ".hermes" / "kanban" / "logs" / plan_id / "interventions.jsonl"
+    if scoped.is_file():
+        return scoped
+    return _interventions_log_path()  # flat fallback
+
+
 def _scope_violations_path(board_slug: str = "") -> Path:
     """Return the scope violations log path, board-scoped when available."""
     if board_slug:
@@ -236,6 +255,53 @@ def read_intervention_count(path: Path) -> int:
     raw = path.read_text(encoding="utf-8", errors="replace")
     digits = re.sub(r"[^0-9]", "", raw)
     return int(digits) if digits else 0
+
+
+def _resolve_intervention_count(plan_id: str, source_notes: list[str]) -> int:
+    """Count interventions from JSONL (SSOT). Plan-scoped path first, flat fallback.
+
+    When the counter file disagrees with the JSONL, appends a diagnostic to
+    *source_notes* explaining the discrepancy and which source was used.
+    """
+    jsonl_path = _plan_interventions_log_path(plan_id)
+    jsonl_count = 0
+    if jsonl_path.is_file():
+        jsonl_count = sum(1 for _ in open(jsonl_path, "r", encoding="utf-8"))
+
+    # Check plan-scoped counter (where the shell script actually writes with --plan-id)
+    scoped_counter = _project_root() / ".hermes" / "kanban" / "logs" / plan_id / "interventions.count"
+    scoped_val: int | None = None
+    if scoped_counter.is_file():
+        try:
+            scoped_val = int(scoped_counter.read_text(encoding="utf-8", errors="replace").strip())
+        except (ValueError, OSError):
+            pass
+
+    # Flat counter (fallback — un-scoped shell invocations)
+    flat_val: int | None = None
+    flat_counter = _interventions_count_path()
+    if flat_counter.is_file():
+        try:
+            flat_val = int(flat_counter.read_text(encoding="utf-8", errors="replace").strip())
+        except (ValueError, OSError):
+            pass
+
+    effective_counter = scoped_val if scoped_val is not None else flat_val
+
+    if jsonl_count > 0 and effective_counter is not None and jsonl_count != effective_counter:
+        source_notes.append(
+            f"Intervention counter ({effective_counter}) disagrees with "
+            f"JSONL event log ({jsonl_count} entries) — using JSONL as "
+            "source of truth. Counter may have been lost during board "
+            "archive or reset. To reconcile: delete interventions.count "
+            "(it is regenerated from JSONL on next increment)."
+        )
+
+    if jsonl_count > 0:
+        return jsonl_count
+    if effective_counter is not None:
+        return effective_counter
+    return 0
 
 
 def format_tokens(value: int) -> str:
@@ -2141,15 +2207,21 @@ def main(argv: list[str] | None = None) -> int:
     # Scope to most recent run only — avoids aggregating across multiple decompositions
     token_entries = _scope_to_latest_run(token_entries, plan_id)
 
-    intervention_count = read_intervention_count(interventions_path)
+    # Move source_notes init BEFORE _resolve_intervention_count so the helper
+    # can append discrepancy notes.
+    source_notes: list[str] = []
+
+    # Derive intervention_count from JSONL (SSOT), plan-scoped first
+    intervention_count = _resolve_intervention_count(plan_id, source_notes)
+
+    # Read intervention log from plan-scoped path (where shell script writes)
     intervention_log = [
         entry
-        for entry in read_jsonl(_interventions_log_path())
+        for entry in read_jsonl(_plan_interventions_log_path(plan_id))
         if not entry.get("plan_id") or entry.get("plan_id") == plan_id
     ]
     scope_violations = read_jsonl(_scope_violations_path(board_slug or ""))
 
-    source_notes: list[str] = []
     if not token_path.exists():
         source_notes.append(f"Token log missing at `{token_path}`.")
     if not interventions_path.exists():
@@ -2163,6 +2235,35 @@ def main(argv: list[str] | None = None) -> int:
 
     tasks, db_notes = load_task_history(db_path, plan_id, _project_root(), board_task_ids=board_task_ids)
     source_notes.extend(db_notes)
+
+    # ── Archived board detection ─────────────────────────────────────────
+    archived_slug = _find_archived_board(plan_id)
+    if archived_slug:
+        source_notes.append(
+            f"Board archived — found at {_hermes_home()}/kanban/boards/_archived/{archived_slug}. "
+            f"Active DB returned 0 tasks for plan '{plan_id}'. "
+            "Task data may be incomplete. Fill operator ground truth (§9) from session logs or prior reconciliation."
+        )
+        print(
+            f"⚠  Board '{plan_id}' is archived — snapshot: {archived_slug}. "
+            f"Active DB returned 0 tasks. Postmortem data may be incomplete. "
+            f"Fill section 9 (Operator Ground Truth) manually.",
+            file=sys.stderr,
+        )
+
+    # If 0 tasks matched AND archived board found, try plan memory fallback
+    if not tasks and archived_slug:
+        memory_ids, _ = load_plan_memory_task_ids(_project_root(), plan_id)
+        if memory_ids:
+            mem_tasks = len(memory_ids)
+            discrepancy = (
+                f"Plan memory reports {mem_tasks} completed tasks but active DB "
+                f"has 0 — board was archived before postmortem could read it. "
+                f"Use plan memory count ({mem_tasks}) as the authoritative task total."
+            )
+            source_notes.append(discrepancy)
+            print(f"⚠  {discrepancy}", file=sys.stderr)
+
     tasks = _merge_tasks_with_tokens(tasks, token_entries, plan_id)
 
     report = build_report(

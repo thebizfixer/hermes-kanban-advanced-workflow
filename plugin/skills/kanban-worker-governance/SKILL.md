@@ -89,6 +89,13 @@ If `--check-only` fails (exit 1), apply the recovery for the error code, then re
 
 **Without `--check-only`:** the eval chain retains its existing auto-block/auto-complete behavior for backward compatibility with cards dispatched before this fix.
 
+## Diagnostic output
+
+When any kanban tool produces warnings, errors, or data-notes, do not parrot
+the raw output to the operator. Summarize it: what's wrong → what it means →
+what to do. Full pattern: `kanban-advanced:kanban-reconciliation` § Diagnostic
+summarization.
+
 ## Pitfalls (short)
 
 - **`[unauthenticated]` in logs** — cosmetic Cursor indexer; use `coding_agent_invoke.sh smoke`.

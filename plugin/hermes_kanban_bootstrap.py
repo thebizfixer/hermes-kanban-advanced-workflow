@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 from collections.abc import Callable
+
+import yaml
 
 DISPATCH_STALE_TIMEOUT_SECONDS = "14400"
 FAILURE_LIMIT = "5"
@@ -88,6 +91,50 @@ def patch_block_recurrence_limit(
         return False
 
     _log(f"   OK BLOCK_RECURRENCE_LIMIT = {BLOCK_RECURRENCE_LIMIT_TARGET} (patched)")
+    return True
+
+
+def verify_recurrence_limit_geq_failure_limit(
+    log: Callable[[str], None] | None = None,
+) -> bool:
+    """Check BLOCK_RECURRENCE_LIMIT >= failure_limit from config.yaml.
+
+    Reads ``kanban.failure_limit`` directly from ``$HERMES_HOME/config.yaml``
+    (no subprocess — ``hermes config get`` doesn't exist).  Compares against
+    BLOCK_RECURRENCE_LIMIT_TARGET.  Emits a non-blocking WARN when violated
+    (never raises, never exits non-zero).
+
+    Returns False when the invariant is violated (so callers can track it).
+    """
+    def _log(msg: str) -> None:
+        if log is not None:
+            log(msg)
+
+    hermes_home = os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes"))
+    config_path = os.path.join(hermes_home, "config.yaml")
+    config_limit = None
+    try:
+        if os.path.isfile(config_path):
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)
+            config_limit = int((cfg or {}).get("kanban", {}).get("failure_limit", 0)) or None
+    except Exception:
+        pass
+
+    if config_limit is None:
+        _log("   ?  Could not read kanban.failure_limit from config.yaml — skipping invariant check")
+        return True  # can't verify — don't alarm
+
+    if BLOCK_RECURRENCE_LIMIT_TARGET < config_limit:
+        _log(
+            f"   ⚠  WARN: BLOCK_RECURRENCE_LIMIT ({BLOCK_RECURRENCE_LIMIT_TARGET}) "
+            f"< failure_limit ({config_limit}). "
+            "Cards may be triaged before Six Sigma recovery exhausts. "
+            f"Run: hermes config set kanban.failure_limit {BLOCK_RECURRENCE_LIMIT_TARGET}"
+        )
+        return False
+
+    _log(f"   OK BLOCK_RECURRENCE_LIMIT ({BLOCK_RECURRENCE_LIMIT_TARGET}) >= failure_limit ({config_limit})")
     return True
 
 

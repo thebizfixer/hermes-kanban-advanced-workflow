@@ -312,6 +312,22 @@ Use **`${bundle_path}/scripts/preflight.sh`** as the single pre-dispatch gate. I
 | Still stuck after fixes | `in-flight-governance-index.md` § L0–L1 | `wiki/troubleshooting.md` |
 | Bootstrap / init / plugin contract suspect | `wiki/plugin-verification.md` | Tier 1 smoke + sanity before re-init |
 
+## Diagnostic output
+
+Preflight produces JSON diagnostics (pass/degraded/fail per check). When
+surfacing failures to the operator, do not paste raw JSON. Summarize each
+failed check: what failed → what it means → what to do. Full pattern:
+`kanban-advanced:kanban-reconciliation` § Diagnostic summarization.
+
+Example — raw preflight JSON:
+```json
+{"id": "coding_agent_cli_reachability", "status": "fail", "severity": "blocking"}
+```
+
+Agent summary:
+> The coding agent CLI isn't reachable — workers can't execute code. Run
+> `agent login` and re-run preflight. See `coding-agent-auth.md` for details.
+
 ## Cross-references
 
 - Script: `hermes-kanban-advanced-workflow/scripts/preflight.sh`

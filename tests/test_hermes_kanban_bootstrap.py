@@ -6,12 +6,15 @@ import os
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
+import yaml
 
 from plugin.hermes_kanban_bootstrap import (
     BLOCK_RECURRENCE_LIMIT_TARGET,
     DISPATCH_STALE_TIMEOUT_SECONDS,
     apply_hermes_kanban_bootstrap_config,
     patch_block_recurrence_limit,
+    verify_recurrence_limit_geq_failure_limit,
 )
 
 
@@ -128,6 +131,60 @@ class TestHermesKanbanBootstrap(unittest.TestCase):
 
         self.assertFalse(result)
         self.assertTrue(any("Could not find" in line for line in logs))
+
+    def test_invariant_ok_when_equal(self) -> None:
+        """Invariant passes when BLOCK_RECURRENCE_LIMIT == failure_limit."""
+        logs: list[str] = []
+        tmp_home = tempfile.mkdtemp()
+        config_path = os.path.join(tmp_home, "config.yaml")
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                f.write("kanban:\n  failure_limit: 5\n")
+            with unittest.mock.patch.dict(
+                os.environ, {"HERMES_HOME": tmp_home}
+            ):
+                result = verify_recurrence_limit_geq_failure_limit(log=logs.append)
+        finally:
+            os.unlink(config_path)
+            os.rmdir(tmp_home)
+
+        self.assertTrue(result)
+        self.assertTrue(any("OK BLOCK_RECURRENCE_LIMIT" in line for line in logs))
+
+    def test_invariant_warn_when_failure_limit_higher(self) -> None:
+        """Warns when failure_limit > BLOCK_RECURRENCE_LIMIT_TARGET."""
+        logs: list[str] = []
+        tmp_home = tempfile.mkdtemp()
+        config_path = os.path.join(tmp_home, "config.yaml")
+        try:
+            with open(config_path, "w", encoding="utf-8") as f:
+                f.write("kanban:\n  failure_limit: 7\n")
+            with unittest.mock.patch.dict(
+                os.environ, {"HERMES_HOME": tmp_home}
+            ):
+                result = verify_recurrence_limit_geq_failure_limit(log=logs.append)
+        finally:
+            os.unlink(config_path)
+            os.rmdir(tmp_home)
+
+        self.assertFalse(result)
+        self.assertTrue(any("WARN" in line for line in logs))
+        self.assertTrue(any("hermes config set kanban.failure_limit" in line for line in logs))
+
+    def test_invariant_skip_when_config_unreadable(self) -> None:
+        """Skips check gracefully when config.yaml is missing."""
+        logs: list[str] = []
+        tmp_home = tempfile.mkdtemp()
+        try:
+            with unittest.mock.patch.dict(
+                os.environ, {"HERMES_HOME": tmp_home}
+            ):
+                result = verify_recurrence_limit_geq_failure_limit(log=logs.append)
+        finally:
+            os.rmdir(tmp_home)
+
+        self.assertTrue(result)
+        self.assertTrue(any("skipping invariant check" in line for line in logs))
 
 
 if __name__ == "__main__":

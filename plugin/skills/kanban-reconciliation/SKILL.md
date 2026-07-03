@@ -175,3 +175,82 @@ If failure rate exceeds 30% during execution:
 | Missing tier JSON / `uncaught_violation_count: null` in KPI | `kanban-advanced:kanban-postmortem` § Final audit KPIs | Re-run audit before cleanup |
 | Failure rate > 30% mid-run | This skill § Mid-run reconciliation | Worker SOUL, smoke, card bodies |
 | New recurring symptom | `in-flight-governance-index.md` + `wiki/troubleshooting.md` | Promote row per § Skill updates step 5 |
+
+## Diagnostic summarization
+
+When a kanban tool emits diagnostics (warnings, errors, data-notes, health
+checks), the agent must **summarize** them for the operator — never just
+repeat the raw output verbatim.
+
+### Format
+
+For every diagnostic, produce a 3-line summary:
+
+1. **What's wrong** — one sentence in plain language
+2. **What it means** — the operational impact (what breaks, what's at risk)
+3. **What to do** — the exact fix command or next step
+
+### Examples
+
+**Raw diagnostic from `hermes kanban-advanced init`:**
+```
+⚠  WARN: BLOCK_RECURRENCE_LIMIT (5) < failure_limit (7).
+Cards may be triaged before Six Sigma recovery exhausts.
+Run: hermes config set kanban.failure_limit 5
+```
+
+**Agent summary (good — extracts signal):**
+> The block recurrence limit (5) is lower than the Six Sigma failure limit (7).
+> Cards will hit triage before recovery can retry fully. Run:
+> `hermes config set kanban.failure_limit 5`
+
+**Agent summary (bad — just parrots):**
+> There's a warning about BLOCK_RECURRENCE_LIMIT being less than failure_limit.
+> It says cards may be triaged. The fix is `hermes config set kanban.failure_limit 5`.
+
+**Raw diagnostic from `hermes kanban-advanced verify-skills`:**
+```
+  ✗  stripe-issuing  (SKILL.md missing — expected at ...)
+  3 found, 1 missing out of 4 declared
+  Fix: hermes plugins update hermes-procurement
+```
+
+**Agent summary (good):**
+> The procurement plugin is missing its Stripe Issuing skill (SKILL.md
+> deleted or never installed). Workers won't be able to process payments.
+> Run: `hermes plugins update hermes-procurement`
+
+**Raw diagnostic from postmortem generator:**
+```
+⚠  Board 'procurement-expansion' is archived — snapshot: procurement-expansion-20260701-073945.
+Active DB returned 0 tasks. Postmortem data may be incomplete.
+Fill section 9 (Operator Ground Truth) manually.
+```
+
+**Agent summary (good):**
+> The procurement board was archived during the Hermes upgrade — the
+> postmortem generator couldn't read task history. The automated report
+> shows 0 tasks. I've filled in the ground truth from session logs
+> (19/19 done, 2 interventions). The complete report is at
+> `.hermes/kanban/reports/procurement-expansion_postmortem_*.md`.
+
+**Raw diagnostic from intervention counter discrepancy:**
+```
+Intervention counter (1) disagrees with JSONL event log (3 entries)
+— using JSONL as source of truth. Counter may have been lost during
+board archive or reset. To reconcile: delete interventions.count
+```
+
+**Agent summary (good):**
+> The intervention count is off — the counter file says 1 but the event
+> log has 3 entries. The counter was likely lost during the board archive.
+> I'm using the event log (3) as the authoritative count. To fix the
+> counter: `rm .hermes/kanban/logs/<plan_id>/interventions.count` (it regenerates).
+
+### Anti-patterns
+
+- ❌ "There are some warnings in the output." (what warnings?)
+- ❌ "The init command produced: ⚠ WARN: ..." (don't paste raw output)
+- ❌ "This might be a problem." (be specific about what breaks)
+- ✅ "The block limit (5) is lower than the failure limit (7). Cards will
+  be triaged prematurely. Run: `hermes config set kanban.failure_limit 5`"

@@ -97,6 +97,13 @@ python3 scripts/kanban_recover.py --cascade <plan_id>   # pause / resume board
 
 Iteration-limit cards: check worktree commits before re-dispatch. Full flow: `plugin/data/references/salvage-pattern-iteration-exhausted-cards.md`.
 
+## Diagnostic output
+
+When pre-dispatch gates, attestation, verify-skills, or postmortem tools emit
+diagnostics, summarize — never paste raw output. Format: what's wrong → what
+it means → what to do. Full pattern: `kanban-advanced:kanban-reconciliation` §
+Diagnostic summarization.
+
 ## Pitfalls (trimmed — detail in wiki)
 
 - **auto_decompose** — set `kanban.auto_decompose false` for manual decompose.

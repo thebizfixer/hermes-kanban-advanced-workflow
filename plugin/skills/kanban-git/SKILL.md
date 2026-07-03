@@ -24,6 +24,12 @@ Thin router to governed scripts. **Never** run raw `git worktree add` or hand-ty
 
 Exit code 2 with `[escalation:git:merge_conflict]` — block the card; do not burn coding-agent tokens on conflict markers.
 
+## Diagnostic output
+
+When git ops fail (merge conflicts, freshness checks, worktree errors), summarize
+the failure for the operator — what failed, what it means, what to do. Full
+pattern: `kanban-advanced:kanban-reconciliation` § Diagnostic summarization.
+
 ## Integration-first model
 
 Default: merge `origin/${working_branch}` only. Parent-card merges are the exception for same-wave same-file parallelism; use `Parent-branches:` keys resolved from plan memory `card_branches`.

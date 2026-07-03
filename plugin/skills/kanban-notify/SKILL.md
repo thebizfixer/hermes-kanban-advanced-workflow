@@ -229,6 +229,14 @@ Cross-reference: `hermes-kanban-advanced-workflow/prompts/orchestrator.md` § In
 | Plan complete + postmortem | When walk-away on | `walk_away_mode: true` — `kanban_walk_away_post_exec.sh` |
 | Unknown trigger | No until classified | This skill § Intervention trigger table |
 
+## Diagnostic output
+
+When intervention triggers fire, the notification format (§ Notification format)
+already follows the summarization pattern. For non-notify diagnostics (data-notes,
+counter discrepancies), apply the same pattern: what's wrong → what it means →
+what to do. Canonical reference: `kanban-advanced:kanban-reconciliation` §
+Diagnostic summarization.
+
 ## Cross-references
 
 - Preflight gateway check: `kanban-advanced:kanban-preflight` § Gateway health

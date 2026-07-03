@@ -447,6 +447,13 @@ Run `bash hermes-kanban-advanced-workflow/scripts/verify_optimization.sh --plan 
 - **Grep calibration produces false negatives for test discovery.** A single `find . -name 'test_*.py'` won't match `*_test.py`, `tests/`, `spec/`, or non-Python test runners. Before concluding tests are missing, try at least three patterns: `find . \\( -name 'test_*' -o -name '*_test.*' -o -name '*_spec.*' \\)`, `grep -rl 'def test_'`, and `pytest --collect-only --quiet 2>/dev/null`. A false-negative test report wastes time and erodes trust in the hardening pass.
 - **Docs cards dispatched before implementation.** Running a docs card in wave 1 when implementation cards follow in waves 2–5 guarantees the documentation describes pre-change state. The clockwork-v2 run dispatched Card 1 (docs/EXTRACTION.md) before Cards 2–5, producing an extraction doc with stale 3.5s poll times, `[new]` tags, and `pending` backend-mode references — all of which became false after the implementation cards merged. Apply the docs-last decomposition rule: docs workstreams run after all their referenced implementation waves, or carry explicit `Reconcile against HEAD after wave N` acceptance with an `acceptance-verify` follow-up card. The `verify_optimization.sh` check 14 enforces inverted-graph WARN when docs cards appear before their referenced implementation cards in the dependency graph.
 
+## Diagnostic output
+
+When plan validation, optimization checks, or verify_optimization.sh produce
+diagnostics, summarize — never paste raw check output. Format: what failed →
+what it means → what to do. Full pattern: `kanban-advanced:kanban-reconciliation`
+§ Diagnostic summarization.
+
 ## References
 
 - `plugin/data/references/plan-file-format.md` — markup-safe placeholders, `Spec:` contract block, acceptance surfaces, fence rules
