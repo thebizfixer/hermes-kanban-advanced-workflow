@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def register(ctx):
     """Wire all plugin components into the Hermes Agent runtime."""
 
-    # ── 1. Register all 12 bundled skills ──────────────────────────
+    # ── 1. Register all 13 bundled skills ──────────────────────────
     skills_dir = Path(__file__).parent / "skills"
     registered = 0
     failed = []
@@ -72,7 +72,7 @@ def register(ctx):
         handler_fn=cli.handle_kanban,
     )
 
-    logger.info("plugin: kanban-advanced v1.0.0 registered (%d skills, 7 tools, 2 hooks, 1 CLI)",
+    logger.info("plugin: kanban-advanced v0.9.0 registered (%d skills, 7 tools, 4 hooks, 1 CLI)",
                 registered)
 
     # ── 5. Start dashboard sidecar server (if not already running) ───

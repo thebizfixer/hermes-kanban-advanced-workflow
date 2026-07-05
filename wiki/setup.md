@@ -8,7 +8,7 @@
 
 1. **Confirm Hermes is installed and running:**
    ```bash
-   hermes --version          # ≥ 0.16.0 required (tested on 0.17.0)
+   hermes --version          # ≥ 0.16.0 required (tested on 0.17.0 and 0.18.0)
    hermes gateway status     # must be running
    ```
    If not running: `hermes gateway run` (use tmux background for persistence).
@@ -224,4 +224,4 @@ The user should:
 
 **KPIs are automatic.** The agent surfaces success rate, intervention rate, token burn, and failure-mode distribution at the reconciliation checkpoint. See the [README Agent KPIs](../README.md#agent-kpis).
 
-On session start, the `on_session_start` hook fires: on `kanban-advanced-orchestrator` it hints to load `kanban-advanced:kanban-orchestrator`; on other profiles it hints about trigger phrases and the bridge skill. All 12 skills are materialized to `$HERMES_HOME/skills/kanban-advanced/` during init (shared index); dispatch profiles additionally get role-only copies under their profile `skills/` dirs — see [[bootstrap#two-skill-locations-do-not-confuse]].
+On session start, the `on_session_start` hook fires: on `kanban-advanced-orchestrator` it hints to load `kanban-advanced:kanban-orchestrator`; on other profiles it hints about trigger phrases and the bridge skill. All 13 skills are materialized to `$HERMES_HOME/skills/kanban-advanced/` during init (shared index); dispatch profiles additionally get role-only copies under their profile `skills/` dirs — see [[bootstrap#two-skill-locations-do-not-confuse]].

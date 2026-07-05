@@ -3,7 +3,7 @@
 
 Verifies the kanban-advanced plugin contract that the six-sigma agent-role UX
 depends on: all bundled skills register, all LLM tools register with callable
-handlers, both lifecycle hooks register and are callable, and the
+handlers, all lifecycle hooks register and are callable, and the
 profile-aware role-discovery hook (on_session_start) distinguishes the
 orchestrator role from the default/worker role.
 

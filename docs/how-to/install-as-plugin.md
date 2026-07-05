@@ -2,7 +2,7 @@
 
 **How-to guide** — Install the kanban-advanced plugin and bootstrap your project. For a complete walkthrough of the entire lifecycle, see the [tutorial](../tutorial/kanban-advanced-tutorial.md).
 
-**Prerequisites:** Hermes Agent ≥ 0.16.0 (tested on 0.17.0), Python 3.12+, a coding agent CLI on PATH.
+**Prerequisites:** Hermes Agent ≥ 0.16.0 (tested on 0.17.0 and 0.18.0), Python 3.12+, a coding agent CLI on PATH.
 
 ---
 
@@ -98,7 +98,7 @@ Agent reference: [wiki/bootstrap.md](../../wiki/bootstrap.md)
 ### What init also provisions
 
 1. **Config overlay** — `.hermes/kanban-overrides/kanban-config.yaml`
-2. **Shared skill materialization** — all 12 skills → `$HERMES_HOME/skills/kanban-advanced/`
+2. **Shared skill materialization** — all 13 skills → `$HERMES_HOME/skills/kanban-advanced/`
 3. **Cron scripts (files only)** — `auto_unblock.sh`, `board_keeper.sh`, `token_tracker.py` → `$HERMES_HOME/scripts/`. Hermes cron **jobs** are created per plan at **execute/handoff** (`kanban_handoff.py` → `provision_kanban_crons.sh --create`), verified at orchestrator decomposition (`--check`; handoff path uses `--no-crons`), not at init.
 4. **Environment** — `HERMES_ENABLE_PROJECT_PLUGINS=true`, `KANBAN_CODING_AGENT`, `KANBAN_CODING_AGENT_MODEL`, `KANBAN_POLICY_PROFILE`, `HOME` in `.env` (kanban keys only — not app secrets)
 5. **`.worktreeinclude`** — kanban gitignored paths for card worktrees (overlay, invoke scripts); **you** add `.env` / `.venv/` as needed

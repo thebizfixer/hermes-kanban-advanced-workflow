@@ -400,7 +400,7 @@ Pre-decomposition check: verifies governance files (skills, scripts, registry, p
 python3 hermes-kanban-advanced-workflow/scripts/smoke_test_plugin.py
 ```
 
-No Hermes runtime required. Verifies plugin `register()`: 12 skills, 7 kanban tools, 2 hooks, CLI command, callable handlers. Exit 1 if contract broken. Run from plugin checkout root with `python3` or `python` (Windows). See `wiki/plugin-verification.md` and `PLATFORM_NOTES.md`.
+No Hermes runtime required. Verifies plugin `register()`: 13 skills, 7 kanban tools, 4 hooks, CLI command, callable handlers. Exit 1 if contract broken. Run from plugin checkout root with `python3` or `python` (Windows). See `wiki/plugin-verification.md` and `PLATFORM_NOTES.md`.
 
 ## Sanity check (`sanity_check.sh`)
 

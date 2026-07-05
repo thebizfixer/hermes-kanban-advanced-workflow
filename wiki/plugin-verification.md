@@ -62,7 +62,7 @@ bash scripts/sanity_check.sh
 
 | Script | Exit 0 means | Common failures |
 | --- | --- | --- |
-| `smoke_test_plugin.py` | All 12 skills, 7 tools, 2 hooks, CLI register; handlers callable | Missing `kanban-git` in roster, broken `register()` import |
+| `smoke_test_plugin.py` | All 13 skills, 7 tools, 4 hooks, CLI register; handlers callable | Missing `kanban-git` in roster, broken `register()` import |
 | `sanity_check.sh` | Dirs present, all `*.sh` pass `bash -n`, LF endings, skill frontmatter, error registry (incl. E028/E029), presentation acceptance scripts, unit tests pass | Bash heredoc/syntax in a script, CRLF on shell scripts, unittest failures |
 
 **Full Python unit suite** (same as sanity_check’s unittest block; use `-v` for detail):

@@ -1,15 +1,7 @@
 # Advanced Kanban Workflow for Hermes Agent
 
-> ⚠️ **Development status:** This plugin is under active development and testing.
-> **Hermes v0.17.0 compatibility:** The plugin CLI (`hermes kanban-advanced`)
-> does not load under v0.17.0 due to a namespace-loading change in Hermes's
-> plugin architecture. A fix is in progress (9 internal imports need conversion
-> from absolute to relative). The dashboard sidecar, kanban board, and wave
-> crons continue to function. Tracked in
-> [hermes-v0.17.0-upgrade.md](plugin/data/references/hermes-v0.17.0-upgrade.md).
-
 **Repository:** [github.com/thebizfixer/hermes-kanban-advanced-workflow](https://github.com/thebizfixer/hermes-kanban-advanced-workflow)  
-**Version:** 0.9.0 · **Requires:** Python 3.12+, Hermes Agent ≥ 0.16.0 (tested on 0.17.0)  
+**Version:** 0.9.0 · **Requires:** Python 3.12+, Hermes Agent ≥ 0.16.0 (tested on 0.17.0, compatible with 0.18.0)  
 **Platforms:** Linux · macOS · Windows (native + WSL)
 
 A six-sigma multi-agent workflow packaged as a Hermes Agent plugin, with deterministic governance gates (AGT + AEP patterns). Environment and model agnostic.
@@ -61,19 +53,22 @@ Two steps. Init creates `kanban-advanced-orchestrator` and `kanban-advanced-work
 
 | Surface | Count | Details |
 |---------|-------|---------|
-| Bundled skills | 12 | `kanban-advanced:kanban-advanced` (bridge), `kanban-advanced:kanban-planning`, `kanban-advanced:kanban-orchestrator`, `kanban-advanced:kanban-worker`, `kanban-advanced:kanban-preflight`, `kanban-advanced:kanban-cleanup`, `kanban-advanced:kanban-notify`, `kanban-advanced:kanban-postmortem`, `kanban-advanced:kanban-reconciliation`, `kanban-advanced:kanban-orchestrator-governance`, `kanban-advanced:kanban-worker-governance`, `kanban-advanced:kanban-git` |
-| CLI commands | 8 | `hermes kanban-advanced decompose`, `list`, `show`, `validate`, `verify-optimization`, `verify-skills`, `preflight`, `init` |
+| Bundled skills | 13 | `kanban-advanced` (bridge), `kanban-cleanup`, `kanban-coder`, `kanban-git`, `kanban-notify`, `kanban-orchestrator`, `kanban-orchestrator-governance`, `kanban-planning`, `kanban-postmortem`, `kanban-preflight`, `kanban-reconciliation`, `kanban-worker`, `kanban-worker-governance` |
+| CLI commands | 9 | `hermes kanban-advanced decompose`, `list`, `show`, `validate`, `verify-optimization`, `verify-skills`, `preflight`, `init` — plus `process-type` extension dispatch for non-code-gen plugins |
 | LLM tools | 7 | `kanban_create`, `kanban_list`, `kanban_show`, `kanban_complete`, `kanban_block`, `kanban_unblock`, `kanban_link` |
-| Lifecycle hooks | 2 | `on_session_start` (profile-aware skill hint), `post_tool_call` (board event JSONL + event-driven `auto_unblock` after successful `kanban_complete`) |
+| Lifecycle hooks | 4 | `on_session_start` (profile-aware skill hint), `post_tool_call` (board event JSONL + event-driven `auto_unblock` after successful `kanban_complete`), `kanban_task_completed`, `kanban_task_blocked` |
 | Dashboard tab | 1 | Settings UI in the Hermes dashboard (`/kanban-advanced`) — configure coding agent, branch, and profiles without CLI; Save reconciles lifecycle crons when notify toggles change; mirrors `hermes kanban-advanced init` |
 | Governance hooks | 2 | `worktree_setup.sh` installs pre-push (branch guard) and pre-commit (`Files:` boundary) hooks per worktree |
 | Escalation chain | 1 | `kanban_escalation_tracker.sh` + `board_keeper.sh` — coding agent → worker → orchestrator → human (configurable via `escalation_max_attempts`) |
+| Tests | 61 | pytest suite covering decomposer, evaluation chain, card policy, postmortem, config, token tracking, dashboard API, plan parsing, skill verification, and platform-neutrality |
 
 ---
 
 ## Why Kanban Advanced?
 
 Vanilla `hermes kanban` gives you a task board. This plugin adds deterministic governance: preflight gating, attestation, card body policy enforcement, a multi-step evaluation chain (ALLOW/DENY per check), automated recovery, parallel subagent pre-dispatch gate (serial fallback), board-mediated handoff for non-orchestrator profiles, lifecycle notify with resolved gateway deliver, and walk-away execution with token tracking and KPI reporting.
+
+**Since v0.9.0:** Process-type extension hooks (`process_type:*`) allow non-code-gen plugins (procurement, deployment, etc.) to register their own decompose dispatch — the orchestrator routes to the correct CLI subcommand automatically. Bootstrap auto-patches Hermes core `BLOCK_RECURRENCE_LIMIT` (2→5). Intervention tracking is plan-scoped with a canonical JSONL stream. The board resolver is a singleton for consistent multi-board operations. `hermes kanban-advanced verify-skills --process-type <name>` verifies process-type plugin skill registrations. Plan hardening diff (`plan_hardening_diff.py`) compares plan versions between draft stages.
 
 **Full explanation:** [Why kanban-advanced?](docs/explanation/why-kanban-advanced.md) — including when NOT to use it.
 
@@ -254,6 +249,9 @@ flowchart LR
 | Dashboard tab shows "Server Not Running" | Server starts automatically during init. If missing: `python3 scripts/dashboard_server.py`. Gateway must be running for keepalive cron — [wiki/troubleshooting.md](wiki/troubleshooting.md) |
 | Dashboard API returns errors / won't save | Check server is running: `curl http://127.0.0.1:18900/health`. For VPS: verify reverse proxy routes `/api/plugins/kanban-advanced/` → `127.0.0.1:18900` |
 | Port 18900 already in use | Set `KA_DASHBOARD_PORT=18901` in your environment; restart the server |
+| Process-type decomposes to wrong handler | Run `hermes kanban-advanced verify-skills --process-type <name>` to check plugin skill registration |
+| `BLOCK_RECURRENCE_LIMIT` reverts after Hermes update | Re-run `hermes kanban-advanced init` — bootstrap auto-patches the limit back to 5 |
+| Plan hardening diff shows false changes | The diff compares plan YAML frontmatter + card bodies — verify anchor points match between draft and hardened versions. See `plugin/data/references/plan-hardening-methodology.md` |
 
 Full guide: [docs/how-to/troubleshooting.md](docs/how-to/troubleshooting.md)
 

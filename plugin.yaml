@@ -6,6 +6,7 @@ requires_env: []
 provides_skills:
   - kanban-advanced
   - kanban-cleanup
+  - kanban-coder
   - kanban-notify
   - kanban-orchestrator
   - kanban-orchestrator-governance
