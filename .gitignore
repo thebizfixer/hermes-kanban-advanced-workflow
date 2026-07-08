@@ -2,6 +2,7 @@
 .cursor/
 mcps/
 /.hermes/
+.hermes/kanban/plans/
 
 # Secrets
 .env
