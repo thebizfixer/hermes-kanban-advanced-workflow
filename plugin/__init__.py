@@ -85,10 +85,15 @@ def _start_dashboard_sidecar() -> None:
     The sidecar runs on 127.0.0.1:18900 and serves the plugin's dashboard
     API. PID file locking prevents duplicate instances. Started here so
     the dashboard tab works immediately — no manual init required.
+
+    Captures stderr during the startup window so silent failures (stale PID
+    lock, port conflict, missing deps) surface actionable diagnostics in the
+    gateway log instead of vanishing into DEVNULL.
     """
     import subprocess
     import os
     import sys
+    import time
 
     plugin_root = Path(__file__).resolve().parent.parent
     server_script = plugin_root / "scripts" / "dashboard_server.py"
@@ -98,12 +103,40 @@ def _start_dashboard_sidecar() -> None:
         return
 
     try:
-        subprocess.Popen(
+        proc = subprocess.Popen(
             [sys.executable, str(server_script)],
             cwd=str(plugin_root),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-        logger.info("plugin: dashboard sidecar server started")
+        # Give the sidecar a short window to either bind the port or crash.
+        # uvicorn logs to stderr, so a dead process leaves diagnostics there.
+        time.sleep(1.5)
+        poll = proc.poll()
+        if poll is not None:
+            # Process exited before the startup window closed.
+            try:
+                _, stderr = proc.communicate(timeout=2)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                _, stderr = proc.communicate()
+            stderr_text = stderr.decode("utf-8", errors="replace").strip()
+            # uvicorn may also emit the error on stdout
+            if stderr_text:
+                logger.warning(
+                    "plugin: dashboard sidecar exited (code %d): %s",
+                    poll, stderr_text[:800],
+                )
+            else:
+                logger.warning(
+                    "plugin: dashboard sidecar exited (code %d) with no output",
+                    poll,
+                )
+        else:
+            # Still running — detach from the pipes so the subprocess can
+            # continue independently without us holding its stdout/stderr open.
+            proc.stdout.close()
+            proc.stderr.close()
+            logger.info("plugin: dashboard sidecar server started (PID %d)", proc.pid)
     except Exception as exc:
         logger.warning("plugin: could not start dashboard server: %s", exc)

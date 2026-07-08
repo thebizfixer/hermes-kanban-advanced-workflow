@@ -21,6 +21,7 @@ import re
 import subprocess
 import sys
 import os
+import time
 from pathlib import Path
 
 from .hermes_kanban_bootstrap import apply_hermes_kanban_bootstrap_config, patch_block_recurrence_limit, verify_recurrence_limit_geq_failure_limit
@@ -649,13 +650,33 @@ def _handle_init(args) -> int:
     # Start the server now (don't wait for cron)
     if server_script.exists():
         try:
-            subprocess.Popen(
-                ["python3", str(server_script)],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+            proc = subprocess.Popen(
+                [sys.executable, str(server_script)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 start_new_session=True,
             )
-            print(f"   OK Dashboard server started (port 18900)")
+            # Brief startup window to catch immediate crashes (stale PID lock,
+            # port conflict, missing dep). On success detach pipes so the
+            # subprocess continues independently.
+            time.sleep(1.5)
+            poll = proc.poll()
+            if poll is not None:
+                try:
+                    _, stderr_bytes = proc.communicate(timeout=2)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    _, stderr_bytes = proc.communicate()
+                stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
+                if stderr_text:
+                    print(f"   X Dashboard server exited (code {poll}): {stderr_text[:500]}")
+                else:
+                    print(f"   X Dashboard server exited (code {poll}) with no output")
+                print(f"   Start manually: python3 {server_script}")
+            else:
+                proc.stdout.close()
+                proc.stderr.close()
+                print(f"   OK Dashboard server started (PID {proc.pid}, port 18900)")
         except Exception as exc:
             print(f"   !  Could not start dashboard server: {exc}")
             print(f"   Start manually: python3 {server_script}")
