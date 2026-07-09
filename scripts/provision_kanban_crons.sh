@@ -10,6 +10,7 @@
 #   bash scripts/provision_kanban_crons.sh --create [--plan-id ID] [--dry-run] [--json]
 #   bash scripts/provision_kanban_crons.sh --remove [--plan-id ID] [--dry-run] [--json]
 #   bash scripts/provision_kanban_crons.sh --check [--json]
+#   bash scripts/provision_kanban_crons.sh --check-scripts-only
 #
 # Creates kanban-auto-unblock-1m + kanban-board-keeper-3m with deliver=local, no_agent=true.
 # NOT invoked at init/bootstrap — created at execute/handoff (kanban_handoff.py default profile),
@@ -40,7 +41,7 @@ WORKDIR=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --create|--remove|--check|--clean) ACTION="${1#--}"; shift ;;
+    --create|--remove|--check|--clean|--check-scripts-only) ACTION="${1#--}"; shift ;;
     --plan-id) PLAN_ID="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=true; shift ;;
     --json) JSON_OUT=true; shift ;;
@@ -340,6 +341,31 @@ case "$ACTION" in
       fi
     done < <(echo "$cron_list" | grep "Name:" | sed 's/.*Name: *//')
     echo "[provision_kanban_crons] [clean] removed $cleaned stale plan-scoped cron(s)"
+  ;;
+  check-scripts-only)
+    issues=0
+    if ! command -v hermes >/dev/null 2>&1; then
+      echo "[provision_kanban_crons] FAIL: hermes not on PATH" >&2
+      exit 1
+    fi
+    for script in "$AUTO_UNBLOCK_SCRIPT" "$BOARD_KEEPER_SCRIPT"; do
+      if [[ ! -x "$script" ]]; then
+        echo "[provision_kanban_crons] FAIL: $script missing or not executable" >&2
+        issues=$((issues + 1))
+      fi
+    done
+    if _notify_lifecycle_enabled; then
+      if [[ ! -x "$LIFECYCLE_SCRIPT" ]]; then
+        echo "[provision_kanban_crons] FAIL: $LIFECYCLE_SCRIPT missing (notify_lifecycle enabled)" >&2
+        issues=$((issues + 1))
+      fi
+    fi
+    if [[ "$issues" -gt 0 ]]; then
+      echo "[provision_kanban_crons] check-scripts-only: $issues script(s) missing" >&2
+      exit 1
+    fi
+    echo "[provision_kanban_crons] check-scripts-only: all scripts present"
+    exit 0
   ;;
   check)
     issues=0

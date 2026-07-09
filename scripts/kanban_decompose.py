@@ -414,7 +414,13 @@ def link_cards(parent_id: str, child_id: str, dry_run: bool = False) -> bool:
 
 
 def find_existing_plan_cards(plan_id: str, card_keys: list[str]) -> dict[str, str]:
-    """Return existing task IDs keyed by card key when plan_id already has cards on board."""
+    """Return existing task IDs keyed by card key when plan_id already has cards on board.
+
+    Scans impl cards (by card_key field or title fallback) plus gate/root/audit cards
+    (by title pattern). Returns all matched types — not just impl.
+    """
+    import re
+
     if not plan_id:
         return {}
     out, _, rc = hermes("kanban", "list")
@@ -429,11 +435,41 @@ def find_existing_plan_cards(plan_id: str, card_keys: list[str]) -> dict[str, st
         detail, _, _ = hermes("kanban", "show", tid)
         if f"plan_id: {plan_id}" not in detail and f"plan_id:{plan_id}" not in detail.replace(" ", ""):
             continue
+
+        # Extract title from detail output (e.g. "Task t_xxx: Card 1 — Create Utility Module")
+        title = ""
+        for row in detail.splitlines():
+            if row.startswith("Task ") and ":" in row:
+                title = row.split(":", 1)[1].strip()
+                break
+
+        # Primary: match by card_key field in body
+        matched = False
         for key in card_keys:
             marker = f"card_key: {key}"
-            if marker in detail or f"#### Card {key}" in detail or f"key: {key}" in detail:
+            if marker in detail:
                 existing[key] = tid
+                matched = True
                 break
+            # Fallback: match by title-derived key (e.g. "Card 1 — ..." → "card1")
+            if not matched:
+                title_lower = title.lower().replace(" ", "").replace("-", "")
+                for k in card_keys:
+                    if k in title_lower:
+                        existing[k] = tid
+                        matched = True
+                        break
+
+        # Gate/root/audit detection by title pattern
+        if not matched:
+            title_lower = title.lower()
+            if "gate" in title_lower and plan_id.lower() in title_lower:
+                existing["gate"] = tid
+            elif "root" in title_lower and plan_id.lower() in title_lower:
+                existing["root"] = tid
+            elif "final audit" in title_lower and plan_id.lower() in title_lower:
+                existing["audit"] = tid
+
     return existing
 
 

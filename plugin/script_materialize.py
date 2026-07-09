@@ -22,13 +22,17 @@ MANIFEST_FILENAME = ".materialize-manifest.json"
 
 HERMES_SCRIPT_NAMES = (
     "auto_unblock.sh",
+    "auto_unblock.py",
     "board_keeper.sh",
+    "board_keeper.py",
     "kanban_escalation_tracker.sh",
     "kanban_lifecycle_notify.sh",
+    "kanban_lifecycle_notify.py",
     "kanban_completion_notify.sh",
     "kanban_walk_away_post_exec.sh",
     "kanban_intervention_inc.sh",
     "kanban_git_ops.sh",
+    "provision_kanban_crons.sh",
     "token_tracker.py",
     "log_invoke_tokens.py",
     "hermes_token_meter.py",
@@ -176,32 +180,38 @@ def materialize_skills_with_preservation(
     return count, warnings
 
 
-def materialize_hermes_scripts(scripts_src: Path, scripts_dst: Path) -> list[str]:
-    """Copy top-level scripts and scripts/lib helpers into HERMES_HOME."""
+def materialize_hermes_scripts(scripts_src: Path, scripts_dst: Path | list[Path]) -> list[str]:
+    """Copy top-level scripts and scripts/lib helpers into target directories.
+
+    Accepts a single Path (backward-compatible) or a list[Path] to materialize
+    into multiple profile directories plus root at once.
+    """
+    targets = [scripts_dst] if isinstance(scripts_dst, Path) else scripts_dst
     lines: list[str] = []
-    scripts_dst.mkdir(parents=True, exist_ok=True)
-    for script_name in HERMES_SCRIPT_NAMES:
-        src = scripts_src / script_name
-        dst = scripts_dst / script_name
-        if src.exists():
-            dst.write_text(read_utf8_text(src), encoding="utf-8")
-            dst.chmod(0o755)
-            lines.append(f"   OK {script_name} -> {dst}")
-    lib_src = scripts_src / "lib"
-    lib_dst = scripts_dst / "lib"
-    if lib_src.is_dir():
-        lib_dst.mkdir(parents=True, exist_ok=True)
-        for name in LIB_SCRIPT_NAMES:
-            src = lib_src / name
+    for dst_root in targets:
+        dst_root.mkdir(parents=True, exist_ok=True)
+        for script_name in HERMES_SCRIPT_NAMES:
+            src = scripts_src / script_name
+            dst = dst_root / script_name
             if src.exists():
-                dst = lib_dst / name
                 dst.write_text(read_utf8_text(src), encoding="utf-8")
                 dst.chmod(0o755)
-                lines.append(f"   OK lib/{name} -> {dst}")
-        for name in LIB_PYTHON_NAMES:
-            src = lib_src / name
-            if src.exists():
-                dst = lib_dst / name
-                dst.write_text(read_utf8_text(src), encoding="utf-8")
-                lines.append(f"   OK lib/{name} -> {dst}")
+                lines.append(f"   OK {script_name} -> {dst}")
+        lib_src = scripts_src / "lib"
+        lib_dst = dst_root / "lib"
+        if lib_src.is_dir():
+            lib_dst.mkdir(parents=True, exist_ok=True)
+            for name in LIB_SCRIPT_NAMES:
+                src = lib_src / name
+                if src.exists():
+                    dst = lib_dst / name
+                    dst.write_text(read_utf8_text(src), encoding="utf-8")
+                    dst.chmod(0o755)
+                    lines.append(f"   OK lib/{name} -> {dst}")
+            for name in LIB_PYTHON_NAMES:
+                src = lib_src / name
+                if src.exists():
+                    dst = lib_dst / name
+                    dst.write_text(read_utf8_text(src), encoding="utf-8")
+                    lines.append(f"   OK lib/{name} -> {dst}")
     return lines
