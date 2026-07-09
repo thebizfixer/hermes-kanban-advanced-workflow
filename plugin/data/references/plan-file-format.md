@@ -100,6 +100,30 @@ Rules:
 | **Ask-first** | Plan sad-path table | operator deploy steps |
 | **Never** | Per-card `Forbidden:` | do-not-touch paths, no new deps |
 
+### Orchestrator-stamped card header fields
+
+During **Optimize** the orchestrator stamps metadata fields above each card's
+` ```agent ``` ` block. These are machine-generated; plan authors can inspect but
+don't write them manually.
+
+| Field | Purpose | Format |
+|---|---|---|
+| `plan_id` | Board namespace | lowercase kebab identifier |
+| `wave` | Execution order gate | integer, starts at 1 |
+| `wave_parent` | Serial dependency target | `card1`, `none`; see normalization below |
+| `ordinal_parent` | Same-wave ordering | same format as `wave_parent` |
+| `estimated_lines` | Iteration budget anchor | integer, 0 if not estimated |
+| `workspace` / `branch` | Worktree isolation | repo-relative path / branch name |
+
+**`wave_parent` normalization** — the parser accepts any of these and normalizes to
+the canonical lowercase key:
+
+- `card1` or `Card 1` or `card 1` → `"card1"`
+- `none` (any case) → `None` (no parent; links to gate)
+- Markdown bold: `**Wave parent:** Card 1` works too
+
+Full reference: `dependency-graph-format.md` § Card header fields.
+
 ## Acceptance surfaces (decompose discipline)
 
 Before Optimize completes:
