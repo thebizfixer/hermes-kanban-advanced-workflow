@@ -627,7 +627,7 @@ def parse_card_block(block: str) -> dict | None:
             card_type = "root"
             assignee = assignee or "orchestrator"
 
-    plan_id = _extract_field(block, r"plan_id:\s*(.+)")
+    plan_id = _extract_field(block, r"plan_id:\s*(.+)") or extract_markdown_field(block, "Plan ID")
     files_raw = _extract_field(block, r"files:\s*\n((?:\s{2}- .+\n?)+)")
     files: list[str] = []
     if files_raw:
@@ -643,13 +643,13 @@ def parse_card_block(block: str) -> dict | None:
     if tests:
         tests = sanitize_tests_command(tests)
     commit = _extract_field(block, r'commit:\s*"?(.+?)"?\s*$')
-    estimated_lines = _extract_field(block, r"estimated_lines:\s*(\d+)")
-    wave = _extract_field(block, r"wave:\s*(\d+)")
-    wave_parent = _extract_field(block, r"wave_parent:\s*(.+)")
-    ordinal_parent = _extract_field(block, r"ordinal_parent:\s*(.+)")
-    workspace = _extract_field(block, r"workspace:\s*(.+)")
-    branch = _extract_field(block, r"branch:\s*(.+)")
-    card_assignee = _extract_field(block, r"assignee:\s*(.+)")
+    estimated_lines = _extract_field(block, r"estimated_lines:\s*(\d+)") or extract_markdown_field(block, "Estimated lines")
+    wave = _extract_field(block, r"wave:\s*(\d+)") or extract_markdown_field(block, "Wave")
+    wave_parent = _extract_field(block, r"wave_parent:\s*(.+)") or extract_markdown_field(block, "Wave parent")
+    ordinal_parent = _extract_field(block, r"ordinal_parent:\s*(.+)") or extract_markdown_field(block, "Ordinal parent")
+    workspace = _extract_field(block, r"workspace:\s*(.+)") or extract_markdown_field(block, "Workspace")
+    branch = _extract_field(block, r"branch:\s*(.+)") or extract_markdown_field(block, "Branch")
+    card_assignee = _extract_field(block, r"assignee:\s*(.+)") or extract_markdown_field(block, "Assignee")
 
     if card_assignee:
         assignee = card_assignee
