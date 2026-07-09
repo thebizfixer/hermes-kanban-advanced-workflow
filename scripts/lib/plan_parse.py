@@ -651,6 +651,31 @@ def parse_card_block(block: str) -> dict | None:
     branch = _extract_field(block, r"branch:\s*(.+)") or extract_markdown_field(block, "Branch")
     card_assignee = _extract_field(block, r"assignee:\s*(.+)") or extract_markdown_field(block, "Assignee")
 
+    # Normalize wave_parent / ordinal_parent: "none" → None, "Card 1" → "card1"
+    if wave_parent:
+        wp = wave_parent.strip()
+        if wp.lower() == "none":
+            wave_parent = None
+        else:
+            # Normalize "Card 1" / "card 2 — title" → "card1" / "card2"
+            import re as _re
+            m = _re.match(r"card\s*(\d+)", wp, _re.IGNORECASE)
+            wave_parent = f"card{m.group(1)}" if m else wp.lower().replace(" ", "")
+    if ordinal_parent:
+        op = ordinal_parent.strip()
+        if op.lower() == "none":
+            ordinal_parent = None
+        else:
+            import re as _re2
+            m = _re2.match(r"card\s*(\d+)", op, _re2.IGNORECASE)
+            ordinal_parent = f"card{m.group(1)}" if m else op.lower().replace(" ", "")
+    # Normalize wave: non-numeric → 1
+    if wave:
+        try:
+            wave = int(wave)
+        except (ValueError, TypeError):
+            wave = 1
+
     if card_assignee:
         assignee = card_assignee
     elif not assignee:
@@ -695,9 +720,9 @@ def parse_card_block(block: str) -> dict | None:
         "tests": tests or "",
         "commit": commit or "",
         "estimated_lines": int(estimated_lines) if estimated_lines else 0,
-        "wave": int(wave) if wave else 1,
-        "wave_parent": wave_parent.strip() if wave_parent else None,
-        "ordinal_parent": ordinal_parent.strip() if ordinal_parent else None,
+        "wave": wave if isinstance(wave, int) else (int(wave) if wave else 1),
+        "wave_parent": wave_parent if wave_parent else None,
+        "ordinal_parent": ordinal_parent if ordinal_parent else None,
         "workspace": workspace,
         "branch": branch,
         "body": full_body,
