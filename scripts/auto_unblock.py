@@ -1,39 +1,59 @@
 #!/usr/bin/env python3
-"""Launcher: runs auto_unblock.sh via Git Bash with Windows paths.
-Workaround for https://github.com/NousResearch/hermes-agent/issues/23404"""
-import os, sys, subprocess
+"""Launcher: runs auto_unblock.sh — platform-neutral (Windows Git Bash, Unix direct)."""
+import os
+import sys
+import subprocess
+from pathlib import Path
 
-# Detect Git Bash — try common install locations, fall back to PATH
-GIT_BASH = None
-for candidate in [
-    "C:/Program Files/Git/usr/bin/bash.exe",
-    "C:/Git/usr/bin/bash.exe",
-    os.path.expandvars("%ProgramFiles%/Git/usr/bin/bash.exe"),
-]:
-    if os.path.isfile(candidate.replace("/", os.sep)):
-        GIT_BASH = candidate.replace("/", os.sep)
-        break
-if not GIT_BASH:
-    GIT_BASH = "bash"  # fallback to PATH
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SCRIPT_NAME = "auto_unblock.sh"
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-script = os.path.join(script_dir, 'auto_unblock.sh').replace('\\', '/')
-args = ' '.join(sys.argv[1:])
 
-# Ensure MSYS coreutils are on PATH when running bare bash.exe
-git_usr_bin = os.path.dirname(GIT_BASH).replace('\\', '/') if GIT_BASH != "bash" else ""
+def _find_repo_root() -> str:
+    """Walk up from SCRIPT_DIR or CWD to find the repo root (.git or .hermes/kanban)."""
+    for start in [Path(SCRIPT_DIR), Path.cwd()]:
+        for p in [start] + list(start.parents)[:6]:
+            if (p / ".git").is_dir() or (p / ".hermes" / "kanban").is_dir():
+                return str(p.resolve())
+    return str(Path.cwd())
+
+
 env = os.environ.copy()
-if git_usr_bin:
-    env['PATH'] = git_usr_bin + os.pathsep + env.get('PATH', '')
+# Pass board scope through both env var names
+for v in ("KANBAN_BOARD", "HERMES_KANBAN_BOARD"):
+    if os.environ.get(v):
+        env["KANBAN_BOARD"] = os.environ[v]
+        break
 
-# Pass board scope if set (for multi-board isolation)
-if os.environ.get('HERMES_KANBAN_BOARD'):
-    env['KANBAN_BOARD'] = os.environ['HERMES_KANBAN_BOARD']
+script = os.path.join(SCRIPT_DIR, SCRIPT_NAME)
+cwd = _find_repo_root()
 
-r = subprocess.run(f'"{GIT_BASH}" "{script}" {args}', shell=True,
-                   capture_output=True, text=True, encoding="utf-8", timeout=60, env=env)
+if sys.platform == "win32":
+    # ── Windows: Git Bash ──
+    GIT_BASH = None
+    for candidate in [
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+        r"C:\Git\usr\bin\bash.exe",
+        os.path.expandvars(r"%ProgramFiles%\Git\usr\bin\bash.exe"),
+    ]:
+        if os.path.isfile(candidate):
+            GIT_BASH = candidate
+            break
+    if not GIT_BASH:
+        print("[launcher] Git Bash not found — install Git for Windows", file=sys.stderr)
+        sys.exit(1)
+    git_usr_bin = os.path.dirname(GIT_BASH)
+    env["PATH"] = git_usr_bin + os.pathsep + env.get("PATH", "")
+    # Use shell=False — pass script as argument to bash
+    cmd = [GIT_BASH, script] + sys.argv[1:]
+else:
+    # ── Unix (Linux / macOS / WSL): run .sh directly ──
+    cmd = ["/bin/bash", script] + sys.argv[1:]
+
+r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
+                   timeout=60, cwd=cwd, env=env)
 if r.stdout:
-    print(r.stdout, end='')
+    print(r.stdout, end="")
 if r.stderr:
-    print(r.stderr, end='', file=sys.stderr)
+    print(r.stderr, end="", file=sys.stderr)
 sys.exit(r.returncode)

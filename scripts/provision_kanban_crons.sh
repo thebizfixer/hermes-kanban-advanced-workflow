@@ -26,11 +26,11 @@ CRON_HERMES_HOME="$KANBAN_GATEWAY_HERMES_HOME"
 
 # .py launchers work around https://github.com/NousResearch/hermes-agent/issues/23404
 # (bash script paths with Windows backslashes get mangled by the cron runner).
-# Use absolute paths from SCRIPT_DIR so crons resolve correctly on all platforms
-# (Linux, macOS, WSL) — not just where Update Plugin materialized them.
-AUTO_UNBLOCK_SCRIPT="$SCRIPT_DIR/auto_unblock.py"
-BOARD_KEEPER_SCRIPT="$SCRIPT_DIR/board_keeper.py"
-LIFECYCLE_SCRIPT="$SCRIPT_DIR/kanban_lifecycle_notify.py"
+# Use bare filenames — Hermes cron resolves them against $HERMES_HOME/scripts/.
+# script_materialize.py copies these .py launchers there during init/Update Plugin.
+AUTO_UNBLOCK_SCRIPT="auto_unblock.py"
+BOARD_KEEPER_SCRIPT="board_keeper.py"
+LIFECYCLE_SCRIPT="kanban_lifecycle_notify.py"
 
 ACTION=""
 PLAN_ID=""
@@ -348,15 +348,19 @@ case "$ACTION" in
       echo "[provision_kanban_crons] FAIL: hermes not on PATH" >&2
       exit 1
     fi
-    for script in "$AUTO_UNBLOCK_SCRIPT" "$BOARD_KEEPER_SCRIPT"; do
-      if [[ ! -x "$script" ]]; then
-        echo "[provision_kanban_crons] FAIL: $script missing or not executable" >&2
+    # Scripts are resolved by Hermes cron against $HERMES_HOME/scripts/
+    SCRIPTS_BASE="$HERMES_HOME/scripts"
+    for script_name in "$AUTO_UNBLOCK_SCRIPT" "$BOARD_KEEPER_SCRIPT"; do
+      script_path="$SCRIPTS_BASE/$script_name"
+      if [[ ! -x "$script_path" ]]; then
+        echo "[provision_kanban_crons] FAIL: $script_path missing or not executable" >&2
         issues=$((issues + 1))
       fi
     done
     if _notify_lifecycle_enabled; then
-      if [[ ! -x "$LIFECYCLE_SCRIPT" ]]; then
-        echo "[provision_kanban_crons] FAIL: $LIFECYCLE_SCRIPT missing (notify_lifecycle enabled)" >&2
+      lifecycle_path="$SCRIPTS_BASE/$LIFECYCLE_SCRIPT"
+      if [[ ! -x "$lifecycle_path" ]]; then
+        echo "[provision_kanban_crons] FAIL: $lifecycle_path missing (notify_lifecycle enabled)" >&2
         issues=$((issues + 1))
       fi
     fi
@@ -373,15 +377,18 @@ case "$ACTION" in
       echo "[provision_kanban_crons] FAIL: hermes not on PATH" >&2
       exit 1
     fi
-    for script in "$AUTO_UNBLOCK_SCRIPT" "$BOARD_KEEPER_SCRIPT"; do
-      if [[ ! -x "$script" ]]; then
-        echo "[provision_kanban_crons] FAIL: $script missing or not executable" >&2
+    SCRIPTS_BASE="$HERMES_HOME/scripts"
+    for script_name in "$AUTO_UNBLOCK_SCRIPT" "$BOARD_KEEPER_SCRIPT"; do
+      script_path="$SCRIPTS_BASE/$script_name"
+      if [[ ! -x "$script_path" ]]; then
+        echo "[provision_kanban_crons] FAIL: $script_path missing or not executable" >&2
         issues=$((issues + 1))
       fi
     done
     if _notify_lifecycle_enabled; then
-      if [[ ! -x "$LIFECYCLE_SCRIPT" ]]; then
-        echo "[provision_kanban_crons] FAIL: $LIFECYCLE_SCRIPT missing (notify_lifecycle enabled)" >&2
+      lifecycle_path="$SCRIPTS_BASE/$LIFECYCLE_SCRIPT"
+      if [[ ! -x "$lifecycle_path" ]]; then
+        echo "[provision_kanban_crons] FAIL: $lifecycle_path missing (notify_lifecycle enabled)" >&2
         issues=$((issues + 1))
       fi
     fi

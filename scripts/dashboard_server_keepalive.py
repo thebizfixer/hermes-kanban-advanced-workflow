@@ -5,6 +5,10 @@ if the server crashes, this restarts it within 60s.
 
 Invoked by a script-only cron job every 60s.
 Empty stdout = silent. Non-empty = action was taken.
+
+Platform-neutral: uses sys.executable for the subprocess spawn, resolves
+HERMES_HOME with a cross-platform default, and handles stale PID locks
+regardless of Windows/Linux/WSL.
 """
 import os
 import subprocess
@@ -28,9 +32,12 @@ script_dir = Path(__file__).resolve().parent
 plugin_root = script_dir.parent
 server_script = plugin_root / "scripts" / "dashboard_server.py"
 
+# HERMES_HOME — explicit in cron env or cross-platform default
+hermes_home = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes"))
+
 # Start server (PID locking in Python prevents duplicates)
 # Clean stale PID lock from previous dead process
-lock_path = Path(os.environ.get("HERMES_HOME", Path.home() / ".hermes")) / "run" / f"kanban-dashboard-server-{PORT}.pid"
+lock_path = hermes_home / "run" / f"kanban-dashboard-server-{PORT}.pid"
 if lock_path.exists():
     try:
         lock_path.unlink()
