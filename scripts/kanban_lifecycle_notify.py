@@ -10,10 +10,20 @@ SCRIPT_NAME = "kanban_lifecycle_notify.sh"
 
 
 def _find_repo_root() -> str:
-    """Walk up from SCRIPT_DIR or CWD to find the repo root (.git or .hermes/kanban)."""
+    """Walk up from SCRIPT_DIR or CWD to find the repo root.
+
+    Prefers the kanban config overlay (only in project roots) over bare .git
+    detection — the plugin is its own git repo, and .hermes/kanban exists at
+    both user-home and project level (false positive).
+    """
     for start in [Path(SCRIPT_DIR), Path.cwd()]:
         for p in [start] + list(start.parents)[:6]:
-            if (p / ".git").is_dir() or (p / ".hermes" / "kanban").is_dir():
+            # Primary: kanban config overlay — only exists in project roots
+            if (p / ".hermes" / "kanban-overrides" / "kanban-config.yaml").is_file():
+                return str(p.resolve())
+            # Secondary: .git in a directory that also has .hermes/
+            # (excludes the plugin repo, which has .git but not .hermes/)
+            if (p / ".git").is_dir() and (p / ".hermes").is_dir():
                 return str(p.resolve())
     return str(Path.cwd())
 
