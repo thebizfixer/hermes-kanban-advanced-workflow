@@ -6,7 +6,11 @@
   "version": "0.9.0",
   "tab": {
     "path": "/kanban-advanced",
-    "position": "after:skills"
+    "position": "after:skills",
+    "onActivate": {
+      "healthCheck": "http://127.0.0.1:18900/health",
+      "startCommand": "python3 .hermes/plugins/kanban-advanced/scripts/dashboard_server.py"
+    }
   },
   "entry": "dist/index.js",
   "api": "plugin_api.py"

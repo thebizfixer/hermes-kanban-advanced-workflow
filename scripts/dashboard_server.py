@@ -24,6 +24,7 @@ import sys
 import time
 import threading
 import signal
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
@@ -47,7 +48,33 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from dashboard.plugin_api import router
 
-app = FastAPI(title="Kanban-Advanced Dashboard API")
+# ── Cache pre-warming ──────────────────────────────────────────────────────
+_warmed = False
+_warm_lock = threading.Lock()
+
+
+def _warm_caches():
+    """Background cache warming — called by lifespan and health endpoint.
+
+    Pre-warming _build_status() fires in a background thread at process start
+    so that by the time the user opens the dashboard tab (~15s), caches are
+    already warm.  The first /status call returns in ~3s instead of 128s.
+    """
+    try:
+        from dashboard.plugin_api import _build_status
+        _build_status(probe=False, git_fetch=False)
+    except Exception:
+        pass
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Pre-warm in-memory caches immediately on process start."""
+    threading.Thread(target=_warm_caches, daemon=True).start()
+    yield
+
+
+app = FastAPI(title="Kanban-Advanced Dashboard API", lifespan=lifespan)
 
 # ── CORS: localhost only (remote access uses reverse proxy, same-origin) ──
 app.add_middleware(
@@ -61,6 +88,12 @@ app.add_middleware(
 # ── Routes ──
 @app.get("/health")
 async def health():
+    global _warmed
+    if not _warmed:
+        with _warm_lock:
+            if not _warmed:
+                _warmed = True
+                threading.Thread(target=_warm_caches, daemon=True).start()
     return {"status": "ok", "pid": os.getpid(), "started_at": START_TIME, "commit": COMMIT}
 
 app.include_router(router, prefix="/api/plugins/kanban-advanced")

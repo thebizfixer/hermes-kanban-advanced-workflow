@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -622,17 +623,58 @@ def _check_profiles(
     return result
 
 
-def _check_gateway() -> dict:
+# ── Stale-while-revalidate locks (prevent duplicate refresh threads) ──
+_gateway_refresh_lock = Lock()
+_gateway_refreshing = False
+_git_behind_refresh_locks: dict[str, Lock] = {}
+_git_behind_refresh_lock = Lock()
+
+
+def _check_gateway(*, stale_ok: bool = True) -> dict:
+    """Return gateway status with stale-while-revalidate.
+
+    When *stale_ok* (default for status polls), returns cached result if
+    available (30s TTL). On cache miss, returns {"running": None,
+    "outdated": None} immediately and refreshes in a background thread —
+    the frontend shows "checking…" badges for None.
+
+    When *stale_ok* is False (init/save flows), blocks until the real
+    gateway status is available (up to 10s).
+    """
     cached = _cache_get("gateway_status", 30.0)
     if cached is not None:
         return cached
-    try:
-        r = _run([HERMES_BIN, "gateway", "status"], timeout=10)
-        result = {"running": r.returncode == 0, "outdated": "outdated" in r.stdout.lower()}
-    except Exception:
-        result = {"running": False, "outdated": False}
-    _cache_set("gateway_status", result)
-    return result
+
+    if not stale_ok:
+        try:
+            r = _run([HERMES_BIN, "gateway", "status"], timeout=10)
+            result = {"running": r.returncode == 0, "outdated": "outdated" in r.stdout.lower()}
+        except Exception:
+            result = {"running": False, "outdated": False}
+        _cache_set("gateway_status", result)
+        return result
+
+    # Stale-while-revalidate: return unknown immediately, refresh in background
+    global _gateway_refreshing
+    _cache_set("gateway_status", {"running": None, "outdated": None})
+
+    with _gateway_refresh_lock:
+        if _gateway_refreshing:
+            return {"running": None, "outdated": None}
+        _gateway_refreshing = True
+
+    def _refresh():
+        global _gateway_refreshing
+        try:
+            r = _run([HERMES_BIN, "gateway", "status"], timeout=10)
+            result = {"running": r.returncode == 0, "outdated": "outdated" in r.stdout.lower()}
+        except Exception:
+            result = {"running": False, "outdated": False}
+        _cache_set("gateway_status", result)
+        _gateway_refreshing = False
+
+    threading.Thread(target=_refresh, daemon=True).start()
+    return {"running": None, "outdated": None}
 
 
 def _get_max_turns(
@@ -707,39 +749,78 @@ def _git_resolve_upstream(install_dir: Path, git_exe: str) -> str | None:
 
 
 def _git_behind_count(
-    install_dir: Path, git_exe: str, *, fetch: bool = True
+    install_dir: Path, git_exe: str, *, fetch: bool = True, stale_ok: bool = True
 ) -> int | None:
-    """Commits the checkout is behind its upstream.
+    """Commits the checkout is behind its upstream — stale-while-revalidate.
 
-    Checks the cache first — even when *fetch* is True, returns a cached
-    value within _TTL_GIT_BEHIND (300s) to avoid a blocking 15s git fetch
-    on every dashboard page load.  Only fetches when the cache is stale or
-    empty.
+    Returns cached value if available (300s TTL). On cache miss:
+    - *stale_ok=True* (default for status polls): returns None immediately,
+      refreshes in background. With *fetch*=True, does full git fetch +
+      rev-list. With *fetch*=False, does fast local check (rev-parse +
+      rev-list, sub-second) in background.
+    - *stale_ok=False* (update flows): blocks until the real count is
+      available (up to 25s with fetch).
+
+    Only one refresh thread runs per *install_dir* at a time.
     """
     cache_key = f"git_behind:{install_dir}"
-    # Always consult cache first — don't re-fetch within the TTL window
     cached = _cache_get(cache_key, _TTL_GIT_BEHIND)
     if cached is not None:
         return cached  # type: ignore[return-value]
 
-    if fetch:
-        _git_fetch_origin(install_dir, git_exe)
-
-    upstream = _git_resolve_upstream(install_dir, git_exe)
-    if not upstream:
+    if not stale_ok:
+        # Blocking path — needed by update flows that gate on behind count
+        if fetch:
+            _git_fetch_origin(install_dir, git_exe)
+        upstream = _git_resolve_upstream(install_dir, git_exe)
+        if not upstream:
+            return None
+        try:
+            r = _run(
+                [git_exe, "rev-list", "--count", f"HEAD..{upstream}"],
+                timeout=10,
+                cwd=str(install_dir),
+            )
+            if r.returncode == 0 and r.stdout.strip().isdigit():
+                behind = int(r.stdout.strip())
+                _cache_set(cache_key, behind)
+                return behind
+        except Exception:
+            pass
         return None
-    try:
-        r = _run(
-            [git_exe, "rev-list", "--count", f"HEAD..{upstream}"],
-            timeout=10,
-            cwd=str(install_dir),
+
+    # Stale-while-revalidate: return None, refresh in background
+    with _git_behind_refresh_lock:
+        rlock = _git_behind_refresh_locks.setdefault(
+            str(install_dir), Lock()
         )
-        if r.returncode == 0 and r.stdout.strip().isdigit():
-            behind = int(r.stdout.strip())
-            _cache_set(cache_key, behind)
-            return behind
-    except Exception:
-        pass
+    if rlock.locked():
+        return None  # already refreshing
+
+    def _refresh(install_path: Path, git: str, ck: str, rl: Lock, do_fetch: bool):
+        try:
+            with rl:
+                if do_fetch:
+                    _git_fetch_origin(install_path, git)
+            upstream = _git_resolve_upstream(install_path, git)
+            if not upstream:
+                return
+            r = _run(
+                [git, "rev-list", "--count", f"HEAD..{upstream}"],
+                timeout=10,
+                cwd=str(install_path),
+            )
+            if r.returncode == 0 and r.stdout.strip().isdigit():
+                _cache_set(ck, int(r.stdout.strip()))
+        except Exception:
+            pass
+
+    rlock.acquire()  # mark refreshing
+    threading.Thread(
+        target=_refresh,
+        args=(install_dir, git_exe, cache_key, rlock, fetch),
+        daemon=True,
+    ).start()
     return None
 
 
@@ -1532,7 +1613,7 @@ def _execute_init(body: dict, output: list[str]) -> dict:
     patch_block_recurrence_limit(log=output.append)
 
     # Gateway
-    gw = _check_gateway()
+    gw = _check_gateway(stale_ok=False)
     if gw["running"]:
         if gw["outdated"]:
             output.append("   !  Gateway outdated — restart to update")
@@ -1762,7 +1843,7 @@ def update_plugin(request: Request):
     if not git_exe:
         return {"success": False, "error": "git not found on PATH", "output": output}
 
-    behind_before = _git_behind_count(install_dir, git_exe)
+    behind_before = _git_behind_count(install_dir, git_exe, stale_ok=False)
     if behind_before is None:
         # Git unreachable — still allow sidecar restart (user's primary intent)
         output.append("   !  Could not reach git remote — restarting sidecar anyway")
