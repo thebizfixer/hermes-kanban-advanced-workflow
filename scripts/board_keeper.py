@@ -37,6 +37,7 @@ for v in ("KANBAN_BOARD", "HERMES_KANBAN_BOARD"):
 
 script = os.path.join(SCRIPT_DIR, SCRIPT_NAME)
 cwd = _find_repo_root()
+env["REPO_ROOT"] = cwd
 
 if sys.platform == "win32":
     # ── Windows: Git Bash ──
