@@ -102,3 +102,17 @@ Before attestation, run `verify_goal_cards.py` — it counts structured YAML and
 - `kanban-advanced:kanban-orchestrator` — `--goal` on create
 - `kanban-advanced:kanban-worker` — goal loop + eval chain
 - [hermes-v0.15.0-upgrade.md](hermes-v0.15.0-upgrade.md)
+
+## Upstream judge gate (v0.18.2+)
+
+As of Hermes v0.18.2+, `kanban_complete` on `goal_mode` tasks is gated by an
+auxiliary `goal_judge` model (#38367, #38388, #38696). When configured, the
+judge reviews the completion summary against the task's acceptance criteria
+before the write commits. When no `goal_judge` auxiliary is configured, the
+gate is **fail-open** — completion proceeds normally.
+
+kanban-advanced's **evaluation chain** still runs first and independently.
+The upstream gate is a complementary second layer: the eval chain verifies
+code/fix correctness; the judge verifies goal acceptance. Configure a
+`goal_judge` auxiliary model for defense-in-depth on goal cards; leave
+unconfigured for the same behavior as before.

@@ -1,6 +1,6 @@
 # Hermes v0.18.0 upgrade notes
 
-> **Last updated:** 2026-07-01 · **Hermes version:** v0.18.0 (v2026.7.1)
+> **Last updated:** 2026-07-14 · **Hermes version:** v0.18.2 (v2026.7.7.2)
 > **Plugin version:** v0.9.0 · **Tested on:** Windows 10 (git-bash/MSYS)
 
 This document records every v0.18.0 change that affects the kanban-advanced plugin.
@@ -110,6 +110,38 @@ verification before `kanban_complete`. Complementary — no changes needed.
 
 Pre-update snapshots now include `projects.db` and kanban boards (#52990).
 Beneficial — no action needed.
+
+---
+
+## ✅ Beneficial: Goal mode judge gate (v0.18.2)
+
+### What changed
+
+v0.18.2 adds a completion judge gate for `goal_mode` kanban tasks
+(#38367, #38388, #38696):
+
+- `kanban_complete` on goal_mode tasks invokes `judge_goal()` (auxiliary model)
+  to review the completion summary against the task's acceptance criteria
+- If verdict ≠ `"done"`, completion is rejected with guidance
+- **Fail-open:** if no `goal_judge` auxiliary model is configured, the gate
+  doesn't fire — completion proceeds normally
+- `kanban_block` on goal_mode tasks is restricted to `dependency` and
+  `needs_input` kinds only; `capability`/`transient` blocks are rejected and
+  the worker is redirected to `kanban_complete` (which the judge now gates)
+
+### Impact on plugin
+
+No code changes needed. The plugin uses standard Hermes kanban tools.
+The evaluation chain already gates `kanban_complete` — the judge gate is
+a complementary second layer.
+
+- **If operator configures `goal_judge` auxiliary:** defense-in-depth —
+  eval chain verifies code correctness, judge verifies goal acceptance
+- **If operator doesn't configure it:** no behavior change (fail-open)
+- **Block restriction:** aligns with kanban-advanced governance — workers
+  can't escape the eval chain by blocking instead of completing
+
+Added to `goal-card-selection.md` as a reference note.
 
 ---
 
