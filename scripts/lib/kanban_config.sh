@@ -187,28 +187,32 @@ _walk_away_mode_enabled() {
 _resolve_active_plan_id() {
     local repo_root="${1:-}"
     local plan_id="${HERMES_KANBAN_PLAN_ID:-}"
-    # Read from plan memory (per-plan tracking) — prefer active:true plans (Bug 1/2).
+    # Single Python invocation: prefer active:true plans sorted by file mtime
+    # (newest first, breaks the alphabetical tiebreaker when multiple plans are active).
     if [[ -z "$plan_id" && -n "$repo_root" ]]; then
-        for f in "$repo_root/.hermes/kanban/memory/"*.json; do
-            [[ -f "$f" ]] || continue
-            result="$(python3 -c "
-import json,sys
-d=json.load(open(sys.argv[1]))
-plan_id=d.get('plan_id','')
-active=d.get('active',False)
-print(plan_id, active, sep='\\t')
-" "$f" 2>/dev/null || true)"
-            IFS=$'\t' read -r pid active <<< "$result"
-            [[ "$active" == "True" && -n "$pid" ]] && { plan_id="$pid"; break; }
-        done
-        # Fallback: if no active plan found, take any plan with a plan_id
-        if [[ -z "$plan_id" ]]; then
-            for f in "$repo_root/.hermes/kanban/memory/"*.json; do
-                [[ -f "$f" ]] || continue
-                plan_id="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('plan_id',''))" "$f" 2>/dev/null || true)"
-                [[ -n "$plan_id" ]] && break
-            done
-        fi
+        plan_id="$(python3 -c "
+import json, glob, os, sys
+
+mem_dir = os.path.join(r'$repo_root', '.hermes', 'kanban', 'memory')
+files = glob.glob(os.path.join(mem_dir, '*.json'))
+candidates = []
+for f in files:
+    try:
+        d = json.load(open(f))
+        pid = d.get('plan_id', '')
+        if not pid:
+            continue
+        active = d.get('active', False)
+        mtime = os.path.getmtime(f)
+        candidates.append((active, mtime, pid))
+    except Exception:
+        pass
+
+if candidates:
+    # Sort: active:True first, then by mtime descending (newest wins tiebreaker)
+    candidates.sort(key=lambda x: (not x[0], -x[1]))
+    print(candidates[0][2])
+" 2>/dev/null || true)"
     fi
     # Fallback to legacy singleton file
     if [[ -z "$plan_id" && -n "$repo_root" && -f "$repo_root/.hermes/kanban/logs/lifecycle_plan_id" ]]; then

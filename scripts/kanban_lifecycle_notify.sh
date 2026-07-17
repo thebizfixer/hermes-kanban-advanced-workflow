@@ -25,29 +25,33 @@ export KANBAN_BOARD="${BOARD:-${KANBAN_BOARD:-}}"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 # Read PLAN_ID from plan memory (per-plan tracking) or fall back to legacy singleton.
-# Prefer active:true entries before falling back to any plan_id (Bug 1/2: alphabetical
-# glob picks stale completed plans; active:true is the intent marker).
+# Single Python invocation: prefer active:true plans sorted by file mtime (newest
+# first, breaks the alphabetical tiebreaker when multiple plans are active).
+# Falls back to any plan_id if no active plan is found.
 if [[ -z "$PLAN_ID" ]]; then
-  for f in "$REPO_ROOT/.hermes/kanban/memory/"*.json; do
-    [[ -f "$f" ]] || continue
-    result="$(python3 -c "
-import json,sys
-d=json.load(open(sys.argv[1]))
-plan_id=d.get('plan_id','')
-active=d.get('active',False)
-print(plan_id, active, sep='\t')
-" "$f" 2>/dev/null || true)"
-    IFS=$'\t' read -r pid active <<< "$result"
-    [[ "$active" == "True" && -n "$pid" ]] && { PLAN_ID="$pid"; break; }
-  done
-  # Fallback: if no active plan found, take any plan with a plan_id
-  if [[ -z "$PLAN_ID" ]]; then
-    for f in "$REPO_ROOT/.hermes/kanban/memory/"*.json; do
-      [[ -f "$f" ]] || continue
-      PLAN_ID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('plan_id',''))" "$f" 2>/dev/null || true)"
-      [[ -n "$PLAN_ID" ]] && break
-    done
-  fi
+  PLAN_ID="$(python3 -c "
+import json, glob, os, sys
+
+mem_dir = os.path.join('$REPO_ROOT', '.hermes', 'kanban', 'memory')
+files = glob.glob(os.path.join(mem_dir, '*.json'))
+candidates = []
+for f in files:
+    try:
+        d = json.load(open(f))
+        pid = d.get('plan_id', '')
+        if not pid:
+            continue
+        active = d.get('active', False)
+        mtime = os.path.getmtime(f)
+        candidates.append((active, mtime, pid))
+    except Exception:
+        pass
+
+if candidates:
+    # Sort: active:True first, then by mtime descending (newest wins tiebreaker)
+    candidates.sort(key=lambda x: (not x[0], -x[1]))
+    print(candidates[0][2])
+" 2>/dev/null || true)"
 fi
 if [[ -z "$PLAN_ID" && -f "$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id" ]]; then
   PLAN_ID="$(<"$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id")"
