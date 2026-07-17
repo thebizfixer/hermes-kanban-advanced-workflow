@@ -24,19 +24,36 @@ done
 export KANBAN_BOARD="${BOARD:-${KANBAN_BOARD:-}}"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-# Read PLAN_ID from plan memory (per-plan tracking) or fall back to legacy singleton
+# Read PLAN_ID from plan memory (per-plan tracking) or fall back to legacy singleton.
+# Prefer active:true entries before falling back to any plan_id (Bug 1/2: alphabetical
+# glob picks stale completed plans; active:true is the intent marker).
 if [[ -z "$PLAN_ID" ]]; then
   for f in "$REPO_ROOT/.hermes/kanban/memory/"*.json; do
     [[ -f "$f" ]] || continue
-    PLAN_ID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('plan_id',''))" "$f" 2>/dev/null || true)"
-    [[ -n "$PLAN_ID" ]] && break
+    result="$(python3 -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+plan_id=d.get('plan_id','')
+active=d.get('active',False)
+print(plan_id, active, sep='\t')
+" "$f" 2>/dev/null || true)"
+    IFS=$'\t' read -r pid active <<< "$result"
+    [[ "$active" == "True" && -n "$pid" ]] && { PLAN_ID="$pid"; break; }
   done
+  # Fallback: if no active plan found, take any plan with a plan_id
+  if [[ -z "$PLAN_ID" ]]; then
+    for f in "$REPO_ROOT/.hermes/kanban/memory/"*.json; do
+      [[ -f "$f" ]] || continue
+      PLAN_ID="$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d.get('plan_id',''))" "$f" 2>/dev/null || true)"
+      [[ -n "$PLAN_ID" ]] && break
+    done
+  fi
 fi
 if [[ -z "$PLAN_ID" && -f "$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id" ]]; then
   PLAN_ID="$(<"$REPO_ROOT/.hermes/kanban/logs/lifecycle_plan_id")"
 fi
 if ! _load_branch_config "$REPO_ROOT" 2>/dev/null; then
-  exit 0
+  exit 1
 fi
 
 ENABLED="${NOTIFY_LIFECYCLE:-}"
@@ -56,6 +73,9 @@ mkdir -p "$LOG_DIR"
 export KANBAN_LIFECYCLE_PLAN_ID="$PLAN_ID"
 export KANBAN_LIFECYCLE_STATE="${LOG_DIR}/lifecycle_state.json"
 export KANBAN_LIFECYCLE_LOG="${LOG_DIR}/lifecycle.jsonl"
+
+# Ensure scripts/lib/ is on PYTHONPATH so board_resolver import succeeds (Bug 3).
+export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/lib:${PYTHONPATH:-}"
 
 python3 - <<'PY'
 import json
