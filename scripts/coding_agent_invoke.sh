@@ -5,8 +5,11 @@
 #   coding_agent_invoke.sh smoke
 #   coding_agent_invoke.sh dispatch "<full prompt>"
 #
-# Env:
-#   KANBAN_CODING_AGENT        (default: agent)
+# Env resolution (first wins):
+#   1. Already exported in environment (gateway sets these)
+#   2. Project .env (written by dashboard init/save — sourced here)
+#   3. Hardcoded fallback: hermes
+#
 #   KANBAN_CODING_AGENT_MODEL  (default: auto)
 #   HERMES_KANBAN_PLAN_ID      Plan ID for token attribution
 #   HERMES_KANBAN_TASK         Task ID for token attribution
@@ -24,11 +27,25 @@ ensure_coding_agent_home
 
 MODE="${1:-smoke}"
 PROMPT="${2:-say ok}"
-BINARY="${KANBAN_CODING_AGENT:-agent}"
+REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+
+# Source project .env for coding-agent vars set by dashboard init/save.
+# The gateway doesn't source .env for spawned child processes, so we
+# load it here so non-default agent configs reach workers.
+# Only sets vars that aren't already in the environment (gateway wins).
+if [ -f "$REPO_ROOT/.env" ]; then
+  for _var in KANBAN_CODING_AGENT KANBAN_CODING_AGENT_MODEL KANBAN_CODING_AGENT_PROVIDER KANBAN_CODING_AGENT_PROFILE; do
+    if [ -z "${!_var:-}" ]; then
+      _val="$(grep "^${_var}=" "$REPO_ROOT/.env" 2>/dev/null | head -1 | cut -d= -f2-)"
+      [ -n "${_val:-}" ] && export "${_var}=${_val}"
+    fi
+  done
+fi
+
+BINARY="${KANBAN_CODING_AGENT:-hermes}"
 MODEL="${KANBAN_CODING_AGENT_MODEL:-auto}"
 PROVIDER="${KANBAN_CODING_AGENT_PROVIDER:-}"
 PROFILE="${KANBAN_CODING_AGENT_PROFILE:-}"
-REPO_ROOT="${HERMES_KANBAN_REPO_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 model_is_auto() {
   case "${MODEL,,}" in
