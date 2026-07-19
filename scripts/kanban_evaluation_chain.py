@@ -136,6 +136,20 @@ def compute_workspace_hash(workspace: str) -> str:
     return "unknown"
 
 
+def _current_head_commit(workspace: str) -> str:
+    """Return the full HEAD commit hash, or fallback to workspace tree hash."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, cwd=workspace, timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+    return compute_workspace_hash(workspace)
+
+
 def _resolve_project_root(workspace: str) -> str:
     """Walk up from workspace to find project root (has .hermes/kanban-overrides/kanban-config.yaml)."""
     d = os.path.abspath(workspace)
@@ -1110,6 +1124,15 @@ def run_chain(task_id: str, workspace: str, card_body: str,
         error_entries = memory.get("error_entries", [])
         current_hash = compute_attractor_hash(parsed["files"], parsed["tests"], workspace)
         recent_deny = [e for e in error_entries if e["attractor_hash"] == current_hash and e["outcome"] == "DENY"]
+        # Invalidate stale attractors: if HEAD commit differs from the recorded
+        # entry, the operator made a commit — the error may be resolved.
+        current_commit = _current_head_commit(workspace)
+        current_baseline = os.environ.get("KANBAN_PRE_AGENT_SHA", "HEAD~1")
+        recent_deny = [
+            e for e in recent_deny
+            if e.get("commit_hash") == current_commit
+            and e.get("baseline_ref", current_baseline) == current_baseline
+        ]
         if recent_deny:
             last = recent_deny[-1]
             print(f"[chain] Error attractor match — same signature DENY'd before: {last['error_code']}")
@@ -1172,6 +1195,8 @@ def run_chain(task_id: str, workspace: str, card_body: str,
                         "error_code": error_code,
                         "error_reason": reason,
                         "workspace_hash": compute_workspace_hash(workspace),
+                        "commit_hash": _current_head_commit(workspace),
+                        "baseline_ref": os.environ.get("KANBAN_PRE_AGENT_SHA", "HEAD~1"),
                         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     }
                     memory.setdefault("error_entries", [])
