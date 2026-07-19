@@ -60,7 +60,11 @@ def _estimate_from_text(text: str) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output-file", required=True)
+    parser.add_argument("--plan-id", default="", help="Plan ID for token attribution")
     args = parser.parse_args()
+
+    # Resolve plan_id: CLI arg > KANBAN_PLAN_ID env > HERMES_KANBAN_PLAN_ID env
+    plan_id = args.plan_id or os.environ.get("KANBAN_PLAN_ID", "") or os.environ.get("HERMES_KANBAN_PLAN_ID", "")
 
     path = Path(args.output_file)
     if not path.exists() or path.stat().st_size == 0:
@@ -81,7 +85,7 @@ def main() -> int:
         except json.JSONDecodeError:
             continue
 
-    plan_id = os.environ.get("HERMES_KANBAN_PLAN_ID", "")
+    # plan_id already resolved at top of main() — use directly
     task_id = os.environ.get("HERMES_KANBAN_TASK", "")
     model = os.environ.get("KANBAN_CODING_AGENT_MODEL", "")
 
