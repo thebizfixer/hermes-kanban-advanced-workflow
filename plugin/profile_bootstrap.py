@@ -513,8 +513,8 @@ def reconcile_dispatch_profiles(
     coder_home = _profile_home(hermes_home, coder_profile)
     if coder_home.is_dir():
         _copy_profile_config_from_default(hermes_home, coder_profile)
-        # Ensure external_dirs is set for skill discovery
-        _ensure_external_dirs(coder_home)
+        # Coder: external_dirs skipped — skills seeded by seed_dispatch_profile_skills below;
+        # kanban-advanced injection causes recursion in coder child sessions.
     log("   OK Synced config.yaml + .env + auth.json from default profile")
 
     env = _home_env(hermes_home)
