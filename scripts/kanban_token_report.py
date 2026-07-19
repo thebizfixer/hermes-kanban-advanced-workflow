@@ -85,7 +85,7 @@ def format_tokens(n: int) -> str:
     return str(n)
 
 
-def report_plan(plan_id: str, entries: list[dict]):
+def report_plan(plan_id: str, entries: list[dict], board_task_ids: set[str] | None = None):
     # Scope to most recent run only (same logic as generate_postmortem.py)
     plan_entries = [e for e in entries if e.get("plan_id") == plan_id]
     # Find the most recent planning-complete or decompose-complete checkpoint
@@ -105,6 +105,12 @@ def report_plan(plan_id: str, entries: list[dict]):
     boundary_ts = planning_ts or decompose_ts
     if boundary_ts:
         plan_entries = [e for e in plan_entries if str(e.get("timestamp") or "") >= boundary_ts]
+
+    # Fallback: match by task_id from board when plan_id filter returns empty
+    if not plan_entries and board_task_ids:
+        plan_entries = [e for e in entries if e.get("task_id") in board_task_ids]
+        if plan_entries:
+            print(f"plan_id filter returned empty — matched {len(plan_entries)} entries via board task_ids")
 
     if not plan_entries:
         print(f"No token data found for plan '{plan_id}'")
@@ -200,8 +206,35 @@ def main():
 
     entries = read_jsonl(_token_log_path(board))
 
+    # Resolve board task_ids for fallback matching
+    board_task_ids: set[str] | None = None
+    if args.plan and board:
+        try:
+            import sqlite3
+            from pathlib import Path as _P
+            hermes_home = _P(os.environ.get("HERMES_HOME", _P.home() / ".hermes"))
+            db_path = hermes_home / "state.db"
+            if db_path.exists():
+                conn = sqlite3.connect(str(db_path))
+                conn.row_factory = sqlite3.Row
+                # Try active board first, then archived
+                for table_prefix in ("", "_archived/"):
+                    try:
+                        rows = conn.execute(
+                            "SELECT id FROM kanban_tasks WHERE board_slug = ?",
+                            (board,),
+                        ).fetchall()
+                        if rows:
+                            board_task_ids = {str(r[0]) for r in rows}
+                            break
+                    except Exception:
+                        pass
+                conn.close()
+        except Exception:
+            pass
+
     if args.plan:
-        report_plan(args.plan, entries)
+        report_plan(args.plan, entries, board_task_ids)
     elif args.task:
         report_task(args.task, entries)
     elif args.all or True:
