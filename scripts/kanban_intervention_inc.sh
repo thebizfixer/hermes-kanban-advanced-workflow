@@ -14,6 +14,10 @@ PLAN_ID=""
 TASK_ID=""
 REASON=""
 FAILURE_CLASS="manual"
+ERROR_CODE=""
+
+# Fallback: read from environment when not passed as flag
+ERROR_CODE="${ERROR_CODE:-${INTERVENTION_ERROR_CODE:-}}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -21,6 +25,7 @@ while [[ $# -gt 0 ]]; do
     --task-id) TASK_ID="${2:-}"; shift 2 ;;
     --reason) REASON="${2:-}"; shift 2 ;;
     --failure-class) FAILURE_CLASS="${2:-manual}"; shift 2 ;;
+    --error-code) ERROR_CODE="${2:-}"; shift 2 ;;
     *) shift ;;
   esac
 done
@@ -59,7 +64,7 @@ fi
 echo "$new" > "$COUNTER"
 
 if [[ -n "$PLAN_ID" || -n "$TASK_ID" || -n "$REASON" ]]; then
-  python3 - "$JSONL" "$PLAN_ID" "$TASK_ID" "$FAILURE_CLASS" "$REASON" <<'PY'
+  python3 - "$JSONL" "$PLAN_ID" "$TASK_ID" "$FAILURE_CLASS" "$REASON" "$ERROR_CODE" <<'PY'
 import json, sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -71,6 +76,7 @@ entry = {
     "task_id": sys.argv[3] or None,
     "failure_class": sys.argv[4] or "manual",
     "reason": sys.argv[5] or "",
+    "error_code": (sys.argv[6] if len(sys.argv) > 6 and sys.argv[6] else None),
     "source": "kanban_intervention_inc.sh",
 }
 path.parent.mkdir(parents=True, exist_ok=True)
