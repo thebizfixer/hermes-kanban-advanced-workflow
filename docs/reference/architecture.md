@@ -590,3 +590,7 @@ This ensures worker, orchestrator, and coder profiles have valid model config
 even on fresh installs — they inherit from the active (default) profile. The coder
 profile is only created when `coding_agent_binary == "hermes"`. After Strategy B,
 `max_turns` is also applied to all three profiles.
+
+> **Note:** `_ensure_external_dirs` is intentionally skipped for the coder profile
+> to prevent kanban-advanced skill tree recursion. The coder receives only the
+> `kanban-coder` skill via `seed_dispatch_profile_skills`.

@@ -8,7 +8,7 @@ Canonical registry: `plugin/data/registry/error-codes.yaml` (bundled with the pl
 | --------- | ------------- | --------------------------------------------- | ----- |
 | E001      | error         | File not in diff (allows `already_committed` when prior SHA matches message + diff-tree) | Yes   |
 | E002      | warning       | Unlisted file change (auto-reverted)          | No    |
-| E003      | error         | Test failure                                  | Yes   |
+| E003      | error         | Test failure (tsc errors filtered to card Files scope; pre-existing out-of-scope errors do not block) | Yes   |
 | E004      | error         | Commit message mismatch                       | No    |
 | E005      | warning       | Token log missing (superseded by E018)        | No    |
 | E006      | error         | Zero output                                   | Yes   |
@@ -28,7 +28,7 @@ Canonical registry: `plugin/data/registry/error-codes.yaml` (bundled with the pl
 | E020      | error         | Agent output unparseable / missing usage      | Yes   |
 | E021      | error         | Worktree incomplete (missing kanban scripts)  | No    |
 | E022      | error         | Parallel subagent gate domain timeout           | Yes   |
-| E023      | error         | Repeated identical error (lattice memory hit)   | No    |
+| E023      | error         | Repeated identical error at same commit (lattice memory; invalidated when HEAD advances) | No    |
 | E028      | error         | Layout/presentation acceptance failed           | Yes   |
 | E029      | error         | Presentation a11y acceptance failed             | Yes   |
 | P001-P009 | error/warning | Card body policy violations                   | No    |
