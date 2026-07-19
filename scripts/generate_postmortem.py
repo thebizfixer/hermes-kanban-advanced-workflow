@@ -565,15 +565,24 @@ def load_task_history(
 ) -> tuple[list[TaskRecord], list[str]]:
     notes: list[str] = []
     root = project_root or _project_root()
-    task_id_filter, filter_note = load_plan_memory_task_ids(root, plan_id)
-    if filter_note:
-        notes.append(filter_note)
-    elif not task_id_filter:
-        notes.append(
-            "No plan memory task_ids — falling back to exact plan_id match in metadata/body "
-            "(substring plan_id match disabled)."
-        )
-    if board_task_ids is not None:
+
+    # Prefer board-derived task IDs (authoritative) over plan memory (stale snapshot).
+    # Plan memory is written at decompose time and never updated for re-decomposition
+    # or handoff cards — the board DB is the source of truth.
+    if board_task_ids:
+        task_id_filter = board_task_ids
+        notes.append(f"Board-scoped (primary) — {len(board_task_ids)} task ID(s) from board.")
+    else:
+        task_id_filter, filter_note = load_plan_memory_task_ids(root, plan_id)
+        if filter_note:
+            notes.append(f"Plan memory (fallback — no board task IDs available): {filter_note}")
+        elif not task_id_filter:
+            notes.append(
+                "No plan memory task_ids — falling back to exact plan_id match in metadata/body "
+                "(substring plan_id match disabled)."
+            )
+
+    if board_task_ids is not None and not task_id_filter:
         if not board_task_ids:
             notes.append("Board-scoped task ID set is empty — no tasks will be included.")
         else:
@@ -625,10 +634,7 @@ def load_task_history(
             if not matched:
                 continue
 
-            # Board-scoped filtering: skip tasks not in the board's task list
-            if board_task_ids is not None and task_id not in board_task_ids:
-                continue
-
+            # task_id_filter is now board-preferred (set at top of load_task_history) —
             task = TaskRecord(
                 task_id=task_id,
                 title=str(_row_value(row, title_col, "")),
