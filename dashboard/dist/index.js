@@ -698,8 +698,11 @@
     function runPluginUpdate() {
       setPluginUpdating(true);
       setConsoleLines([]);
-      // Detect restart-only vs full update based on banner state
-      var isRestart = status && (status.sidecar_stale === true || status.plugin_up_to_date === true);
+      // Detect restart-only vs full update based on banner state.
+      // Update takes priority: if there are upstream commits, always do a full update
+      // (git pull), even if sidecar is stale or already up-to-date.
+      var isRestart = status && !status.plugin_update_available
+        && (status.sidecar_stale === true || status.plugin_up_to_date === true);
       var endpoint = isRestart ? "/api/plugins/kanban-advanced/update?restart=1" : "/api/plugins/kanban-advanced/update";
       addLines([isRestart ? "=== Restarting plugin (no git) ===" : "=== Updating plugin (git pull) ===", ""]);
       apiFetch(endpoint, { method: "POST" }).then(function (r) {
@@ -1042,7 +1045,9 @@
                     React.createElement("span", { className: "w-3 h-3 border border-current border-t-transparent rounded-full animate-spin flex-shrink-0" }),
                     "Restarting…"
                   )
-                : (status && (status.plugin_up_to_date === true || status.sidecar_stale === true) ? "Restart Plugin" : "Update Plugin")
+                : (status && status.plugin_update_available ? "Update Plugin"
+                   : status && (status.plugin_up_to_date === true || status.sidecar_stale === true) ? "Restart Plugin"
+                   : "Update Plugin")
             ) : null
           )
         )
