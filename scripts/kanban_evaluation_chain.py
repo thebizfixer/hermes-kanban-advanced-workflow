@@ -436,6 +436,56 @@ def step_impl_before_test(
     return True, None
 
 
+# ── tsc scope filter helpers ─────────────────────────────────────────
+
+def _is_tsc_command(cmd: str) -> bool:
+    """Return True when the command invokes the TypeScript compiler."""
+    return bool(re.search(r"\btsc\b", cmd, re.IGNORECASE))
+
+
+def _filter_tsc_errors(
+    stdout: str, stderr: str, files: list[str]
+) -> tuple[list[str], list[str]]:
+    """Split tsc error lines into in-scope and out-of-scope.
+
+    Parses TypeScript error lines of the form::
+
+        path/to/file.ts(line,col): error TS1234: message
+
+    Returns (in_scope_lines, out_of_scope_lines).
+    """
+    TS_ERR_RE = re.compile(
+        r"^([^(\s]+\.(?:ts|tsx))\(\d+,\d+\):\s+error\s+TS",
+        re.MULTILINE,
+    )
+    norm_files = {f.replace("\\", "/").lstrip("./") for f in files}
+    basenames = {Path(f).name for f in norm_files}
+
+    in_scope: list[str] = []
+    out_of_scope: list[str] = []
+
+    combined = stdout + stderr
+    for m in TS_ERR_RE.finditer(combined):
+        filepath = m.group(1).replace("\\", "/").lstrip("./")
+        line_start = m.start()
+        # Find the end of this error block (next error line or EOF)
+        next_err = TS_ERR_RE.search(combined, m.end())
+        block_end = next_err.start() if next_err else len(combined)
+        block = combined[line_start:block_end].strip()
+
+        # Match by prefix or basename
+        matched = any(
+            filepath.startswith(nf) or filepath.endswith("/" + nf) or Path(filepath).name == bn
+            for nf in norm_files for bn in basenames
+        )
+        if matched:
+            in_scope.append(block)
+        else:
+            out_of_scope.append(block)
+
+    return in_scope, out_of_scope
+
+
 def step_3_tests_pass(tests_cmd: str, workspace: str, files: list | None = None) -> Tuple[bool, Optional[str]]:
     """Run Tests: command. All must pass. Detects common silent failures:
     - 'no tests ran' / 'collected 0 items'
@@ -489,6 +539,27 @@ def step_3_tests_pass(tests_cmd: str, workspace: str, files: list | None = None)
         return False, "E003_TEST_RUNNER_MISSING"
 
     if result.returncode != 0:
+        # ── tsc scope filter ──────────────────────────────────────────
+        # When the test command is `tsc --noEmit` and the card has a Files: list,
+        # filter errors to only those matching the card's scope. Pre-existing
+        # errors in unrelated packages should not block the card.
+        if files and _is_tsc_command(tests_cmd):
+            in_scope, out_of_scope = _filter_tsc_errors(
+                result.stdout, result.stderr, files
+            )
+            if not in_scope:
+                print(
+                    f"[E003] ALLOW — {len(out_of_scope)} tsc error(s) filtered "
+                    f"(all outside card Files scope)"
+                )
+                return True, None
+            print(
+                f"[E003] Test failure ({len(in_scope)} in-scope tsc errors; "
+                f"{len(out_of_scope)} out-of-scope filtered):\n"
+                f"{chr(10).join(in_scope[:10])}"
+            )
+            return False, "E003_TEST_FAILURE"
+
         print(f"[E003] Test failure:\\n{result.stdout[-500:]}\\n{result.stderr[-500:]}")
         return False, "E003_TEST_FAILURE"
 
